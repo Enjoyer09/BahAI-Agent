@@ -14,7 +14,6 @@ import {
   ChevronDown,
   ChevronRight,
   PanelLeftClose,
-  User,
   LogOut
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';

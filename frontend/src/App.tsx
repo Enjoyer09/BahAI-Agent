@@ -3,7 +3,7 @@
 // ==========================================
 
 import { useState, useEffect } from 'react';
-import { Code, Command, PanelLeft, LayoutDashboard, Monitor } from 'lucide-react';
+import { Code, Command, PanelLeft, Monitor } from 'lucide-react';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatArea from './components/chat/ChatArea';
 import ChatInput from './components/chat/ChatInput';
@@ -76,7 +76,6 @@ export default function App() {
         onDeleteProject={chat.deleteProject}
         onArchiveProject={chat.archiveProject}
         onDeleteConv={chat.deleteConversation}
-        onAuthClick={() => setShowAuthModal(true)}
         sendMessage={chat.sendMessage}
         themeCtx={themeCtx}
         {...settings}
