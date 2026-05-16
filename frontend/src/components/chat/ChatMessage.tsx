@@ -2,7 +2,7 @@
 // ChatMessage — Smart Hidden Thoughts Edition
 // ==========================================
 
-import { User, Copy, Check, FileText, Sparkles, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import MarkdownRenderer from '../common/MarkdownRenderer';
 import ToolCallCard from './ToolCallCard';

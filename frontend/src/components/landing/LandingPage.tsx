@@ -3,7 +3,7 @@
 // ==========================================
 
 import { useEffect, useState } from 'react';
-import { ArrowRight, Zap, Code2, Cpu, Globe, Rocket, ShieldCheck, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Zap, Code2, Cpu, Globe, Rocket, ChevronDown, CheckCircle2 } from 'lucide-react';
 
 interface LandingPageProps {
   onGetStarted: () => void;

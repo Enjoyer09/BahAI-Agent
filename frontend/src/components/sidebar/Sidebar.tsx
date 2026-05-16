@@ -14,8 +14,10 @@ import {
   ChevronDown,
   ChevronRight,
   PanelLeftClose,
-  User
+  User,
+  LogOut
 } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
 import type { Project, Conversation } from '../../lib/types';
 import type { ThemeMode } from '../../hooks/useTheme';
 import { API_BASE_URL } from '../../lib/constants';
@@ -51,6 +53,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar(props: SidebarProps) {
+  const { signOut } = useAuth();
   const [showSettings, setShowSettings] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addMode, setAddMode] = useState<'local' | 'remote'>('local');
@@ -124,7 +127,7 @@ export default function Sidebar(props: SidebarProps) {
           <div className="w-12 h-12 rounded-2xl bg-white/5 p-1 flex items-center justify-center border border-white/5 group-hover:border-blue-500/30 transition-all duration-500 shadow-inner overflow-hidden">
             <img 
               src="/logo.png" 
-              alt="iBahora Logo" 
+              alt="bahAI Logo" 
               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
             />
           </div>
@@ -231,11 +234,11 @@ export default function Sidebar(props: SidebarProps) {
       {/* Footer */}
       <div className="p-4 space-y-2 border-t border-white/5">
         <button 
-          onClick={props.onAuthClick}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all hover:bg-blue-600/10 text-blue-400 group ${!props.sidebarOpen ? 'justify-center' : ''}`}
+          onClick={signOut}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all hover:bg-red-600/10 text-red-400 group ${!props.sidebarOpen ? 'justify-center' : ''}`}
         >
-          <User size={20} className="group-hover:scale-110 transition-transform" />
-          {props.sidebarOpen && <span className="text-xs font-bold uppercase tracking-widest">Giriş / Qeydiyyat</span>}
+          <LogOut size={20} className="group-hover:scale-110 transition-transform" />
+          {props.sidebarOpen && <span className="text-xs font-bold uppercase tracking-widest">Çıxış Et</span>}
         </button>
 
         <button 

@@ -8,7 +8,8 @@ import { API_BASE_URL } from '../lib/constants';
 interface User {
   id: number;
   email: string;
-  fullName: string;
+  name: string;
+  role: 'admin' | 'user';
 }
 
 interface AuthContextType {
