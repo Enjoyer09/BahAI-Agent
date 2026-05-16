@@ -12,9 +12,11 @@ import Terminal from './components/chat/Terminal';
 import CodeEditor from './components/chat/CodeEditor';
 import LivePreview from './components/chat/LivePreview';
 import AuthModal from './components/auth/AuthModal';
+import LandingPage from './components/landing/LandingPage';
 import { useSettings } from './hooks/useSettings';
 import { useChat } from './hooks/useChat';
 import { useTheme } from './hooks/useTheme';
+import { useAuth } from './hooks/useAuth';
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -24,9 +26,13 @@ export default function App() {
   const [showPreview, setShowPreview] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
+  const { user, loading: authLoading } = useAuth();
   const settings = useSettings();
   const themeCtx = useTheme();
   const chat = useChat(settings.settings);
+
+  // Dynamic Layout Logic: Check if any auxiliary window is active
+  const isAuxActive = activeFile || showPreview || showTerminal;
 
   // Auto-toggle preview for web projects if needed
   useEffect(() => {
@@ -36,8 +42,24 @@ export default function App() {
     }
   }, [chat.activeProject?.id]);
 
+  if (authLoading) {
+    return <div className="h-screen w-full flex items-center justify-center bg-[#050505] text-blue-500">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+    </div>;
+  }
+
+  // If not logged in, show the Landing Page
+  if (!user) {
+    return (
+      <>
+        <LandingPage onGetStarted={() => setShowAuthModal(true)} />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+      </>
+    );
+  }
+
   return (
-    <div className="h-screen w-full flex bg-[var(--bg-main)] text-[var(--fg-main)] overflow-hidden font-sans selection:bg-blue-500/30">
+    <div className="h-screen w-full flex bg-[var(--bg-main)] text-[var(--fg-main)] overflow-hidden font-sans selection:bg-blue-500/30 animate-in fade-in duration-700">
       
       {/* Sidebar */}
       <Sidebar 
@@ -101,73 +123,69 @@ export default function App() {
         {/* Content Area */}
         <div className="flex-1 flex gap-2 min-h-0">
           
-          {/* Chat Side Panel */}
-          <div className="w-[450px] flex flex-col bg-[var(--bg-surface)]/40 backdrop-blur-xl border border-white/5 rounded-[2.5rem] overflow-hidden shrink-0">
+          {/* Chat Panel — Dynamic Width */}
+          <div className={`flex flex-col bg-[var(--bg-surface)]/40 backdrop-blur-xl border border-white/5 rounded-[2.5rem] overflow-hidden transition-all duration-500 ease-in-out ${isAuxActive ? 'w-[450px]' : 'flex-1 mx-20'}`}>
             <ChatArea messages={chat.messages} loading={chat.loading} />
             <ChatInput onSend={chat.sendMessage} loading={chat.loading} onStop={chat.stop} />
           </div>
 
-          {/* Editor/Tree/Preview Group */}
-          <div className="flex-1 flex flex-col min-w-0 gap-2">
-            <div className="flex-1 flex gap-2 min-h-0">
-              {/* File Tree (Conditional) */}
-              {sidebarOpen && sidebarMode === 'files' && chat.activeProject && (
-                <div className="w-64 bg-[var(--bg-surface)]/40 backdrop-blur-xl border border-white/5 rounded-3xl overflow-hidden animate-in slide-in-from-left-4 duration-300">
-                   <FileTree 
-                    projectPath={chat.activeProject.path} 
-                    onFileSelect={setActiveFile} 
-                    selectedPath={activeFile || undefined}
-                   />
-                </div>
-              )}
+          {/* Editor/Tree/Preview Group — Only visible if aux is active */}
+          {isAuxActive && (
+            <div className="flex-1 flex flex-col min-w-0 gap-2 animate-in slide-in-from-right-4 duration-500">
+              <div className="flex-1 flex gap-2 min-h-0">
+                {/* File Tree */}
+                {sidebarOpen && sidebarMode === 'files' && chat.activeProject && (
+                  <div className="w-64 bg-[var(--bg-surface)]/40 backdrop-blur-xl border border-white/5 rounded-3xl overflow-hidden">
+                    <FileTree 
+                      projectPath={chat.activeProject.path} 
+                      onFileSelect={setActiveFile} 
+                      selectedPath={activeFile || undefined}
+                    />
+                  </div>
+                )}
 
-              {/* Central Editor */}
-              {activeFile && (
-                <div className="flex-1 bg-[var(--bg-surface)]/60 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col shadow-inner">
-                  <CodeEditor 
-                    filePath={activeFile} 
-                    projectDir={chat.activeProject?.path || ''} 
-                    onClose={() => setActiveFile(null)} 
-                  />
-                </div>
-              )}
+                {/* Central Editor */}
+                {activeFile && (
+                  <div className="flex-1 bg-[var(--bg-surface)]/60 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col shadow-inner">
+                    <CodeEditor 
+                      filePath={activeFile} 
+                      projectDir={chat.activeProject?.path || ''} 
+                      onClose={() => setActiveFile(null)} 
+                    />
+                  </div>
+                )}
 
-              {/* Live Preview Panel */}
-              {showPreview && (
-                <div className={`bg-white border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in fade-in duration-500 ${activeFile ? 'w-1/3 min-w-[400px]' : 'flex-1'}`}>
-                  <LivePreview 
-                    url={`http://localhost:${chat.activeProject?.lastPort || 5173}`} 
-                    isVisible={showPreview} 
-                    refreshKey={chat.previewKey} 
-                    onUrlChange={(newUrl) => {
-                      const match = newUrl.match(/http:\/\/localhost:(\d+)/);
-                      if (match && match[1]) {
-                        const newPort = parseInt(match[1]);
-                        chat.updateProjectPort(newPort);
-                      }
-                    }}
-                  />
-                </div>
-              )}
+                {/* Live Preview Panel */}
+                {showPreview && (
+                  <div className={`bg-white border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl transition-all duration-500 ${activeFile ? 'w-1/3 min-w-[400px]' : 'flex-1'}`}>
+                    <LivePreview 
+                      url={`http://localhost:${chat.activeProject?.lastPort || 5173}`} 
+                      isVisible={showPreview} 
+                      refreshKey={chat.previewKey} 
+                      onUrlChange={(newUrl) => {
+                        const match = newUrl.match(/http:\/\/localhost:(\d+)/);
+                        if (match && match[1]) {
+                          const newPort = parseInt(match[1]);
+                          chat.updateProjectPort(newPort);
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
 
-              {!activeFile && !showPreview && (
-                <div className="flex-1 flex flex-col items-center justify-center opacity-10">
-                   <LayoutDashboard size={80} />
+              {/* Terminal Panel */}
+              {showTerminal && (
+                <div className="h-64 bg-[#0a0a0c] border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+                  <Terminal />
                 </div>
               )}
             </div>
-
-            {/* Terminal Panel */}
-            {showTerminal && (
-              <div className="h-64 bg-[#0a0a0c] border border-white/10 rounded-3xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300 shadow-2xl">
-                <Terminal />
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </main>
 
-      {/* Auth Modal Overlay */}
+      {/* Auth Modal Overlay (For manual triggers from Workspace) */}
       <AuthModal 
         isOpen={showAuthModal} 
         onClose={() => setShowAuthModal(false)} 

@@ -33,12 +33,12 @@ export default function ChatMessage({ message }: ChatMessageProps) {
   return (
     <div className={`group flex gap-4 mb-6 ${isBot ? '' : 'flex-row-reverse'}`}>
       {/* AVATAR */}
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-xl transition-transform group-hover:scale-105 ${
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-xl transition-transform group-hover:scale-105 overflow-hidden ${
         isBot 
-          ? 'bg-blue-600 text-white shadow-blue-600/30 ring-1 ring-white/20' 
+          ? 'bg-white/5 border border-white/10 shadow-blue-600/10' 
           : 'bg-white/10 text-gray-400 border border-white/10'
       }`}>
-        {isBot ? <Sparkles size={18} /> : <User size={18} />}
+        {isBot ? <img src="/agent_icon.png" alt="bahAI" className="w-full h-full object-cover" /> : <User size={18} />}
       </div>
 
       {/* CONTENT */}
@@ -98,9 +98,9 @@ export default function ChatMessage({ message }: ChatMessageProps) {
 
             {showThoughts && (
               <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                {message.tool_calls?.map(tc => (
+                {message.tool_calls?.map((tc, j) => (
                   <ToolCallCard 
-                    key={tc.id} 
+                    key={j} 
                     toolName={tc.function?.name || tc.name} 
                     args={tc.function?.arguments || tc.args} 
                     result={tc.result}

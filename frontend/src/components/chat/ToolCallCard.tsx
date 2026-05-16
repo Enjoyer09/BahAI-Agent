@@ -15,13 +15,14 @@ interface ToolCallCardProps {
 }
 
 function formatArgs(toolName: string, argsStr: string): string {
+  if (!argsStr) return '';
   try {
     const p = JSON.parse(argsStr);
-    if (toolName === 'read_file' || toolName === 'write_file' || toolName === 'file_edit') return p.filepath || '';
+    if (toolName === 'read_file' || toolName === 'write_file' || toolName === 'file_edit') return p.path || p.filepath || '';
     if (toolName === 'list_directory') return p.path || '';
     if (toolName === 'glob_search') return `${p.pattern} in ${p.cwd || '.'}`;
     if (toolName === 'grep_search') return `"${p.query}" in ${p.cwd || '.'}`;
-    if (toolName === 'run_bash') return p.command || '';
+    if (toolName === 'run_terminal_command' || toolName === 'run_bash') return p.command || '';
     return argsStr;
   } catch { return argsStr; }
 }
@@ -30,7 +31,7 @@ function tryParseJSON(str: string): any { try { return JSON.parse(str); } catch 
 
 export default function ToolCallCard({ toolName, args, result, status = 'done', duration }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const icon = TOOL_ICONS[toolName] || '🔧';
+  const Icon = TOOL_ICONS[toolName];
   const label = TOOL_LABELS[toolName] || toolName;
   const summary = formatArgs(toolName, args);
 
@@ -40,7 +41,9 @@ export default function ToolCallCard({ toolName, args, result, status = 'done', 
       <button onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:opacity-80">
         <div style={{ color: 'var(--fg-muted)' }}>{expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</div>
-        <span className="text-base flex-shrink-0">{icon}</span>
+        <div className="flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
+          {Icon ? <Icon size={16} /> : <span className="text-base">🔧</span>}
+        </div>
         <div className="flex-1 min-w-0">
           <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>{label}</span>
           {summary && <span className="ml-2 text-xs font-mono truncate" style={{ color: 'var(--fg-muted)' }}>{summary.length > 60 ? summary.slice(0, 60) + '...' : summary}</span>}

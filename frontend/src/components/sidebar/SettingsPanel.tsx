@@ -1,9 +1,6 @@
-// ==========================================
-// SettingsPanel — API config settings
-// ==========================================
-
-import { Server, Key, Folder, Code, Zap } from 'lucide-react';
+import { Server, Key, Folder, Code, Zap, ShieldAlert } from 'lucide-react';
 import { MODELS } from '../../lib/constants';
+import { useAuth } from '../../hooks/useAuth';
 
 interface SettingsPanelProps {
   apiKey: string; setApiKey: (v: string) => void;
@@ -15,7 +12,7 @@ interface SettingsPanelProps {
 
 function SettingField({ icon: Icon, label, children }: { icon: any; label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5 animate-in fade-in duration-500">
       <label className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 opacity-50">
         <Icon size={12} /> {label}
       </label>
@@ -29,21 +26,39 @@ export default function SettingsPanel({
   projectDir, setProjectDir, performanceMode, setPerformanceMode 
 }: SettingsPanelProps) {
   
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const cls = "w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 text-xs outline-none focus:border-blue-500/50 transition-all text-white";
 
   return (
     <div className="space-y-5">
-      <SettingField icon={Server} label="API Base URL">
-        <input type="text" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} className={cls} />
-      </SettingField>
-      <SettingField icon={Key} label="API Key">
-        <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} className={cls} placeholder="nvapi-..." />
-      </SettingField>
-      <SettingField icon={Folder} label="Workspace Path">
-        <input type="text" value={projectDir} onChange={e => setProjectDir(e.target.value)} className={cls} placeholder="/Users/..." />
-      </SettingField>
-      <SettingField icon={Code} label="AI Model">
-        <select value={model} onChange={e => setModel(e.target.value)} className={`${cls} appearance-none cursor-pointer`}>
+      {/* Admin-Only Sections */}
+      {isAdmin ? (
+        <>
+          <SettingField icon={Server} label="API Base URL">
+            <input type="text" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} className={cls} />
+          </SettingField>
+          <SettingField icon={Key} label="API Key">
+            <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} className={cls} placeholder="nvapi-..." />
+          </SettingField>
+          <SettingField icon={Folder} label="Workspace Path">
+            <input type="text" value={projectDir} onChange={e => setProjectDir(e.target.value)} className={cls} placeholder="/Users/..." />
+          </SettingField>
+        </>
+      ) : (
+        <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 mb-4">
+          <div className="flex items-center gap-2 text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1">
+            <ShieldAlert size={14} /> Standart İstifadəçi
+          </div>
+          <p className="text-[10px] text-gray-500 leading-relaxed">
+            API sazlamaları administrator tərəfindən idarə olunur. Siz yalnız modellər arasında keçid edə bilərsiniz.
+          </p>
+        </div>
+      )}
+
+      {/* Everyone can change Model */}
+      <SettingField icon={Code} label="AI Model Seçimi">
+        <select value={model} onChange={e => setModel(e.target.value)} className={`${cls} appearance-none cursor-pointer border-blue-500/20`}>
           {MODELS.map(m => <option key={m.id} value={m.id} className="bg-[#1e2235]">{m.name}</option>)}
         </select>
       </SettingField>
@@ -65,9 +80,6 @@ export default function SettingsPanel({
             <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${performanceMode ? 'right-0.5' : 'left-0.5'}`} />
           </div>
         </button>
-        <p className="mt-2 text-[9px] text-gray-500 italic px-1">
-          Ağır vizual effektləri və blurları söndürərək proqramı sürətləndirir.
-        </p>
       </div>
     </div>
   );

@@ -12,11 +12,26 @@ const { glob } = require('glob');
 const execFileAsync = util.promisify(execFile);
 
 const app = express();
+const db = require('./db');
+const { router: authRoutes, verifyToken } = require('./auth');
 
-// SEC-7: Restrict CORS to local dev port
-app.use(cors({ origin: 'http://localhost:5173' }));
-// SEC-9: Reduce body limit to prevent DoS
+// Initialize Database
+db.initDb();
+
+// SEC-7: Restrict CORS
+app.use(cors());
 app.use(express.json({ limit: '2mb' }));
+
+// Public Auth Routes
+app.use('/api/auth', authRoutes);
+
+// Protected Agent/File Routes
+app.use('/api/chat', verifyToken);
+app.use('/api/files', verifyToken);
+app.use('/api/read-file', verifyToken);
+app.use('/api/write-file', verifyToken);
+app.use('/api/run-terminal', verifyToken);
+app.use('/api/pick-directory', verifyToken);
 
 // ==========================================
 // Configuration from environment
@@ -159,6 +174,20 @@ const TOOLS = [
     {
         type: "function",
         function: {
+            name: "check_port_status",
+            description: "Checks if a specific port is active and listening for connections.",
+            parameters: {
+                type: "object",
+                properties: {
+                    port: { type: "number", description: "The port number to check (e.g. 5173)" }
+                },
+                required: ["port"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
             name: "run_terminal_command",
             description: "Runs a safe terminal command in the project directory.",
             parameters: {
@@ -212,6 +241,27 @@ async function handleToolCall(toolCall, workingDirectory) {
 
     try {
         switch (name) {
+            case "check_port_status": {
+                const net = require('net');
+                return new Promise((resolve) => {
+                    const socket = new net.Socket();
+                    socket.setTimeout(2000);
+                    socket.on('connect', () => {
+                        socket.destroy();
+                        resolve(`Port ${args.port} is ACTIVE and listening.`);
+                    });
+                    socket.on('timeout', () => {
+                        socket.destroy();
+                        resolve(`Port ${args.port} is CLOSED (Timeout).`);
+                    });
+                    socket.on('error', () => {
+                        socket.destroy();
+                        resolve(`Port ${args.port} is CLOSED.`);
+                    });
+                    socket.connect(args.port, '127.0.0.1');
+                });
+            }
+
             case "list_directory": {
                 const targetPath = path.resolve(workingDirectory, args.path || '.');
                 if (!isPathSafe(targetPath, workingDirectory)) return "Error: Path outside workspace";
@@ -259,18 +309,38 @@ async function handleToolCall(toolCall, workingDirectory) {
             }
 
             case "run_terminal_command": {
-                // SEC-Audit: Enhanced shell safety
                 if (!isBashCommandSafe(args.command)) return "Error: Command blocked or contains unsafe characters.";
                 
                 return new Promise((resolve) => {
-                    // Use a direct spawn without sh -c for simple commands if possible
-                    // For now, we still use sh -c but with stricter regex in isBashCommandSafe
-                    const proc = spawn('sh', ['-c', args.command], { cwd: workingDirectory });
+                    const isServerCmd = args.command.includes('dev') || args.command.includes('serve') || args.command.includes('npm run') || args.command.includes('yarn');
+                    
+                    const proc = spawn('sh', ['-c', args.command], { 
+                        cwd: workingDirectory,
+                        detached: true, // Allow process to live independently
+                        stdio: 'pipe'
+                    });
+
                     let out = "", err = "";
-                    proc.stdout.on('data', d => out += d);
+                    proc.stdout.on('data', d => {
+                        out += d;
+                        // If it's a server, we don't wait for close, we look for "ready" signals
+                        if (isServerCmd && (out.includes('ready') || out.includes('Local:') || out.includes('localhost:'))) {
+                            resolve(`Server started in background.\nSTDOUT Snapshot: ${out}`);
+                        }
+                    });
                     proc.stderr.on('data', d => err += d);
+                    
                     proc.on('close', code => resolve(`Exit Code ${code}\nSTDOUT: ${out}\nSTDERR: ${err}`));
-                    setTimeout(() => { proc.kill(); resolve(`Timeout reached: ${out}`); }, 30000);
+
+                    // For non-server commands, keep timeout. For servers, return success early but KEEP ALIVE.
+                    setTimeout(() => {
+                        if (isServerCmd) {
+                            resolve(`Server is likely running in background (Timeout reached, but process kept alive).\nSTDOUT: ${out}`);
+                        } else {
+                            proc.kill();
+                            resolve(`Timeout reached: ${out}`);
+                        }
+                    }, isServerCmd ? 5000 : 30000);
                 });
             }
 
@@ -330,10 +400,14 @@ app.post('/api/chat', async (req, res) => {
     const effectiveApiKey = apiKey || process.env.NVIDIA_API_KEY;
     const client = new OpenAI({ baseURL: baseUrl || "https://integrate.api.nvidia.com/v1", apiKey: effectiveApiKey });
 
-    const sysPrompt = `Sən iBahora Code IDE rəsmi AI Agentisən. Project Root: ${resolvedWD}.
+    const sysPrompt = `Sən bahAI İDE rəsmi AI Agentisən. Project Root: ${resolvedWD}.
 Sən professional proqramçı və UI/UX ekspertisən.
-MÜHÜM: Dəyişiklikləri etmədən əvvəl glob_search və read_file ilə kodu anla. 
-Dəyişiklik etdikdə YALNIZ file_edit istifadə et (bütöv faylı yenidən yazma).
+MÜHÜM QAYDALAR:
+1. Kodu dəyişməzdən əvvəl glob_search və read_file ilə mütləq kodu analiz et.
+2. Dəyişiklik etdikdə YALNIZ file_edit istifadə et (bütöv faylı yenidən yazma).
+3. LIVE PREVIEW HAQQINDA: Bizim LivePreview paneli YALNIZ 'http://localhost:PORT' formatında işləyir. Lokal fayl yollarını (file:///...) aça bilmir.
+4. Əgər bir web səhifə yaratmısansa, onu görmək üçün mütləq bir server başlatmalısan (məs: 'npx serve' və ya 'npm run dev').
+5. SERVERİ TƏSDİQLƏ (KRİTİK): check_port_status alətini çağırmadan serverin işlədiyini iddia etmək QADAĞANDIR! Əgər bu aləti çağırmamısansa, "Server işləyir" demə! Əgər port aktiv deyilsə, serverin niyə qalxmadığını (logs) yoxla.
 Azərbaycan dilində cavab ver.`;
 
     const apiMessages = [{ role: 'system', content: sysPrompt }, ...messages];
@@ -436,7 +510,6 @@ app.post('/api/write-file', async (req, res) => {
 });
 
 app.get('/api/pick-directory', async (req, res) => {
-    // Only on macOS via AppleScript
     if (process.platform !== 'darwin') {
         return res.status(400).json({ error: "Sadece macOS desteklenir" });
     }
@@ -447,4 +520,22 @@ app.get('/api/pick-directory', async (req, res) => {
     });
 });
 
-app.listen(PORT, () => console.log(`🚀 iBahora Backend running on http://localhost:${PORT}`));
+// Serve Static Frontend in Production
+const frontendDist = path.resolve(__dirname, '../frontend/dist');
+app.use(express.static(frontendDist));
+
+// Catch-all for 404s or SPA routing - return index.html for frontend, JSON for API
+app.use((req, res) => {
+    if (req.url.startsWith('/api')) {
+        return res.status(404).json({ error: `Route ${req.originalUrl} not found` });
+    }
+    res.sendFile(path.join(frontendDist, 'index.html'));
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error('SERVER ERROR:', err);
+    res.status(500).json({ error: 'Daxili server xətası baş verdi' });
+});
+
+app.listen(PORT, () => console.log(`🚀 bahAI Backend running on http://localhost:${PORT}`));

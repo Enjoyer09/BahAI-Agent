@@ -13,6 +13,11 @@ interface CodeEditorProps {
   onClose: () => void;
 }
 
+function getAuthHeader() {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
 export default function CodeEditor({ filePath, projectDir, onClose }: CodeEditorProps) {
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
@@ -31,7 +36,9 @@ export default function CodeEditor({ filePath, projectDir, onClose }: CodeEditor
     const fetchFile = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`${API_BASE_URL}/api/read-file?path=${encodeURIComponent(filePath)}&workingDirectory=${encodeURIComponent(projectDir)}`);
+        const response = await fetch(`${API_BASE_URL}/api/read-file?path=${encodeURIComponent(filePath)}&workingDirectory=${encodeURIComponent(projectDir)}`, {
+          headers: getAuthHeader()
+        });
         if (!response.ok) throw new Error('Fayl oxuna bilmədi');
         const data = await response.text();
         setContent(data);
@@ -51,7 +58,10 @@ export default function CodeEditor({ filePath, projectDir, onClose }: CodeEditor
     try {
       const response = await fetch(`${API_BASE_URL}/api/write-file`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        },
         body: JSON.stringify({
           path: filePath,
           content,
@@ -98,56 +108,51 @@ export default function CodeEditor({ filePath, projectDir, onClose }: CodeEditor
             <span className="text-xs font-bold text-gray-200">{fileName}</span>
             <span className="text-[9px] text-gray-500 uppercase tracking-tighter opacity-50">{filePath}</span>
           </div>
-          {isDirty && <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" title="Yadda saxlanılmayıb" />}
         </div>
-        
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-4">
           <button 
-            onClick={handleSave}
             disabled={!isDirty || saving}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+            onClick={handleSave}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
               isDirty 
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 hover:scale-105 active:scale-95' 
-                : 'text-gray-500 opacity-50 cursor-not-allowed'
+                ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-600/20 active:scale-95' 
+                : 'bg-white/5 text-gray-500 cursor-not-allowed'
             }`}
           >
             {saving ? <Loader2 size={12} className="animate-spin" /> : (saveSuccess ? <Check size={12} /> : <Save size={12} />)}
-            {saveSuccess ? 'Saxlanıldı' : 'Yadda Saxla'}
+            {saveSuccess ? 'Yadda Saxlanıldı' : 'Yadda Saxla'}
           </button>
-          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-xl transition-colors text-gray-400">
+          <button onClick={onClose} className="p-1 hover:bg-white/5 rounded-lg transition-colors text-gray-400">
             <X size={18} />
           </button>
         </div>
       </div>
 
-      {/* Monaco Editor Container */}
-      <div className="flex-1 relative overflow-hidden">
-        {loading ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#1e1e1e] z-10">
-            <Loader2 size={32} className="text-blue-500 animate-spin opacity-50" />
+      {/* Editor Container */}
+      <div className="flex-1 relative">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#1e1e1e]">
+            <Loader2 size={32} className="animate-spin text-blue-500" />
           </div>
-        ) : (
-          <Editor
-            height="100%"
-            language={languageMap[fileExtension] || fileExtension}
-            theme={theme}
-            value={content}
-            onChange={(value) => setContent(value || '')}
-            options={{
-              fontSize: 13,
-              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-              minimap: { enabled: true },
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              padding: { top: 20, bottom: 20 },
-              cursorSmoothCaretAnimation: 'on',
-              smoothScrolling: true,
-              lineNumbersMinChars: 3,
-              bracketPairColorization: { enabled: true },
-              renderLineHighlight: 'all'
-            }}
-          />
         )}
+        <Editor
+          height="100%"
+          language={languageMap[fileExtension] || 'plaintext'}
+          theme={theme}
+          value={content}
+          onChange={(value) => setContent(value || '')}
+          options={{
+            fontSize: 13,
+            minimap: { enabled: true },
+            scrollBeyondLastLine: false,
+            smoothScrolling: true,
+            cursorBlinking: 'smooth',
+            padding: { top: 20 },
+            fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+            fontLigatures: true
+          }}
+        />
       </div>
     </div>
   );

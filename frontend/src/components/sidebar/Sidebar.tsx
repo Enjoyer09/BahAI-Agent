@@ -13,7 +13,8 @@ import {
   GitBranch,
   ChevronDown,
   ChevronRight,
-  PanelLeftClose
+  PanelLeftClose,
+  User
 } from 'lucide-react';
 import type { Project, Conversation } from '../../lib/types';
 import type { ThemeMode } from '../../hooks/useTheme';
@@ -117,24 +118,31 @@ export default function Sidebar(props: SidebarProps) {
   return (
     <aside className={`flex flex-col bg-[var(--bg-surface-alt)]/80 backdrop-blur-2xl border border-white/5 shadow-2xl transition-all duration-500 relative z-40 rounded-3xl my-2 ml-2 overflow-hidden ${props.sidebarOpen ? 'w-80' : 'w-20'}`}>
       
-      {/* Simple Header */}
-      <div className={`h-16 flex items-center border-b border-white/5 shrink-0 transition-all px-5 ${props.sidebarOpen ? 'justify-between' : 'justify-center'}`}>
-        <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20 shrink-0 cursor-pointer overflow-hidden" onClick={() => !props.sidebarOpen && props.setSidebarOpen(true)}>
-            <span className="text-white font-black text-base leading-none translate-y-[1px]">B</span>
+      {/* Premium Logo Header */}
+      <div className={`h-20 flex items-center border-b border-white/5 shrink-0 transition-all px-4 ${props.sidebarOpen ? 'justify-between' : 'justify-center'}`}>
+        <div className="flex items-center gap-2 overflow-hidden cursor-pointer group" onClick={() => !props.sidebarOpen && props.setSidebarOpen(true)}>
+          <div className="w-12 h-12 rounded-2xl bg-white/5 p-1 flex items-center justify-center border border-white/5 group-hover:border-blue-500/30 transition-all duration-500 shadow-inner overflow-hidden">
+            <img 
+              src="/logo.png" 
+              alt="iBahora Logo" 
+              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+            />
           </div>
           {props.sidebarOpen && (
-            <span className="font-bold text-sm tracking-tight truncate animate-in fade-in slide-in-from-left-2 duration-300">iBahora Code</span>
+            <div className="flex flex-col animate-in fade-in slide-in-from-left-2 duration-500">
+              <span className="font-black text-sm tracking-tighter text-white leading-none mb-1">bahAI</span>
+              <span className="text-[8px] font-bold text-blue-400 uppercase tracking-[0.2em] leading-none opacity-80">INTELLIGENCE</span>
+            </div>
           )}
         </div>
         
         {props.sidebarOpen && (
           <button 
             onClick={() => props.setSidebarOpen(false)}
-            className="p-1.5 rounded-lg transition-all hover:bg-white/5 text-[var(--fg-muted)] hover:text-blue-400 active:scale-90"
+            className="p-2 rounded-xl transition-all hover:bg-white/5 text-[var(--fg-muted)] hover:text-blue-400 active:scale-90"
             title="Yığ"
           >
-            <PanelLeftClose size={20} />
+            <PanelLeftClose size={18} />
           </button>
         )}
       </div>

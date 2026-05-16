@@ -5,6 +5,11 @@
 import { API_BASE_URL } from './constants';
 import type { SSEEvent } from './types';
 
+function getAuthHeader() {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
 export async function sendChatMessage(
   messages: Array<{ role: string; content: string }>,
   apiKey: string,
@@ -16,7 +21,10 @@ export async function sendChatMessage(
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
     body: JSON.stringify({
       messages,
       apiKey,
@@ -28,6 +36,7 @@ export async function sendChatMessage(
   });
 
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Giriş tələb olunur. Zəhmət olmasa daxil olun.');
     throw new Error(`API xətası: ${response.status} ${response.statusText}`);
   }
 
@@ -48,7 +57,6 @@ export async function sendChatMessage(
     if (value) {
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n\n');
-      // Keep the last potentially incomplete chunk in the buffer
       buffer = lines.pop() || '';
 
       for (const line of lines) {
@@ -58,14 +66,13 @@ export async function sendChatMessage(
             const data = JSON.parse(dataStr) as SSEEvent;
             onEvent(data);
           } catch {
-            // ignore unparseable chunks
+            // ignore
           }
         }
       }
     }
   }
 
-  // Process any remaining data in the buffer
   if (buffer.startsWith('data: ')) {
     try {
       const data = JSON.parse(buffer.slice(6)) as SSEEvent;
@@ -77,7 +84,18 @@ export async function sendChatMessage(
 }
 
 export async function fetchFileTree(dirPath: string, workingDirectory: string): Promise<any[]> {
-  const response = await fetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(dirPath)}&workingDirectory=${encodeURIComponent(workingDirectory)}`);
-  if (!response.ok) throw new Error('Fayl siyahısı alına bilmədi');
+  const response = await fetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(dirPath)}&workingDirectory=${encodeURIComponent(workingDirectory)}`, {
+    headers: getAuthHeader()
+  });
+  if (!response.ok) throw new Error('Fayl siyahısı alına bilmədi. Giriş etdiyinizdən əmin olun.');
   return await response.json();
+}
+
+export async function pickDirectory(): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/api/pick-directory`, {
+    headers: getAuthHeader()
+  });
+  if (!response.ok) throw new Error('Qovluq seçilə bilmədi');
+  const data = await response.json();
+  return data.path;
 }
