@@ -58,10 +58,21 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--bg-main);
   color: var(--fg-main);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Ensure all form elements inherit colors correctly */
+input, textarea, button, select {
+  font-family: inherit;
+  color: inherit;
+}
+
+/* Force light text globally for the dark theme */
+:root {
+  color-scheme: dark;
 }
 
 .glass-panel {

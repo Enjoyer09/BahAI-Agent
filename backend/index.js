@@ -397,8 +397,11 @@ app.post('/api/chat', async (req, res) => {
         return res.status(403).json({ error: "Unauthorized working directory" });
     }
 
-    const effectiveApiKey = apiKey || process.env.NVIDIA_API_KEY;
-    const client = new OpenAI({ baseURL: baseUrl || "https://integrate.api.nvidia.com/v1", apiKey: effectiveApiKey });
+    const effectiveApiKey = apiKey || process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY;
+    const effectiveBaseUrl = baseUrl || process.env.OPENAI_BASE_URL || "https://integrate.api.nvidia.com/v1";
+    const effectiveModel = model || process.env.OPENAI_MODEL || 'meta/llama-3.3-70b-instruct';
+
+    const client = new OpenAI({ baseURL: effectiveBaseUrl, apiKey: effectiveApiKey });
 
     const sysPrompt = `Sən bahAI İDE rəsmi AI Agentisən. Project Root: ${resolvedWD}.
 Sən professional proqramçı və UI/UX ekspertisən.
@@ -422,7 +425,7 @@ Azərbaycan dilində cavab ver.`;
         while (step < MAX_STEPS) {
             step++;
             const response = await client.chat.completions.create({
-                model: model || 'meta/llama-3.3-70b-instruct',
+                model: effectiveModel,
                 messages: currentMessages,
                 tools: TOOLS,
                 temperature: 0.2
