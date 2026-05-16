@@ -17,7 +17,7 @@ function loadSetting(key: string, fallback: string): string {
 export function useSettings() {
   const [apiKey, setApiKey] = useState(() => loadSetting('apiKey', ''));
   const [baseUrl, setBaseUrl] = useState(() => loadSetting('baseUrl', DEFAULT_BASE_URL));
-  const [model, setModel] = useState(() => loadSetting('model', 'meta/llama-3.3-70b-instruct'));
+  const [model, setModel] = useState(() => loadSetting('model', 'deepseek-v4-flash-free'));
   const [projectDir, setProjectDir] = useState(() => loadSetting('projectDir', ''));
   const [performanceMode, setPerformanceMode] = useState(() => {
     return localStorage.getItem('performanceMode') === 'true';
@@ -30,7 +30,7 @@ export function useSettings() {
   useEffect(() => { localStorage.setItem('projectDir', projectDir); }, [projectDir]);
   useEffect(() => { localStorage.setItem('performanceMode', String(performanceMode)); }, [performanceMode]);
 
-  const settings: Settings = { apiKey, baseUrl, model, projectDir, performanceMode, setProjectDir };
+  const settings: Settings = { apiKey, baseUrl, model, projectDir, performanceMode };
 
   return {
     settings,

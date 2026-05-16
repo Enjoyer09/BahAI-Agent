@@ -2,15 +2,16 @@
 // App — Fully Integrated Workspace-First IDE
 // ==========================================
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { Play, Globe, Code, Command, PanelLeftClose, PanelLeft, LayoutDashboard, Monitor } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Code, Command, PanelLeft, LayoutDashboard, Monitor } from 'lucide-react';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatArea from './components/chat/ChatArea';
 import ChatInput from './components/chat/ChatInput';
 import FileTree from './components/sidebar/FileTree';
 import Terminal from './components/chat/Terminal';
 import CodeEditor from './components/chat/CodeEditor';
-import LivePreview from './components/chat/LivePreview'; // NEW
+import LivePreview from './components/chat/LivePreview';
+import AuthModal from './components/auth/AuthModal';
 import { useSettings } from './hooks/useSettings';
 import { useChat } from './hooks/useChat';
 import { useTheme } from './hooks/useTheme';
@@ -20,11 +21,12 @@ export default function App() {
   const [sidebarMode, setSidebarMode] = useState<'projects' | 'files'>('projects');
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [showTerminal, setShowTerminal] = useState(false);
-  const [showPreview, setShowPreview] = useState(false); // NEW
+  const [showPreview, setShowPreview] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const settings = useSettings();
   const themeCtx = useTheme();
-  const chat = useChat(settings);
+  const chat = useChat(settings.settings);
 
   // Auto-toggle preview for web projects if needed
   useEffect(() => {
@@ -52,6 +54,7 @@ export default function App() {
         onDeleteProject={chat.deleteProject}
         onArchiveProject={chat.archiveProject}
         onDeleteConv={chat.deleteConversation}
+        onAuthClick={() => setShowAuthModal(true)}
         sendMessage={chat.sendMessage}
         themeCtx={themeCtx}
         {...settings}
@@ -98,6 +101,12 @@ export default function App() {
         {/* Content Area */}
         <div className="flex-1 flex gap-2 min-h-0">
           
+          {/* Chat Side Panel */}
+          <div className="w-[450px] flex flex-col bg-[var(--bg-surface)]/40 backdrop-blur-xl border border-white/5 rounded-[2.5rem] overflow-hidden shrink-0">
+            <ChatArea messages={chat.messages} loading={chat.loading} />
+            <ChatInput onSend={chat.sendMessage} loading={chat.loading} onStop={chat.stop} />
+          </div>
+
           {/* Editor/Tree/Preview Group */}
           <div className="flex-1 flex flex-col min-w-0 gap-2">
             <div className="flex-1 flex gap-2 min-h-0">
@@ -107,42 +116,43 @@ export default function App() {
                    <FileTree 
                     projectPath={chat.activeProject.path} 
                     onFileSelect={setActiveFile} 
-                    activeFile={activeFile}
+                    selectedPath={activeFile || undefined}
                    />
                 </div>
               )}
 
               {/* Central Editor */}
-              <div className="flex-1 bg-[var(--bg-surface)]/60 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col shadow-inner">
-                {activeFile ? (
+              {activeFile && (
+                <div className="flex-1 bg-[var(--bg-surface)]/60 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col shadow-inner">
                   <CodeEditor 
                     filePath={activeFile} 
                     projectDir={chat.activeProject?.path || ''} 
                     onClose={() => setActiveFile(null)} 
                   />
-                ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center p-12 space-y-6">
-                    <div className="w-24 h-24 rounded-[2rem] bg-blue-600/10 flex items-center justify-center text-blue-500 animate-bounce-slow">
-                      <LayoutDashboard size={48} />
-                    </div>
-                    <div className="space-y-2">
-                      <h3 className="text-xl font-black">iBahora İş Sahəsi</h3>
-                      <p className="text-sm text-[var(--fg-muted)] max-w-xs mx-auto leading-relaxed">
-                        Sol tərəfdən bir layihə seçin və ya agentə nə etmək istədiyinizi yazın.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
 
-              {/* Live Preview Panel (NEW) */}
+              {/* Live Preview Panel */}
               {showPreview && (
-                <div className="w-1/3 min-w-[400px] bg-white border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in slide-in-from-right-4 duration-500">
+                <div className={`bg-white border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in fade-in duration-500 ${activeFile ? 'w-1/3 min-w-[400px]' : 'flex-1'}`}>
                   <LivePreview 
                     url={`http://localhost:${chat.activeProject?.lastPort || 5173}`} 
                     isVisible={showPreview} 
                     refreshKey={chat.previewKey} 
+                    onUrlChange={(newUrl) => {
+                      const match = newUrl.match(/http:\/\/localhost:(\d+)/);
+                      if (match && match[1]) {
+                        const newPort = parseInt(match[1]);
+                        chat.updateProjectPort(newPort);
+                      }
+                    }}
                   />
+                </div>
+              )}
+
+              {!activeFile && !showPreview && (
+                <div className="flex-1 flex flex-col items-center justify-center opacity-10">
+                   <LayoutDashboard size={80} />
                 </div>
               )}
             </div>
@@ -150,18 +160,18 @@ export default function App() {
             {/* Terminal Panel */}
             {showTerminal && (
               <div className="h-64 bg-[#0a0a0c] border border-white/10 rounded-3xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300 shadow-2xl">
-                <Terminal projectPath={chat.activeProject?.path || ''} />
+                <Terminal />
               </div>
             )}
           </div>
-
-          {/* Chat Side Panel */}
-          <div className="w-[450px] flex flex-col bg-[var(--bg-surface)]/40 backdrop-blur-xl border border-white/5 rounded-[2.5rem] overflow-hidden shrink-0">
-            <ChatArea messages={chat.messages} loading={chat.loading} />
-            <ChatInput onSend={chat.sendMessage} loading={chat.loading} onStop={chat.stop} />
-          </div>
         </div>
       </main>
+
+      {/* Auth Modal Overlay */}
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)} 
+      />
     </div>
   );
 }

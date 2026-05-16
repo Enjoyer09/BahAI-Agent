@@ -13,8 +13,7 @@ import {
   GitBranch,
   ChevronDown,
   ChevronRight,
-  PanelLeftClose,
-  PanelLeft
+  PanelLeftClose
 } from 'lucide-react';
 import type { Project, Conversation } from '../../lib/types';
 import type { ThemeMode } from '../../hooks/useTheme';
@@ -83,7 +82,11 @@ export default function Sidebar(props: SidebarProps) {
   const handlePickDir = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/pick-directory`);
-      if (!response.ok) return;
+      if (!response.ok) {
+        const err = await response.json();
+        alert(`Xəta: ${err.error || 'Qovluq seçilə bilmədi'}`);
+        return;
+      }
       const data = await response.json();
       if (data.path) {
         setNewProjPath(data.path);
@@ -94,6 +97,7 @@ export default function Sidebar(props: SidebarProps) {
       }
     } catch (e) {
       console.error('Picker error:', e);
+      alert('Backend ilə rabitə qurulmadı. Serverin işlədiyindən əmin olun.');
     }
   };
 
@@ -116,8 +120,8 @@ export default function Sidebar(props: SidebarProps) {
       {/* Simple Header */}
       <div className={`h-16 flex items-center border-b border-white/5 shrink-0 transition-all px-5 ${props.sidebarOpen ? 'justify-between' : 'justify-center'}`}>
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20 shrink-0 cursor-pointer" onClick={() => !props.sidebarOpen && props.setSidebarOpen(true)}>
-            <span className="text-white font-black text-sm">B</span>
+          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20 shrink-0 cursor-pointer overflow-hidden" onClick={() => !props.sidebarOpen && props.setSidebarOpen(true)}>
+            <span className="text-white font-black text-base leading-none translate-y-[1px]">B</span>
           </div>
           {props.sidebarOpen && (
             <span className="font-bold text-sm tracking-tight truncate animate-in fade-in slide-in-from-left-2 duration-300">iBahora Code</span>
@@ -199,7 +203,7 @@ export default function Sidebar(props: SidebarProps) {
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border ${isActive ? 'bg-blue-600/10 text-blue-400 border-blue-500/20' : 'hover:bg-white/5 text-[var(--fg-muted)] border-transparent'} ${!props.sidebarOpen ? 'justify-center' : ''}`}
                     >
                       {project.repoUrl ? <GitBranch size={18} /> : <FolderPlus size={18} />}
-                      {props.sidebarOpen && <span className="text-xs font-medium truncate flex-1 text-left">{project.name}</span>}
+                      {props.sidebarOpen && <span className="text-xs font-semibold truncate flex-1 text-left pr-10">{project.name}</span>}
                     </button>
                     
                     {props.sidebarOpen && (
@@ -218,6 +222,14 @@ export default function Sidebar(props: SidebarProps) {
 
       {/* Footer */}
       <div className="p-4 space-y-2 border-t border-white/5">
+        <button 
+          onClick={props.onAuthClick}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all hover:bg-blue-600/10 text-blue-400 group ${!props.sidebarOpen ? 'justify-center' : ''}`}
+        >
+          <User size={20} className="group-hover:scale-110 transition-transform" />
+          {props.sidebarOpen && <span className="text-xs font-bold uppercase tracking-widest">Giriş / Qeydiyyat</span>}
+        </button>
+
         <button 
           onClick={() => setShowSettings(!showSettings)}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${showSettings ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-[var(--fg-muted)]'} ${!props.sidebarOpen ? 'justify-center' : ''}`}
@@ -239,9 +251,23 @@ export default function Sidebar(props: SidebarProps) {
             <div className="space-y-5">
               <input type="text" value={newProjName} onChange={e => setNewProjName(e.target.value)} placeholder="Layihə Adı" className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50" />
               {addMode === 'remote' && <input type="text" value={newProjRepo} onChange={e => setNewProjRepo(e.target.value)} placeholder="GitHub URL" className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50" />}
-              <div className="flex gap-2">
-                <input type="text" value={newProjPath} onChange={e => setNewProjPath(e.target.value)} placeholder="Qovluq Yolu" className="flex-1 bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50" />
-                <button onClick={handlePickDir} className="px-6 bg-blue-600/10 border border-blue-500/30 text-blue-400 rounded-xl hover:bg-blue-600/20 transition-all text-[10px] font-black tracking-widest">SEÇ</button>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">İş Sahəsi (Qovluq)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={newProjPath} 
+                    onChange={e => setNewProjPath(e.target.value)} 
+                    placeholder="/Users/path/to/project" 
+                    className="flex-1 bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50" 
+                  />
+                  <button 
+                    onClick={handlePickDir} 
+                    className="px-4 bg-blue-600/20 border border-blue-500/40 text-blue-400 rounded-xl hover:bg-blue-600/30 transition-all text-[10px] font-black whitespace-nowrap"
+                  >
+                    QOVLUQ SEÇ
+                  </button>
+                </div>
               </div>
             </div>
             <div className="mt-8 flex justify-end gap-3">
@@ -257,7 +283,7 @@ export default function Sidebar(props: SidebarProps) {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-xl bg-black/40 animate-in fade-in duration-300">
           <div className="w-full max-w-md bg-[var(--bg-surface)] border border-white/10 rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.8)] p-10 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-6 flex gap-2">
-              <ThemeToggle mode={props.themeCtx.theme} setMode={props.themeCtx.setTheme} />
+              <ThemeToggle theme={props.themeCtx.theme} setTheme={props.themeCtx.setTheme} />
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-white/5 rounded-xl transition-colors"><X size={20} /></button>
             </div>
             

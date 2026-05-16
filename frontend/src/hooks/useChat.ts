@@ -1,5 +1,5 @@
 // ==========================================
-// useChat Hook — Fully Audit-Compliant
+// useChat Hook — Fully Immutable & Audit-Safe
 // ==========================================
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -26,10 +26,10 @@ export function useChat(settings: Settings) {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [previewKey, setPreviewKey] = useState(0); // NEW: For live reload
+  const [previewKey, setPreviewKey] = useState(0);
 
   // PERF-1: Debounced Persistence
-  const storageTimeout = useRef<NodeJS.Timeout | null>(null);
+  const storageTimeout = useRef<any>(null);
   useEffect(() => {
     if (storageTimeout.current) clearTimeout(storageTimeout.current);
     storageTimeout.current = setTimeout(() => {
@@ -78,6 +78,8 @@ export function useChat(settings: Settings) {
     if (!settings.apiKey || !activeConvId) return;
 
     const userMsg: Message = { id: generateId(), role: 'user', content: input, attachments, timestamp: Date.now() };
+    
+    // Add user message to state
     let currentMsgs = [...messages, userMsg];
     setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
     
@@ -104,35 +106,82 @@ export function useChat(settings: Settings) {
               timestamp: Date.now() 
             };
             currentMsgs = [...currentMsgs, assistantMsg];
+            
+            // AUTO PORT DETECTION: Scan assistant message for new localhost URLs
+            const msgContent = typeof event.message === 'string' ? event.message : (event.message.content || '');
+            if (msgContent.includes('http://localhost:')) {
+              const match = msgContent.match(/http:\/\/localhost:(\d+)/);
+              if (match && match[1]) {
+                const newPort = parseInt(match[1]);
+                if (activeProject) {
+                   setProjects(prev => prev.map(p => 
+                     p.id === activeProject.id ? { ...p, lastPort: newPort } : p
+                   ));
+                }
+              }
+            }
+            
             setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
           } else if (event.type === 'tool_execution') {
-            const lastMsg = currentMsgs[currentMsgs.length - 1];
-            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.tool_calls) {
-              lastMsg.tool_calls = lastMsg.tool_calls.map((tc: any) => 
-                tc.function.name === event.tool ? { ...tc, status: 'running' } : tc
-              );
-              setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: [...currentMsgs], updatedAt: Date.now() } : c));
-            }
+            // IMMUTABLE UPDATE: Create a NEW messages array and NEW objects
+            currentMsgs = currentMsgs.map((m, idx) => {
+              if (idx === currentMsgs.length - 1 && m.role === 'assistant' && m.tool_calls) {
+                return {
+                  ...m,
+                  tool_calls: m.tool_calls.map((tc: any) => 
+                    tc.function.name === event.tool ? { ...tc, status: 'running' } : tc
+                  )
+                };
+              }
+              return m;
+            });
+            setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
           } else if (event.type === 'tool_result') {
-            const lastMsg = currentMsgs[currentMsgs.length - 1];
-            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.tool_calls) {
-               lastMsg.tool_calls = lastMsg.tool_calls.map((tc: any) => 
-                 tc.status === 'running' ? { ...tc, status: 'done', result: event.result } : tc
-               );
+            // IMMUTABLE UPDATE: Enrich the tool_call and add a NEW tool message
+            let updatedToolCallId = '';
+            currentMsgs = currentMsgs.map((m, idx) => {
+              if (idx === currentMsgs.length - 1 && m.role === 'assistant' && m.tool_calls) {
+                const updatedToolCalls = m.tool_calls.map((tc: any) => {
+                  if (tc.status === 'running') {
+                    updatedToolCallId = tc.id;
+                    return { ...tc, status: 'done', result: event.result };
+                  }
+                  return tc;
+                });
+                return { ...m, tool_calls: updatedToolCalls };
+              }
+              return m;
+            });
 
-               const toolMsg: Message = {
-                 id: generateId(),
-                 role: 'tool',
-                 content: typeof event.result === 'string' ? event.result : JSON.stringify(event.result),
-                 tool_call_id: lastMsg.tool_calls.find((tc: any) => tc.status === 'done' && tc.result === event.result)?.id || '',
-                 timestamp: Date.now()
-               };
-               currentMsgs = [...currentMsgs, toolMsg];
-               setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: [...currentMsgs], updatedAt: Date.now() } : c));
+            const toolMsg: Message = {
+              id: generateId(),
+              role: 'tool',
+              content: typeof event.result === 'string' ? event.result : JSON.stringify(event.result),
+              tool_call_id: updatedToolCallId,
+              timestamp: Date.now()
+            };
+
+            // AUTO PORT DETECTION: If terminal output contains a URL, update the project port
+            if (typeof event.result === 'string' && event.result.includes('http://localhost:')) {
+              const match = event.result.match(/http:\/\/localhost:(\d+)/);
+              if (match && match[1]) {
+                const newPort = parseInt(match[1]);
+                // FIX: Use functional update to avoid stale projects state
+                setProjects(prev => prev.map(p => 
+                  p.id === activeProject?.id ? { ...p, lastPort: newPort } : p
+                ));
+              }
             }
+
+            currentMsgs = [...currentMsgs, toolMsg];
+            setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+            setPreviewKey(prev => prev + 1);
           } else if (event.type === 'workspace_updated') {
-            updateProject(activeProject!.id, { path: event.path });
-            setPreviewKey(k => k + 1); // TRIGGER RELOAD
+            // SEC-Audit: Safe null check for activeProject
+            if (activeProject) {
+              updateProject(activeProject.id, { path: event.path });
+            }
+            setPreviewKey(k => k + 1);
           }
         },
         controller.signal
@@ -150,6 +199,11 @@ export function useChat(settings: Settings) {
     sendMessage, stop: () => { abortController?.abort(); setLoading(false); },
     setActiveConvId, createProject, updateProject, archiveProject: (id: string, archived: boolean = true) => updateProject(id, { archived }),
     deleteProject: (id: string) => { setProjects(p => p.filter(x => x.id !== id)); setConversations(c => c.filter(x => x.projectId !== id)); },
+    updateProjectPort: (port: number) => {
+      if (activeProject) {
+        setProjects(prev => prev.map(p => p.id === activeProject.id ? { ...p, lastPort: port } : p));
+      }
+    },
     createConversation, deleteConversation: (id: string) => setConversations(c => c.filter(x => x.id !== id)),
     clearAll: () => { setConversations([]); setProjects([]); setActiveConvId(null); }
   };

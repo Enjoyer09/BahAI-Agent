@@ -25,7 +25,10 @@ const PORT = process.env.PORT || 3001;
 const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '15', 10);
 const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
   ? process.env.ALLOWED_DIRECTORIES.split(',').map(d => path.resolve(d.trim()))
-  : [path.resolve(process.cwd())]; // Default to current dir if not set
+  : [
+      path.resolve(__dirname, '..'), // Project root
+      path.resolve(process.env.HOME || process.env.USERPROFILE || '/'), // User home (Documents, etc)
+    ];
 
 // ==========================================
 // Security helpers
@@ -49,7 +52,15 @@ function isPathSafe(filePath, workingDirectory) {
     return !r.startsWith('..') && !path.isAbsolute(r);
   });
 
-  return isInsideProject || isAllowedGlobally;
+  const isSafe = isInsideProject || isAllowedGlobally;
+  
+  if (!isSafe) {
+    console.warn(`🚨 SECURITY ALERT: Blocked access to ${resolvedPath}`);
+    console.warn(`   Rel to Project: ${rel} | Inside: ${isInsideProject}`);
+    console.warn(`   Allowed Globally: ${isAllowedGlobally}`);
+  }
+
+  return isSafe;
 }
 
 /**
@@ -58,6 +69,10 @@ function isPathSafe(filePath, workingDirectory) {
 const ALLOWED_COMMANDS = ['npm', 'yarn', 'git', 'node', 'ls', 'pwd', 'mkdir', 'touch', 'grep', 'find'];
 
 function isBashCommandSafe(command) {
+  // SEC-Audit: Block shell metacharacters to prevent chaining/injection
+  const unsafeChars = /[;&|`$(){}]/;
+  if (unsafeChars.test(command)) return false;
+
   const baseCmd = command.trim().split(/\s+/)[0];
   // Basic allowlist check
   return ALLOWED_COMMANDS.includes(baseCmd) || command.startsWith('npm run');
@@ -158,6 +173,21 @@ const TOOLS = [
     {
         type: "function",
         function: {
+            name: "git_clone",
+            description: "Clones a git repository from a URL into the current directory.",
+            parameters: {
+                type: "object",
+                properties: {
+                    url: { type: "string", description: "The GitHub repository URL (HTTPS)" },
+                    folderName: { type: "string", description: "The name of the folder to clone into" }
+                },
+                required: ["url", "folderName"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
             name: "grep_search",
             description: "Search for a string pattern in the codebase using grep.",
             parameters: {
@@ -229,16 +259,38 @@ async function handleToolCall(toolCall, workingDirectory) {
             }
 
             case "run_terminal_command": {
-                if (!isBashCommandSafe(args.command)) return "Error: Command blocked for security reasons.";
+                // SEC-Audit: Enhanced shell safety
+                if (!isBashCommandSafe(args.command)) return "Error: Command blocked or contains unsafe characters.";
                 
-                // BUG-10: Use sh -c for complex commands
                 return new Promise((resolve) => {
+                    // Use a direct spawn without sh -c for simple commands if possible
+                    // For now, we still use sh -c but with stricter regex in isBashCommandSafe
                     const proc = spawn('sh', ['-c', args.command], { cwd: workingDirectory });
                     let out = "", err = "";
                     proc.stdout.on('data', d => out += d);
                     proc.stderr.on('data', d => err += d);
                     proc.on('close', code => resolve(`Exit Code ${code}\nSTDOUT: ${out}\nSTDERR: ${err}`));
                     setTimeout(() => { proc.kill(); resolve(`Timeout reached: ${out}`); }, 30000);
+                });
+            }
+
+            case "git_clone": {
+                // SEC-Audit: Validate folder name
+                if (args.folderName.includes('..') || args.folderName.includes('/')) {
+                    return "Error: Invalid folder name for security reasons.";
+                }
+                
+                return new Promise((resolve) => {
+                    // SEC-4: Use execFile style for safety
+                    const proc = spawn('git', ['clone', args.url, args.folderName], { cwd: workingDirectory });
+                    let out = "", err = "";
+                    proc.stdout.on('data', d => out += d);
+                    proc.stderr.on('data', d => err += d);
+                    proc.on('close', (code) => {
+                        if (code === 0) resolve(`Successfully cloned ${args.url} into ${args.folderName}`);
+                        else resolve(`Error cloning: ${err}`);
+                    });
+                    setTimeout(() => { proc.kill(); resolve(`Timeout reached while cloning`); }, 60000);
                 });
             }
 
@@ -332,8 +384,8 @@ Azərbaycan dilində cavab ver.`;
  * SEC-3: Protected file reading
  */
 app.get('/api/read-file', async (req, res) => {
-  const { filepath, workingDirectory } = req.query;
-  const resolvedPath = path.resolve(filepath);
+  const { path: reqPath, workingDirectory } = req.query;
+  const resolvedPath = path.resolve(reqPath);
   if (!isPathSafe(resolvedPath, workingDirectory)) {
     return res.status(403).json({ error: "Access denied" });
   }
@@ -360,7 +412,7 @@ app.get('/api/files', async (req, res) => {
     const files = await fs.readdir(targetDir, { withFileTypes: true });
     const result = files.map(f => ({
       name: f.name,
-      isDirectory: f.isDirectory(),
+      type: f.isDirectory() ? 'directory' : 'file',
       path: path.join(reqPath || '.', f.name)
     }));
     res.json(result);
@@ -370,8 +422,8 @@ app.get('/api/files', async (req, res) => {
 });
 
 app.post('/api/write-file', async (req, res) => {
-  const { filepath, content, workingDirectory } = req.body;
-  const resolvedPath = path.resolve(filepath);
+  const { path: reqPath, content, workingDirectory } = req.body;
+  const resolvedPath = path.resolve(reqPath);
   if (!isPathSafe(resolvedPath, workingDirectory)) {
     return res.status(403).json({ error: "Access denied" });
   }

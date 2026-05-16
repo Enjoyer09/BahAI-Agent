@@ -76,9 +76,8 @@ export async function sendChatMessage(
   }
 }
 
-export async function fetchFileTree(dirPath: string): Promise<string[]> {
-  const response = await fetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(dirPath)}`);
+export async function fetchFileTree(dirPath: string, workingDirectory: string): Promise<any[]> {
+  const response = await fetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(dirPath)}&workingDirectory=${encodeURIComponent(workingDirectory)}`);
   if (!response.ok) throw new Error('Fayl siyahısı alına bilmədi');
-  const data = await response.json();
-  return data.files || [];
+  return await response.json();
 }

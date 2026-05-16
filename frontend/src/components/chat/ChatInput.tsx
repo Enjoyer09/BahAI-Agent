@@ -41,9 +41,9 @@ export default function ChatInput({ onSend, onStop, loading, disabled }: ChatInp
       const reader = new FileReader();
       reader.onload = (ev) => {
         setAttachments(prev => [...prev, {
+          id: Math.random().toString(36).substring(7),
           name: file.name,
           type: file.type.startsWith('image/') ? 'image' : 'file',
-          mimeType: file.type,
           url: ev.target?.result as string
         }]);
       };
