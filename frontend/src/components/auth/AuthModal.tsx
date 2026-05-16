@@ -74,13 +74,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           <div className="grid grid-cols-2 gap-4 mb-8">
             <button 
               onClick={() => alert('GitHub girişi tezliklə aktiv olacaq!')}
-              className="flex items-center justify-center gap-3 px-4 py-3 bg-white/5 border border-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:border-white/10 transition-all active:scale-95"
+              className="flex items-center justify-center gap-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10 hover:border-white/20 transition-all active:scale-95"
             >
               <Github size={16} /> GitHub
             </button>
             <button 
               onClick={() => alert('Google girişi tezliklə aktiv olacaq!')}
-              className="flex items-center justify-center gap-3 px-4 py-3 bg-white/5 border border-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:border-white/10 transition-all active:scale-95"
+              className="flex items-center justify-center gap-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10 hover:border-white/20 transition-all active:scale-95"
             >
               Google
             </button>
@@ -98,7 +98,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 <input 
                   type="text" required value={name} onChange={e => setName(e.target.value)}
                   placeholder="Adınız və Soyadınız" 
-                  className="w-full bg-white/5 border border-white/5 rounded-2xl px-12 py-4 text-xs focus:outline-none focus:border-blue-500/50 transition-all"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-12 py-4 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 transition-all"
                 />
               </div>
             )}
@@ -107,7 +107,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <input 
                 type="email" required value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="Email Ünvanı" 
-                className="w-full bg-white/5 border border-white/5 rounded-2xl px-12 py-4 text-xs focus:outline-none focus:border-blue-500/50 transition-all"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl px-12 py-4 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 transition-all"
               />
             </div>
             <div className="relative group">
@@ -115,7 +115,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <input 
                 type="password" required value={password} onChange={e => setPassword(e.target.value)}
                 placeholder="Şifrə" 
-                className="w-full bg-white/5 border border-white/5 rounded-2xl px-12 py-4 text-xs focus:outline-none focus:border-blue-500/50 transition-all"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl px-12 py-4 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 transition-all"
               />
             </div>
 
