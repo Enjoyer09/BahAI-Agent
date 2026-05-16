@@ -538,4 +538,6 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Daxili server xətası baş verdi' });
 });
 
-app.listen(PORT, () => console.log(`🚀 bahAI Backend running on http://localhost:${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 bahAI Backend running on http://0.0.0.0:${PORT}`);
+});
