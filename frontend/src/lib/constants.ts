@@ -1,7 +1,9 @@
 import type { ModelOption } from './types';
 import { List, Search, FileText, Edit, Terminal, Globe } from 'lucide-react';
 
-export const API_BASE_URL = 'http://localhost:3001';
+export const API_BASE_URL = import.meta.env.MODE === 'production' 
+  ? window.location.origin 
+  : 'http://localhost:3001';
 export const DEFAULT_BASE_URL = 'https://opencode.ai/zen/v1';
 
 export const MODELS: ModelOption[] = [
