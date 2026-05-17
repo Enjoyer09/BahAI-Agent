@@ -156,7 +156,7 @@ export default function Sidebar(props: SidebarProps) {
   };
 
   return (
-    <aside className={`flex flex-col bg-[var(--bg-surface-alt)]/80 backdrop-blur-2xl border border-white/5 shadow-2xl transition-all duration-500 relative z-40 rounded-3xl my-2 ml-2 overflow-hidden ${props.sidebarOpen ? 'w-80' : 'w-20'}`}>
+    <aside className={`flex flex-col bg-[var(--bg-surface-alt)]/80 backdrop-blur-2xl border border-white/5 shadow-2xl transition-all duration-500 relative z-40 rounded-3xl my-2 ml-2 overflow-hidden ${props.sidebarOpen ? 'w-80 max-lg:w-[85vw] max-lg:ml-0 max-lg:my-0 max-lg:rounded-none max-lg:h-full' : 'w-20 max-lg:w-0 max-lg:ml-0 max-lg:my-0 max-lg:border-0'}`}>
       
       {/* Premium Logo Header */}
       <div className={`h-20 flex items-center border-b border-white/5 shrink-0 transition-all px-4 ${props.sidebarOpen ? 'justify-between' : 'justify-center'}`}>
