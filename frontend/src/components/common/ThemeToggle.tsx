@@ -14,7 +14,7 @@ const options: { value: ThemeMode; icon: typeof Sun; label: string }[] = [
 
 export default function ThemeToggle({ theme, setTheme }: ThemeToggleProps) {
   return (
-    <div className="relative flex p-1.5 bg-black/20 border border-white/5 rounded-2xl w-full select-none backdrop-blur-md shadow-inner">
+    <div className="relative flex p-1.5 bg-[var(--bg-surface-alt)] border border-[var(--border)] rounded-2xl w-full select-none backdrop-blur-md shadow-inner">
       {options.map(({ value, icon: Icon, label }) => {
         const isActive = theme === value;
         return (
@@ -25,11 +25,11 @@ export default function ThemeToggle({ theme, setTheme }: ThemeToggleProps) {
               relative flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 z-10 active:scale-95
               ${isActive 
                 ? 'text-white bg-blue-600 shadow-xl shadow-blue-600/30' 
-                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-black/5 dark:hover:bg-white/5'
               }
             `}
           >
-            <Icon size={14} className={isActive ? 'animate-pulse text-white' : ''} />
+            <Icon size={14} className={isActive ? 'animate-pulse' : ''} />
             <span>{label}</span>
           </button>
         );
