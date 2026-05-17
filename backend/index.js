@@ -228,29 +228,34 @@ async function extractAttachment(attachment) {
   const mimeType = attachment?.mimeType || decoded?.mimeType || attachment?.type || 'application/octet-stream';
   const name = attachment?.name || 'attachment';
 
-  if (!decoded) {
-    return { name, mimeType, extractedText: '' };
-  }
+  try {
+    if (!decoded) {
+      return { name, mimeType, extractedText: '' };
+    }
 
-  if (mimeType === 'application/pdf' || name.toLowerCase().endsWith('.pdf')) {
-    const data = await pdfParse(decoded.buffer);
-    return { name, mimeType, extractedText: data.text || '' };
-  }
+    if (mimeType === 'application/pdf' || name.toLowerCase().endsWith('.pdf')) {
+      const data = await pdfParse(decoded.buffer);
+      return { name, mimeType, extractedText: data.text || '' };
+    }
 
-  if (
-    mimeType.startsWith('text/') ||
-    mimeType.includes('json') ||
-    mimeType.includes('xml') ||
-    /\.(log|txt|json|csv|md|yaml|yml|env)$/i.test(name)
-  ) {
-    return { name, mimeType, extractedText: decoded.buffer.toString('utf8') };
-  }
+    if (
+      mimeType.startsWith('text/') ||
+      mimeType.includes('json') ||
+      mimeType.includes('xml') ||
+      /\.(log|txt|json|csv|md|yaml|yml|env)$/i.test(name)
+    ) {
+      return { name, mimeType, extractedText: decoded.buffer.toString('utf8') };
+    }
 
-  if (mimeType.startsWith('image/')) {
-    return { name, mimeType, imageUrl: attachment.url, extractedText: `[Şəkil əlavə olunub: ${name}]` };
-  }
+    if (mimeType.startsWith('image/')) {
+      return { name, mimeType, imageUrl: attachment.url, extractedText: `[Şəkil əlavə olunub: ${name}]` };
+    }
 
-  return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}, ${mimeType}]` };
+    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}, ${mimeType}]` };
+  } catch (error) {
+    console.error('Attachment parse xətası:', name, error?.message || error);
+    return { name, mimeType, extractedText: `[Attachment oxunarkən xəta baş verdi: ${name}]` };
+  }
 }
 
 async function normalizeMessagesForModel(messages = []) {
@@ -266,7 +271,16 @@ async function normalizeMessagesForModel(messages = []) {
     const imageParts = [];
 
     for (const attachment of message.attachments) {
-      const extracted = await extractAttachment(attachment);
+      let extracted;
+      try {
+        extracted = await extractAttachment(attachment);
+      } catch (error) {
+        extracted = {
+          name: attachment?.name || 'attachment',
+          mimeType: attachment?.mimeType || attachment?.type || 'application/octet-stream',
+          extractedText: `[Attachment emalında xəta: ${attachment?.name || 'attachment'}]`
+        };
+      }
       if (extracted.extractedText) {
         textParts.push(`\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 30000)}`);
       }
@@ -1079,7 +1093,13 @@ MÜHÜM QAYDALAR:
 5. SERVERİ TƏSDİQLƏ (KRİTİK): check_port_status alətini çağırmadan serverin işlədiyini iddia etmək QADAĞANDIR! Əgər bu aləti çağırmamısansa, "Server işləyir" demə! Əgər port aktiv deyilsə, serverin niyə qalxmadığını (logs) yoxla.
 Azərbaycan dilində cavab ver.`;
 
-    const modelMessages = await normalizeMessagesForModel(messages);
+    let modelMessages = [];
+    try {
+      modelMessages = await normalizeMessagesForModel(messages);
+    } catch (error) {
+      console.error('/api/chat normalize xətası:', error?.message || error);
+      modelMessages = Array.isArray(messages) ? messages : [];
+    }
     let projectMemory = {};
     if (db.hasDatabase() && projectId) {
       try {
