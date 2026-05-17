@@ -1,12 +1,8 @@
 import { Code, Zap } from 'lucide-react';
 import { MODELS } from '../../lib/constants';
-import { useAuth } from '../../hooks/useAuth';
 
 interface SettingsPanelProps {
-  apiKey: string; setApiKey: (v: string) => void;
-  baseUrl: string; setBaseUrl: (v: string) => void;
   model: string; setModel: (v: string) => void;
-  projectDir: string; setProjectDir: (v: string) => void;
   performanceMode: boolean; setPerformanceMode: (v: boolean) => void;
 }
 
@@ -22,12 +18,9 @@ function SettingField({ icon: Icon, label, children }: { icon: any; label: strin
 }
 
 export default function SettingsPanel({ 
-  apiKey, setApiKey, baseUrl, setBaseUrl, model, setModel, 
-  projectDir, setProjectDir, performanceMode, setPerformanceMode 
+  model, setModel, performanceMode, setPerformanceMode 
 }: SettingsPanelProps) {
   
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
   const cls = "w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 text-xs outline-none focus:border-blue-500/50 transition-all text-white";
 
   return (

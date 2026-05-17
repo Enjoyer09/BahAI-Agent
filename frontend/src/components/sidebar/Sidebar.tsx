@@ -305,10 +305,7 @@ export default function Sidebar(props: SidebarProps) {
             </h2>
 
             <SettingsPanel 
-              apiKey={props.apiKey} setApiKey={props.setApiKey}
-              baseUrl={props.baseUrl} setBaseUrl={props.setBaseUrl}
               model={props.model} setModel={props.setModel}
-              projectDir={props.projectDir} setProjectDir={props.setProjectDir}
               performanceMode={props.performanceMode} setPerformanceMode={props.setPerformanceMode}
             />
 
