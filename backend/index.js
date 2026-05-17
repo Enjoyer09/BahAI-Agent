@@ -22,6 +22,12 @@ db.initDb();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
+// Request Logger
+app.use((req, res, next) => {
+  console.log(`[REQ] ${req.method} ${req.url} (original: ${req.originalUrl})`);
+  next();
+});
+
 // Public Auth Routes
 app.use('/api/auth', authRoutes);
 
@@ -581,10 +587,15 @@ app.use(express.static(frontendDist));
 
 // Catch-all for 404s or SPA routing - return index.html for frontend, JSON for API
 app.use((req, res) => {
-    if (req.url.startsWith('/api')) {
+    if (req.originalUrl.startsWith('/api')) {
         return res.status(404).json({ error: `Route ${req.originalUrl} not found` });
     }
-    res.sendFile(path.join(frontendDist, 'index.html'));
+    res.sendFile(path.join(frontendDist, 'index.html'), (err) => {
+        if (err) {
+            console.error('Failed to send index.html:', err);
+            res.status(500).send("bahAI Frontend was not found or compiled. Please run 'npm run build' first!");
+        }
+    });
 });
 
 // Global Error Handler

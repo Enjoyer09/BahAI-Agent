@@ -64,6 +64,12 @@ async function register(req, res) {
 
 // SEC-3: Middleware to verify Token & Role
 function verifyToken(req, res, next) {
+  const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+  if (isLocalMode) {
+    req.user = { id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' };
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -146,7 +152,8 @@ async function googleLogin(req, res) {
 // Public Auth Configuration
 function getAuthConfig(req, res) {
   res.json({
-    googleClientId: process.env.GOOGLE_CLIENT_ID || null
+    googleClientId: process.env.GOOGLE_CLIENT_ID || null,
+    localMode: process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL
   });
 }
 

@@ -30,6 +30,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Check session on mount
     const verifySession = async () => {
+      try {
+        // Fetch config to check if we are in Local Mode
+        const configRes = await fetch(`${API_BASE_URL}/api/auth/config`);
+        if (configRes.ok) {
+          const configData = await configRes.json();
+          if (configData.localMode) {
+            setUser({ id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' });
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch auth configuration', err);
+      }
+
       const token = localStorage.getItem('auth_token');
       if (!token) {
         setLoading(false);

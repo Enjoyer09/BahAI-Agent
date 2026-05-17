@@ -2,10 +2,14 @@
   "name": "ibahora-monorepo",
   "version": "1.0.0",
   "private": true,
+  "bin": {
+    "bahai-agent": "./bin/cli.js"
+  },
   "scripts": {
     "install:all": "npm install --prefix backend && npm install --prefix frontend",
     "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
-    "start": "node backend/index.js"
+    "start": "node backend/index.js",
+    "local": "node bin/cli.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
