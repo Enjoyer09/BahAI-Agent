@@ -141,45 +141,6 @@ function injectGithubTokenIntoUrl(url, token) {
   }
 }
 
-function sanitizeAttachmentFallbackReply(content, hasAttachments) {
-  if (!hasAttachments || typeof content !== 'string') return content;
-  const text = content.toLowerCase();
-  const retryPatterns = [
-    'drag & drop',
-    'drag and drop',
-    'link göndərin',
-    'copy-paste',
-    'yenidən yüklə',
-    'yenidən upload',
-    'faylı buraya sürüşdür',
-    'pdf-i haradan',
-    'pdf faylını oxumaqda',
-    'pdf faylını birbaşa oxumaqda',
-    'sistemin məhdudiyyətidir',
-    'hazırda işləmir',
-    'copy edin',
-    'paste edin',
-    'məzmununu mətn kimi göndərin'
-  ];
-  const asksToReupload = retryPatterns.some((p) => text.includes(p));
-  if (!asksToReupload) return content;
-  // Do not hard-replace the whole assistant message, otherwise response can stall.
-  // We only strip common retry prompts and keep the rest of model output.
-  const lines = content
-    .split('\n')
-    .filter((line) => {
-      const l = line.toLowerCase();
-      return !retryPatterns.some((p) => l.includes(p));
-    })
-    .map((x) => x.trim())
-    .filter(Boolean);
-
-  const cleaned = lines.join('\n');
-  if (cleaned) return cleaned;
-
-  return 'Attachment qəbul olundu. Faylın mövcud məzmununa əsasən analizə davam edirəm.';
-}
-
 function getUserWorkspaceRoot(user) {
   const userId = user?.id || 'public';
   return path.resolve(WORKSPACE_ROOT, `user_${userId}`);
@@ -435,7 +396,6 @@ async function normalizeMessagesForModel(messages = []) {
       message.content || '',
       '[Sistem qeydi: İstifadəçi artıq attachment göndərib. Yenidən upload/drag-drop/link istəmədən mövcud attachment məzmununu analiz et.]'
     ];
-    const imageParts = [];
 
     for (const attachment of message.attachments) {
       let extracted;
@@ -455,27 +415,13 @@ async function normalizeMessagesForModel(messages = []) {
       } else {
         textParts.push(`\n\n[Attachment: ${attachment?.name || extracted.name || 'attachment'} | ${attachment?.mimeType || extracted.mimeType || 'unknown'}]\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`);
       }
-      if (extracted.imageUrl) {
-        imageParts.push({ type: 'image_url', image_url: { url: extracted.imageUrl } });
-      }
     }
 
-    if (imageParts.length > 0) {
-      normalized.push({
-        ...message,
-        content: [
-          { type: 'text', text: textParts.join('\n').trim() || 'İstifadəçi fayl əlavə edib.' },
-          ...imageParts
-        ],
-        attachments: undefined
-      });
-    } else {
-      normalized.push({
-        ...message,
-        content: textParts.join('\n').trim(),
-        attachments: undefined
-      });
-    }
+    normalized.push({
+      ...message,
+      content: textParts.join('\n').trim(),
+      attachments: undefined
+    });
   }
 
   return normalized;
@@ -1336,6 +1282,7 @@ Azərbaycan dilində cavab ver.`;
 
     let currentMessages = [...apiMessages];
     let step = 0;
+    let attachmentRetryUsed = false;
     const initialPlan = [
       'Oxunacaq faylları müəyyən et',
       'Dəyişiklik planını hazırla',
@@ -1355,9 +1302,21 @@ Azərbaycan dilində cavab ver.`;
             });
 
             const msg = response.choices[0].message;
-            if (typeof msg.content === 'string') {
-              msg.content = sanitizeAttachmentFallbackReply(msg.content, hasAttachmentInRequest);
+
+            const hasToolCalls = Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0;
+            const hasTextContent = typeof msg.content === 'string'
+              ? msg.content.trim().length > 0
+              : Array.isArray(msg.content) && msg.content.length > 0;
+
+            if (hasAttachmentInRequest && !hasToolCalls && !hasTextContent && !attachmentRetryUsed) {
+              attachmentRetryUsed = true;
+              currentMessages.push({
+                role: 'system',
+                content: 'İstifadəçi attachment göndərib. Boş cavab vermə. Mövcud attachment məlumatına əsaslanaraq qısa, konkret analiz və nəticə yaz.'
+              });
+              continue;
             }
+
             currentMessages.push(msg);
 
             // BUG-4: Send full message including tool_calls
