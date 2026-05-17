@@ -3,7 +3,7 @@
 // ==========================================
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Square, Paperclip, X } from 'lucide-react';
+import { Send, Square, Paperclip, Camera, X } from 'lucide-react';
 import type { Attachment } from '../../lib/types';
 
 interface ChatInputProps {
@@ -18,6 +18,7 @@ export default function ChatInput({ onSend, onStop, loading, disabled }: ChatInp
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -34,8 +35,7 @@ export default function ChatInput({ onSend, onStop, loading, disabled }: ChatInp
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  const pushFiles = (files: FileList | null) => {
     if (!files) return;
     Array.from(files).forEach(file => {
       const reader = new FileReader();
@@ -50,6 +50,16 @@ export default function ChatInput({ onSend, onStop, loading, disabled }: ChatInp
       };
       reader.readAsDataURL(file);
     });
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    pushFiles(e.target.files);
+    e.target.value = '';
+  };
+
+  const handleCameraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    pushFiles(e.target.files);
+    e.target.value = '';
   };
 
   return (
@@ -90,10 +100,26 @@ export default function ChatInput({ onSend, onStop, loading, disabled }: ChatInp
           <button 
             onClick={() => fileInputRef.current?.click()}
             className="p-2 text-gray-500 hover:text-white transition-colors cursor-pointer rounded-lg hover:bg-white/5"
+            title="Fayl əlavə et"
           >
             <Paperclip size={18} />
           </button>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple className="hidden" />
+          <button
+            onClick={() => cameraInputRef.current?.click()}
+            className="p-2 text-gray-500 hover:text-white transition-colors cursor-pointer rounded-lg hover:bg-white/5"
+            title="Kamera ilə çək"
+          >
+            <Camera size={18} />
+          </button>
+          <input
+            type="file"
+            ref={cameraInputRef}
+            onChange={handleCameraChange}
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+          />
 
           {loading ? (
             <button 
