@@ -27,6 +27,12 @@ export interface Message {
   tool_call_id?: string;
 }
 
+export interface ApprovalRequest {
+  approvalId: string;
+  tool: string;
+  args: string;
+}
+
 export interface Conversation {
   id: string;
   projectId: string;
@@ -56,6 +62,8 @@ export type SSEEvent =
   | { type: 'assistant_message'; message: any }
   | { type: 'tool_execution'; tool: string; args: string }
   | { type: 'tool_result'; result: any }
+  | { type: 'task_plan'; items: string[] }
+  | { type: 'approval_request'; approvalId: string; tool: string; args: string }
   | { type: 'workspace_updated'; path: string }
   | { type: 'error'; message: string }
   | { type: 'debug'; info: any };

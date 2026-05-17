@@ -44,6 +44,12 @@ app.use('/api/pick-directory', verifyToken);
 app.use('/api/projects', verifyToken);
 app.use('/api/conversations', verifyToken);
 app.use('/api/attachments', verifyToken);
+app.use('/api/task-plan', verifyToken);
+app.use('/api/diff', verifyToken);
+app.use('/api/terminal', verifyToken);
+app.use('/api/project-health', verifyToken);
+app.use('/api/project-memory', verifyToken);
+app.use('/api/approvals', verifyToken);
 
 // ==========================================
 // Configuration from environment
@@ -311,6 +317,55 @@ function serializeConversation(row) {
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now()
   };
+}
+
+const pendingApprovals = new Map();
+
+function makeUnifiedDiff(oldContent, newContent, filePath) {
+  const oldLines = String(oldContent || '').split('\n');
+  const newLines = String(newContent || '').split('\n');
+  const max = Math.max(oldLines.length, newLines.length);
+  const diff = [`--- a/${filePath}`, `+++ b/${filePath}`];
+
+  for (let i = 0; i < max; i += 1) {
+    const oldLine = oldLines[i];
+    const newLine = newLines[i];
+    if (oldLine === newLine) {
+      continue;
+    }
+    if (oldLine !== undefined) diff.push(`-${oldLine}`);
+    if (newLine !== undefined) diff.push(`+${newLine}`);
+  }
+
+  return diff.join('\n');
+}
+
+function isSensitiveTool(toolName) {
+  return toolName === 'write_file' || toolName === 'file_edit' || toolName === 'run_terminal_command' || toolName === 'git_clone';
+}
+
+async function runStreamingCommand(command, cwd, onChunk) {
+  return new Promise((resolve) => {
+    const proc = spawn('sh', ['-c', command], { cwd });
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => {
+      const chunk = String(data);
+      stdout += chunk;
+      onChunk('stdout', chunk);
+    });
+
+    proc.stderr.on('data', (data) => {
+      const chunk = String(data);
+      stderr += chunk;
+      onChunk('stderr', chunk);
+    });
+
+    proc.on('close', (code) => {
+      resolve({ code, stdout, stderr });
+    });
+  });
 }
 
 /**
@@ -841,8 +896,156 @@ app.post('/api/attachments/extract', async (req, res) => {
   }
 });
 
+app.post('/api/task-plan', async (req, res) => {
+  const { prompt, workingDirectory } = req.body;
+  const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
+  try {
+    const files = await fs.readdir(resolvedWD);
+    const likelyFiles = files.slice(0, 20);
+    const plan = [
+      { id: crypto.randomUUID(), title: 'Konteksti oxu', detail: `Layihə qovluğu: ${resolvedWD}`, status: 'pending' },
+      { id: crypto.randomUUID(), title: 'Oxunacaq fayllar', detail: likelyFiles.join(', ') || 'Fayl tapılmadı', status: 'pending' },
+      { id: crypto.randomUUID(), title: 'Dəyişiklikləri hazırla', detail: 'Planlanan patch və diff preview yaradılacaq', status: 'pending' },
+      { id: crypto.randomUUID(), title: 'Yoxlama', detail: 'build/lint/test/health check icra ediləcək', status: 'pending' }
+    ];
+    res.json({ prompt: prompt || '', workingDirectory: resolvedWD, plan });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/diff/preview', async (req, res) => {
+  const { path: reqPath, workingDirectory, newContent } = req.body;
+  const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
+  const resolvedPath = mapPath(reqPath, workingDirectory, resolvedWD);
+  if (!isPathSafe(resolvedPath, workingDirectory, req.user)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  try {
+    const oldContent = await fs.readFile(resolvedPath, 'utf8');
+    const diff = makeUnifiedDiff(oldContent, String(newContent || ''), reqPath || resolvedPath);
+    res.json({ diff, oldContent, newContent: String(newContent || '') });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/diff/apply', async (req, res) => {
+  const { path: reqPath, workingDirectory, newContent } = req.body;
+  const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
+  const resolvedPath = mapPath(reqPath, workingDirectory, resolvedWD);
+  if (!isPathSafe(resolvedPath, workingDirectory, req.user)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  try {
+    await fs.writeFile(resolvedPath, String(newContent || ''), 'utf8');
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/terminal/run', async (req, res) => {
+  const { command, workingDirectory } = req.body;
+  const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
+  if (!isBashCommandSafe(command || '')) {
+    return res.status(400).json({ error: 'Command blocked for safety' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const result = await runStreamingCommand(command, resolvedWD, (stream, chunk) => {
+    res.write(`data: ${JSON.stringify({ type: 'terminal_line', stream, chunk })}\n\n`);
+  });
+  res.write(`data: ${JSON.stringify({ type: 'terminal_done', ...result })}\n\n`);
+  res.end();
+});
+
+app.post('/api/project-health', async (req, res) => {
+  const { workingDirectory } = req.body;
+  const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
+  const commands = [
+    { key: 'build', cmd: 'npm run build' },
+    { key: 'lint', cmd: 'npm run lint' },
+    { key: 'deps', cmd: 'npm outdated --depth=0 || true' },
+    { key: 'port', cmd: 'node -e "require(\'net\').createConnection({port:3001,host:\'127.0.0.1\'}).on(\'connect\',()=>{console.log(\'OPEN\');process.exit(0)}).on(\'error\',()=>{console.log(\'CLOSED\');process.exit(0)})"' },
+    { key: 'health', cmd: 'curl -sS -m 3 http://localhost:3001/api/auth/config || true' }
+  ];
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  for (const item of commands) {
+    res.write(`data: ${JSON.stringify({ type: 'health_step', key: item.key, status: 'running', command: item.cmd })}\n\n`);
+    // eslint-disable-next-line no-await-in-loop
+    const result = await runStreamingCommand(item.cmd, resolvedWD, (stream, chunk) => {
+      res.write(`data: ${JSON.stringify({ type: 'health_log', key: item.key, stream, chunk })}\n\n`);
+    });
+    res.write(`data: ${JSON.stringify({ type: 'health_step', key: item.key, status: result.code === 0 ? 'done' : 'failed', exitCode: result.code })}\n\n`);
+  }
+  res.write(`data: ${JSON.stringify({ type: 'health_done' })}\n\n`);
+  res.end();
+});
+
+app.get('/api/project-memory/:projectId', async (req, res) => {
+  if (!db.hasDatabase()) return res.json({ memory: {} });
+  try {
+    const result = await db.query(
+      'SELECT memory FROM project_memories WHERE project_id = $1 AND user_id = $2',
+      [req.params.projectId, req.user.id]
+    );
+    res.json({ memory: result.rows[0]?.memory || {} });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/project-memory/:projectId', async (req, res) => {
+  if (!db.hasDatabase()) return res.status(503).json({ error: 'Database aktiv deyil' });
+  try {
+    const memory = req.body?.memory || {};
+    await db.query(
+      `INSERT INTO project_memories (project_id, user_id, memory, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+       ON CONFLICT (project_id) DO UPDATE
+       SET memory = EXCLUDED.memory, updated_at = CURRENT_TIMESTAMP`,
+      [req.params.projectId, req.user.id, JSON.stringify(memory)]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/approvals/:id', async (req, res) => {
+  const pending = pendingApprovals.get(req.params.id);
+  if (!pending) return res.status(404).json({ error: 'Approval tapılmadı' });
+  if (pending.userId !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+  pending.status = req.body?.decision === 'approve' ? 'approved' : 'rejected';
+  pendingApprovals.set(req.params.id, pending);
+  res.json({ success: true, status: pending.status });
+});
+
+app.post('/api/approvals/:id/execute', async (req, res) => {
+  const pending = pendingApprovals.get(req.params.id);
+  if (!pending) return res.status(404).json({ error: 'Approval tapılmadı' });
+  if (pending.userId !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+  if (pending.status !== 'approved') return res.status(400).json({ error: 'Approval təsdiqlənməyib' });
+
+  try {
+    const result = await handleToolCall(pending.toolCall, pending.workingDirectory, req.user);
+    pendingApprovals.delete(req.params.id);
+    res.json({ success: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/chat', async (req, res) => {
-    const { messages, apiKey, model, workingDirectory, baseUrl, debug } = req.body;
+    const { messages, apiKey, model, workingDirectory, baseUrl, projectId, safeMode = true } = req.body;
     
     // SEC-1: Verify workingDirectory against ALLOWED_DIRS
     const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
@@ -877,13 +1080,34 @@ MÜHÜM QAYDALAR:
 Azərbaycan dilində cavab ver.`;
 
     const modelMessages = await normalizeMessagesForModel(messages);
-    const apiMessages = [{ role: 'system', content: sysPrompt }, ...modelMessages];
+    let projectMemory = {};
+    if (db.hasDatabase() && projectId) {
+      try {
+        const memoryResult = await db.query(
+          'SELECT memory FROM project_memories WHERE project_id = $1 AND user_id = $2',
+          [projectId, req.user.id]
+        );
+        projectMemory = memoryResult.rows[0]?.memory || {};
+      } catch {
+        projectMemory = {};
+      }
+    }
+
+    const memoryPrompt = `Layihə yaddaşı: ${JSON.stringify(projectMemory)}`;
+    const apiMessages = [{ role: 'system', content: `${sysPrompt}\n${memoryPrompt}` }, ...modelMessages];
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
 
     let currentMessages = [...apiMessages];
     let step = 0;
+    const initialPlan = [
+      'Oxunacaq faylları müəyyən et',
+      'Dəyişiklik planını hazırla',
+      'Diff/Approval ilə tətbiq et',
+      'Build/Test/Health yoxlaması apar'
+    ];
+    res.write(`data: ${JSON.stringify({ type: 'task_plan', items: initialPlan })}\n\n`);
 
     try {
         while (step < MAX_STEPS) {
@@ -904,6 +1128,23 @@ Azərbaycan dilində cavab ver.`;
             if (msg.tool_calls && msg.tool_calls.length > 0) {
                 for (const toolCall of msg.tool_calls) {
                     res.write(`data: ${JSON.stringify({ type: 'tool_execution', tool: toolCall.function.name, args: toolCall.function.arguments })}\n\n`);
+                    if (safeMode && isSensitiveTool(toolCall.function.name)) {
+                        const approvalId = crypto.randomUUID();
+                        pendingApprovals.set(approvalId, {
+                          userId: req.user.id,
+                          status: 'pending',
+                          toolCall,
+                          workingDirectory: resolvedWD,
+                          createdAt: Date.now()
+                        });
+                        res.write(`data: ${JSON.stringify({ type: 'approval_request', approvalId, tool: toolCall.function.name, args: toolCall.function.arguments })}\n\n`);
+                        currentMessages.push({
+                          role: "tool",
+                          tool_call_id: toolCall.id,
+                          content: `Approval required: ${approvalId}`
+                        });
+                        continue;
+                    }
                     const result = await handleToolCall(toolCall, resolvedWD, req.user);
                     
                     const toolResultMsg = { role: "tool", tool_call_id: toolCall.id, content: result };

@@ -16,6 +16,7 @@ export async function sendChatMessage(
   baseUrl: string,
   model: string,
   workingDirectory: string,
+  options: { safeMode: boolean; projectId?: string | null },
   onEvent: (event: SSEEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
@@ -31,6 +32,8 @@ export async function sendChatMessage(
       baseUrl,
       model,
       workingDirectory,
+      safeMode: options.safeMode,
+      projectId: options.projectId || undefined,
     }),
     signal,
   });
@@ -196,4 +199,132 @@ export async function pickDirectory(): Promise<string> {
   if (!response.ok) throw new Error('Qovluq seçilə bilmədi');
   const data = await response.json();
   return data.path;
+}
+
+export async function getTaskPlan(prompt: string, workingDirectory: string): Promise<{ items: string[] }> {
+  const response = await fetch(`${API_BASE_URL}/api/task-plan`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify({ prompt, workingDirectory })
+  });
+  if (!response.ok) throw new Error('Task plan yaradıla bilmədi');
+  const data = await response.json();
+  const items = Array.isArray(data.plan) ? data.plan.map((x: { title: string }) => x.title) : [];
+  return { items };
+}
+
+export async function previewDiff(input: { path: string; workingDirectory: string; newContent: string }): Promise<{ diff: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/diff/preview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) throw new Error('Diff preview alınmadı');
+  return await response.json();
+}
+
+export async function applyDiff(input: { path: string; workingDirectory: string; newContent: string }): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/diff/apply`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) throw new Error('Diff tətbiq olunmadı');
+}
+
+async function streamSse(
+  url: string,
+  body: unknown,
+  onEvent: (event: Record<string, unknown>) => void
+): Promise<void> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new Error(`SSE xətası: ${response.status}`);
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('SSE body boşdur');
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let done = false;
+  while (!done) {
+    const { value, done: readerDone } = await reader.read();
+    done = readerDone;
+    if (!value) continue;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        onEvent(JSON.parse(line.slice(6)));
+      } catch {
+        // ignore invalid chunks
+      }
+    }
+  }
+}
+
+export async function runTerminalStream(command: string, workingDirectory: string, onEvent: (event: Record<string, unknown>) => void): Promise<void> {
+  await streamSse(`${API_BASE_URL}/api/terminal/run`, { command, workingDirectory }, onEvent);
+}
+
+export async function runProjectHealthCheck(workingDirectory: string, onEvent: (event: Record<string, unknown>) => void): Promise<void> {
+  await streamSse(`${API_BASE_URL}/api/project-health`, { workingDirectory }, onEvent);
+}
+
+export async function getProjectMemory(projectId: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`${API_BASE_URL}/api/project-memory/${encodeURIComponent(projectId)}`, {
+    headers: getAuthHeader()
+  });
+  if (!response.ok) throw new Error('Project memory alınmadı');
+  const data = await response.json();
+  return data.memory || {};
+}
+
+export async function saveProjectMemory(projectId: string, memory: Record<string, unknown>): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/project-memory/${encodeURIComponent(projectId)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify({ memory })
+  });
+  if (!response.ok) throw new Error('Project memory yazılmadı');
+}
+
+export async function submitApproval(approvalId: string, decision: 'approve' | 'reject'): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/approvals/${encodeURIComponent(approvalId)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify({ decision })
+  });
+  if (!response.ok) throw new Error('Approval göndərilə bilmədi');
+}
+
+export async function executeApproval(approvalId: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/api/approvals/${encodeURIComponent(approvalId)}/execute`, {
+    method: 'POST',
+    headers: getAuthHeader()
+  });
+  if (!response.ok) throw new Error('Approval icra olunmadı');
+  const data = await response.json();
+  return data.result || '';
 }

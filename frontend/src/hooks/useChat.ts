@@ -5,13 +5,22 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Message, Conversation, Project, Settings } from '../lib/types';
 import {
+  applyDiff,
   createConversationOnServer,
   createProjectOnServer,
   deleteConversationOnServer,
   deleteProjectOnServer,
+  executeApproval,
   extractAttachments,
+  getProjectMemory,
+  getTaskPlan,
   loadWorkspaceState,
+  previewDiff,
+  runProjectHealthCheck,
+  runTerminalStream,
+  saveProjectMemory,
   sendChatMessage,
+  submitApproval,
   updateConversationOnServer,
   updateProjectOnServer
 } from '../lib/api';
@@ -39,6 +48,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   const [serverBacked, setServerBacked] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
+  const [safeMode, setSafeMode] = useState(true);
+  const [taskPlan, setTaskPlan] = useState<string[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<Array<{ approvalId: string; tool: string; args: string }>>([]);
+  const [projectMemory, setProjectMemory] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
     // Prevent cross-account bleed in the same browser session.
@@ -161,6 +174,22 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     projects.find(p => p.id === activeConversation?.projectId) || null
   , [projects, activeConversation]);
 
+  useEffect(() => {
+    const loadMemory = async () => {
+      if (!activeProject?.id || !serverBacked) {
+        setProjectMemory({});
+        return;
+      }
+      try {
+        const memory = await getProjectMemory(activeProject.id);
+        setProjectMemory(memory);
+      } catch {
+        setProjectMemory({});
+      }
+    };
+    loadMemory();
+  }, [activeProject?.id, serverBacked]);
+
   const createConversation = useCallback((projectId: string, title: string = 'Yeni söhbət') => {
     const newConv: Conversation = {
       id: generateId(),
@@ -227,10 +256,18 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
     
     setLoading(true);
+    setTaskPlan([]);
     const controller = new AbortController();
     setAbortController(controller);
 
     try {
+      try {
+        const plan = await getTaskPlan(input, activeProject?.path || settings.projectDir);
+        setTaskPlan(plan.items);
+      } catch {
+        setTaskPlan([]);
+      }
+
       await sendChatMessage(
         currentMsgs.map(m => ({ 
           role: m.role, 
@@ -240,7 +277,16 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
           tool_call_id: m.tool_call_id 
         })),
         settings.apiKey, settings.baseUrl, settings.model, activeProject?.path || settings.projectDir,
+        { safeMode, projectId: activeProject?.id },
         (event: any) => {
+          if (event.type === 'task_plan') {
+            setTaskPlan(Array.isArray(event.items) ? event.items : []);
+            return;
+          }
+          if (event.type === 'approval_request') {
+            setPendingApprovals(prev => [...prev, { approvalId: event.approvalId, tool: event.tool, args: event.args }]);
+            return;
+          }
           if (event.type === 'assistant_message') {
             const assistantMsg: Message = { 
               id: generateId(), 
@@ -333,17 +379,89 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         },
         controller.signal
       );
+
+      if (activeProject?.id && serverBacked) {
+        const inferredMemory = {
+          ...projectMemory,
+          language: 'az',
+          model: settings.model,
+          latestPrompt: input,
+          workspace: activeProject.path
+        };
+        setProjectMemory(inferredMemory);
+        saveProjectMemory(activeProject.id, inferredMemory).catch(console.error);
+      }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         const errMsg: Message = { id: generateId(), role: 'assistant', content: `❌ Xəta: ${err.message}`, timestamp: Date.now() };
         setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: [...c.messages, errMsg], updatedAt: Date.now() } : c));
       }
     } finally { setLoading(false); setAbortController(null); }
-  }, [activeConvId, messages, settings, activeProject, updateProject, serverBacked]);
+  }, [activeConvId, messages, settings, activeProject, updateProject, serverBacked, projectMemory, safeMode]);
+
+  const decideApproval = useCallback(async (approvalId: string, decision: 'approve' | 'reject') => {
+    await submitApproval(approvalId, decision);
+    if (decision === 'approve') {
+      const result = await executeApproval(approvalId);
+      const toolMsg: Message = {
+        id: generateId(),
+        role: 'tool',
+        content: result,
+        timestamp: Date.now()
+      };
+      setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: [...c.messages, toolMsg], updatedAt: Date.now() } : c));
+    }
+    setPendingApprovals(prev => prev.filter(item => item.approvalId !== approvalId));
+  }, [activeConvId]);
+
+  const runHealthCheck = useCallback(async () => {
+    if (!activeProject?.path) return;
+    await runProjectHealthCheck(activeProject.path, (event) => {
+      const detail = event.type === 'health_log'
+        ? { type: 'info', content: String(event.chunk || '') }
+        : { type: 'command', content: `[${String(event.type)}] ${String(event.key || '')} ${String(event.status || '')}` };
+      window.dispatchEvent(new CustomEvent('terminal-log', { detail }));
+    });
+  }, [activeProject?.path]);
+
+  const runTerminalCommand = useCallback(async (command: string) => {
+    if (!activeProject?.path || !command) return;
+    window.dispatchEvent(new CustomEvent('terminal-log', { detail: { type: 'command', content: command } }));
+    await runTerminalStream(command, activeProject.path, (event) => {
+      if (event.type === 'terminal_line') {
+        window.dispatchEvent(new CustomEvent('terminal-log', {
+          detail: {
+            type: event.stream === 'stderr' ? 'error' : 'info',
+            content: String(event.chunk || '')
+          }
+        }));
+      }
+      if (event.type === 'terminal_done') {
+        window.dispatchEvent(new CustomEvent('terminal-log', {
+          detail: {
+            type: Number(event.code) === 0 ? 'success' : 'error',
+            content: `Exit code: ${String(event.code)}`
+          }
+        }));
+      }
+    });
+  }, [activeProject?.path]);
+
+  const getDiffPreview = useCallback(async (filePath: string, newContent: string) => {
+    if (!activeProject?.path) throw new Error('Project seçilməyib');
+    return previewDiff({ path: filePath, workingDirectory: activeProject.path, newContent });
+  }, [activeProject?.path]);
+
+  const applyDiffPreview = useCallback(async (filePath: string, newContent: string) => {
+    if (!activeProject?.path) throw new Error('Project seçilməyib');
+    await applyDiff({ path: filePath, workingDirectory: activeProject.path, newContent });
+  }, [activeProject?.path]);
 
   return {
     projects, conversations, messages, activeConvId, activeConversation, activeProject, loading, previewKey,
+    safeMode, setSafeMode, taskPlan, pendingApprovals, projectMemory,
     sendMessage, stop: () => { abortController?.abort(); setLoading(false); },
+    decideApproval, runHealthCheck, runTerminalCommand, getDiffPreview, applyDiffPreview,
     setActiveConvId, createProject, updateProject, archiveProject: (id: string, archived: boolean = true) => updateProject(id, { archived }),
     deleteProject: (id: string) => {
       setProjects(p => p.filter(x => x.id !== id));

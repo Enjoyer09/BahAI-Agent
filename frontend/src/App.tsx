@@ -11,6 +11,7 @@ import FileTree from './components/sidebar/FileTree';
 import Terminal from './components/chat/Terminal';
 import CodeEditor from './components/chat/CodeEditor';
 import LivePreview from './components/chat/LivePreview';
+import OpsPanel from './components/chat/OpsPanel';
 import AuthModal from './components/auth/AuthModal';
 import LandingPage from './components/landing/LandingPage';
 import { useSettings } from './hooks/useSettings';
@@ -24,6 +25,7 @@ export default function App() {
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [showTerminal, setShowTerminal] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showOps, setShowOps] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const { user, loading: authLoading } = useAuth();
@@ -32,7 +34,7 @@ export default function App() {
   const chat = useChat(settings.settings, user?.id);
 
   // Dynamic Layout Logic: Check if any auxiliary window is active
-  const isAuxActive = activeFile || showPreview || showTerminal;
+  const isAuxActive = activeFile || showPreview || showTerminal || showOps;
 
   // Auto-toggle preview for web projects if needed
   useEffect(() => {
@@ -116,6 +118,14 @@ export default function App() {
             >
               <Command size={14} /> Terminal
             </button>
+            <button
+              onClick={() => setShowOps(!showOps)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border font-bold text-[10px] uppercase tracking-widest ${
+                showOps ? 'bg-white/15 border-white/10 text-white shadow-xl' : 'bg-white/5 border-white/5 text-gray-400 hover:bg-white/10'
+              }`}
+            >
+              Ops
+            </button>
           </div>
         </header>
 
@@ -180,6 +190,20 @@ export default function App() {
                 </div>
               )}
             </div>
+          )}
+
+          {showOps && (
+            <OpsPanel
+              safeMode={chat.safeMode}
+              setSafeMode={chat.setSafeMode}
+              taskPlan={chat.taskPlan}
+              pendingApprovals={chat.pendingApprovals}
+              onDecideApproval={chat.decideApproval}
+              onHealthCheck={chat.runHealthCheck}
+              onTerminalRun={chat.runTerminalCommand}
+              onDiffPreview={chat.getDiffPreview}
+              onDiffApply={chat.applyDiffPreview}
+            />
           )}
         </div>
       </main>
