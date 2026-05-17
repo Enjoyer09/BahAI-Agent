@@ -50,11 +50,55 @@ const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
 // ==========================================
 
 /**
+ * Helper to resolve working directory dynamically.
+ * Maps local paths (e.g., /Users/macbookair/...) to safe sandboxed container directories on cloud/Linux.
+ */
+function resolveWorkingDirectory(wd) {
+  if (!wd) return path.resolve(process.cwd());
+
+  const cleanWd = wd.trim();
+
+  // If running on Linux (Railway) but path is a macOS/Windows user directory
+  if (process.platform === 'linux' && (cleanWd.startsWith('/Users/') || cleanWd.startsWith('/home/') || cleanWd.includes('\\') || cleanWd.includes(':'))) {
+    const folderName = path.basename(cleanWd.replace(/\\/g, '/'));
+    const sandboxPath = path.resolve(__dirname, '../sandbox', folderName || 'default');
+    
+    // Ensure sandbox dir exists
+    const fsExtra = require('fs');
+    if (!fsExtra.existsSync(sandboxPath)) {
+      try {
+        fsExtra.mkdirSync(sandboxPath, { recursive: true });
+      } catch (err) {
+        console.error("Failed to create sandbox directory:", err);
+      }
+    }
+    return sandboxPath;
+  }
+
+  return path.resolve(cleanWd);
+}
+
+/**
+ * Maps a file path from a requested original working directory to a resolved one.
+ */
+function mapPath(originalPath, originalWD, resolvedWD) {
+  if (!originalPath) return resolvedWD;
+  const resolvedOrigWD = path.resolve(originalWD || '.');
+  const resolvedReqPath = path.resolve(originalPath);
+
+  if (resolvedOrigWD === resolvedWD) return resolvedReqPath;
+
+  const rel = path.relative(resolvedOrigWD, resolvedReqPath);
+  return path.resolve(resolvedWD, rel);
+}
+
+/**
  * SEC-2: Robust path safety check using path.relative
  */
 function isPathSafe(filePath, workingDirectory) {
-  if (!workingDirectory) return false;
-  const resolvedBase = path.resolve(workingDirectory);
+  const resolvedWD = resolveWorkingDirectory(workingDirectory);
+  if (!resolvedWD) return false;
+  const resolvedBase = path.resolve(resolvedWD);
   const resolvedPath = path.resolve(filePath);
   
   // Check if it's within the specific project working directory
@@ -392,8 +436,11 @@ app.post('/api/chat', async (req, res) => {
     const { messages, apiKey, model, workingDirectory, baseUrl, debug } = req.body;
     
     // SEC-1: Verify workingDirectory against ALLOWED_DIRS
-    const resolvedWD = path.resolve(workingDirectory || '.');
-    if (!ALLOWED_DIRS.some(base => resolvedWD.startsWith(base))) {
+    const resolvedWD = resolveWorkingDirectory(workingDirectory);
+    if (!ALLOWED_DIRS.some(base => {
+        const r = path.relative(base, resolvedWD);
+        return !r.startsWith('..') && !path.isAbsolute(r);
+    })) {
         return res.status(403).json({ error: "Unauthorized working directory" });
     }
 
@@ -462,8 +509,10 @@ Azərbaycan dilində cavab ver.`;
  */
 app.get('/api/read-file', async (req, res) => {
   const { path: reqPath, workingDirectory } = req.query;
-  const resolvedPath = path.resolve(reqPath);
-  if (!isPathSafe(resolvedPath, workingDirectory)) {
+  const resolvedWD = resolveWorkingDirectory(workingDirectory);
+  const resolvedPath = mapPath(reqPath, workingDirectory, resolvedWD);
+  
+  if (!isPathSafe(resolvedPath, resolvedWD)) {
     return res.status(403).json({ error: "Access denied" });
   }
   try {
@@ -479,9 +528,10 @@ app.get('/api/read-file', async (req, res) => {
  */
 app.get('/api/files', async (req, res) => {
   const { path: reqPath, workingDirectory } = req.query;
-  const targetDir = path.resolve(workingDirectory, reqPath || '.');
+  const resolvedWD = resolveWorkingDirectory(workingDirectory);
+  const targetDir = mapPath(path.resolve(workingDirectory, reqPath || '.'), workingDirectory, resolvedWD);
   
-  if (!isPathSafe(targetDir, workingDirectory)) {
+  if (!isPathSafe(targetDir, resolvedWD)) {
     return res.status(403).json({ error: "Access denied" });
   }
 
@@ -500,8 +550,10 @@ app.get('/api/files', async (req, res) => {
 
 app.post('/api/write-file', async (req, res) => {
   const { path: reqPath, content, workingDirectory } = req.body;
-  const resolvedPath = path.resolve(reqPath);
-  if (!isPathSafe(resolvedPath, workingDirectory)) {
+  const resolvedWD = resolveWorkingDirectory(workingDirectory);
+  const resolvedPath = mapPath(reqPath, workingDirectory, resolvedWD);
+  
+  if (!isPathSafe(resolvedPath, resolvedWD)) {
     return res.status(403).json({ error: "Access denied" });
   }
   try {
