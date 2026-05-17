@@ -75,7 +75,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     };
 
     initGoogle();
-  }, [isOpen, googleClientId]);
+  }, [isOpen, googleClientId, googleLogin, onClose]);
 
   if (!isOpen) return null;
 

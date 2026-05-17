@@ -44,6 +44,7 @@ export default function ChatInput({ onSend, onStop, loading, disabled }: ChatInp
           id: Math.random().toString(36).substring(7),
           name: file.name,
           type: file.type.startsWith('image/') ? 'image' : 'file',
+          mimeType: file.type || 'application/octet-stream',
           url: ev.target?.result as string
         }]);
       };

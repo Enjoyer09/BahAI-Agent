@@ -10,6 +10,10 @@ const db = require('./db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'bahai_secret_key_99';
 
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET production mühitində mütləq təyin olunmalıdır.');
+}
+
 // SEC-1: Login with Role
 async function login(req, res) {
   const { email, password } = req.body;
@@ -39,12 +43,22 @@ async function login(req, res) {
 
 // SEC-2: Register (Default to 'user')
 async function register(req, res) {
-  const { email, password, name } = req.body;
+  const { email, password, name, fullName } = req.body;
+  const displayName = name || fullName || email?.split('@')[0];
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email və şifrə tələb olunur' });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Şifrə ən azı 8 simvol olmalıdır' });
+  }
+
   try {
     const hashedPw = await bcrypt.hash(password, 10);
     const result = await db.query(
       'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
-      [email, hashedPw, name, 'user']
+      [email.toLowerCase(), hashedPw, displayName, 'user']
     );
     
     const user = result.rows[0];
@@ -100,24 +114,26 @@ async function googleLogin(req, res) {
     return res.status(400).json({ error: 'Google məlumatı tapılmadı' });
   }
   try {
-    // Securely decode the Google JWT ID token payload using standard Base64 parsing
-    const parts = credential.split('.');
-    if (parts.length !== 3) {
-      return res.status(400).json({ error: 'Google məlumatı yanlışdır' });
+    const tokenInfoUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`;
+    const tokenInfoResponse = await fetch(tokenInfoUrl);
+    if (!tokenInfoResponse.ok) {
+      return res.status(401).json({ error: 'Google token doğrulanmadı' });
     }
-    const base64Url = parts[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = Buffer.from(base64, 'base64').toString('utf8');
-    const googleUser = JSON.parse(jsonPayload);
+    const googleUser = await tokenInfoResponse.json();
     
-    const { email, name, email_verified } = googleUser;
+    const { email, name, email_verified, aud } = googleUser;
+    const expectedClientId = process.env.GOOGLE_CLIENT_ID;
     
-    if (!email || !email_verified) {
+    if (expectedClientId && aud !== expectedClientId) {
+      return res.status(401).json({ error: 'Google client ID uyğun deyil' });
+    }
+
+    if (!email || (email_verified !== 'true' && email_verified !== true)) {
       return res.status(400).json({ error: 'Google-dan etibarlı və təsdiqlənmiş e-poçt alınmadı' });
     }
 
     // Check if user already exists
-    let result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    let result = await db.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     let user = result.rows[0];
 
     if (!user) {
@@ -127,7 +143,7 @@ async function googleLogin(req, res) {
       const hashedPw = await bcrypt.hash(randomPassword, 10);
       result = await db.query(
         'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
-        [email, hashedPw, name || email.split('@')[0], 'user']
+        [email.toLowerCase(), hashedPw, name || email.split('@')[0], 'user']
       );
       user = result.rows[0];
     }

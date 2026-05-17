@@ -10,6 +10,10 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
+function hasDatabase() {
+  return Boolean(process.env.DATABASE_URL);
+}
+
 async function initDb() {
   if (!process.env.DATABASE_URL) {
     console.warn('⚠️ DATABASE_URL tapılmadı. Verilənlər bazası xüsusiyyətləri (Auth, Projects) işləməyəcək.');
@@ -39,8 +43,14 @@ async function initDb() {
         path TEXT NOT NULL,
         repo_url TEXT,
         last_port INTEGER DEFAULT 5173,
+        archived BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    await client.query(`
+      ALTER TABLE projects
+      ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false
     `);
 
     await client.query(`
@@ -50,20 +60,57 @@ async function initDb() {
         user_id INTEGER REFERENCES users(id),
         title TEXT NOT NULL,
         messages JSONB DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    const adminEmail = 'admin@bahai.az';
-    const adminExists = await client.query('SELECT * FROM users WHERE email = $1', [adminEmail]);
-    
-    if (adminExists.rows.length === 0) {
+    await client.query(`
+      ALTER TABLE conversations
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS attachments (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        conversation_id TEXT REFERENCES conversations(id),
+        filename TEXT NOT NULL,
+        mime_type TEXT,
+        size_bytes INTEGER,
+        extracted_text TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    if (adminEmail && adminPassword) {
+      const adminExists = await client.query('SELECT * FROM users WHERE email = $1', [adminEmail]);
+      if (adminExists.rows.length === 0) {
+        const hashedPw = await bcrypt.hash(adminPassword, 10);
+        await client.query(
+          'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4)',
+          [adminEmail, hashedPw, 'Administrator', 'admin']
+        );
+        console.log(`✅ Admin yaradıldı: ${adminEmail}`);
+      }
+    } else if (process.env.NODE_ENV !== 'production') {
+      const adminEmail = 'admin@bahai.az';
+      const adminExists = await client.query('SELECT * FROM users WHERE email = $1', [adminEmail]);
       const hashedPw = await bcrypt.hash('Admin123!', 10);
       await client.query(
-        'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4)',
-        [adminEmail, hashedPw, 'Administrator', 'admin']
+        `INSERT INTO users (email, password, name, role)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (email) DO NOTHING`,
+        [adminEmail, hashedPw, 'Local Administrator', 'admin']
       );
-      console.log('✅ Default Admin yaradıldı: admin@bahai.az / Admin123!');
+      if (adminExists.rows.length === 0) {
+        console.log('✅ Local admin yaradıldı: admin@bahai.az / Admin123!');
+      }
+    } else {
+      console.warn('⚠️ Production admin yaradılmadı. ADMIN_EMAIL və ADMIN_PASSWORD env-lərini təyin edin.');
     }
 
     console.log('✅ Verilənlər bazası strukturu hazırdır.');
@@ -77,5 +124,6 @@ async function initDb() {
 module.exports = {
   query: (text, params) => pool.query(text, params),
   initDb,
-  pool
+  pool,
+  hasDatabase
 };

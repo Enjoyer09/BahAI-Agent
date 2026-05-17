@@ -12,7 +12,9 @@ export interface Attachment {
   id: string; // SEC-Audit: id is now mandatory
   name: string;
   type: string;
+  mimeType?: string;
   url: string;
+  extractedText?: string;
 }
 
 export interface Message {

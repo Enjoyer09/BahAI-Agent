@@ -2,7 +2,7 @@
 // LivePreview — Smart Iframe Component
 // ==========================================
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { RefreshCcw, ExternalLink, Globe, AlertCircle, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 
 interface LivePreviewProps {
@@ -24,13 +24,13 @@ export default function LivePreview({ url, isVisible, onClose, onUrlChange, refr
     setEditUrl(url);
   }, [url]);
 
-  const reload = () => {
+  const reload = useCallback(() => {
     setLoading(true);
     setError(false);
     if (iframeRef.current) {
       iframeRef.current.src = url;
     }
-  };
+  }, [url]);
 
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +39,7 @@ export default function LivePreview({ url, isVisible, onClose, onUrlChange, refr
 
   useEffect(() => {
     if (isVisible) reload();
-  }, [isVisible, refreshKey, url]);
+  }, [isVisible, refreshKey, reload]);
 
   // Check if URL is reachable
   useEffect(() => {
@@ -47,7 +47,7 @@ export default function LivePreview({ url, isVisible, onClose, onUrlChange, refr
       try {
         await fetch(url, { mode: 'no-cors' });
         setError(false);
-      } catch (e) {
+      } catch {
         setError(true);
       }
     };

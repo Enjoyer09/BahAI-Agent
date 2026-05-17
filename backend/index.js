@@ -5,6 +5,7 @@ const cors = require('cors');
 const { OpenAI } = require('openai');
 const fs = require('fs/promises');
 const path = require('path');
+const crypto = require('crypto');
 const { exec, execFile, spawn } = require('child_process');
 const util = require('util');
 const { glob } = require('glob');
@@ -22,7 +23,7 @@ db.initDb();
 
 // SEC-7: Restrict CORS
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '15mb' }));
 
 // Request Logger
 app.use((req, res, next) => {
@@ -40,6 +41,9 @@ app.use('/api/read-file', verifyToken);
 app.use('/api/write-file', verifyToken);
 app.use('/api/run-terminal', verifyToken);
 app.use('/api/pick-directory', verifyToken);
+app.use('/api/projects', verifyToken);
+app.use('/api/conversations', verifyToken);
+app.use('/api/attachments', verifyToken);
 
 // ==========================================
 // Configuration from environment
@@ -52,6 +56,8 @@ const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
       path.resolve(__dirname, '..'), // Project root
       path.resolve(process.env.HOME || process.env.USERPROFILE || '/'), // User home (Documents, etc)
     ];
+const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../sandbox'));
+const isLocalMode = () => process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
 
 // ==========================================
 // Security helpers
@@ -61,17 +67,54 @@ const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
  * Helper to resolve working directory dynamically.
  * Maps local paths (e.g., /Users/macbookair/...) to safe sandboxed container directories on cloud/Linux.
  */
-function resolveWorkingDirectory(wd, user) {
-  if (!wd) return path.resolve(process.cwd());
+function safeSegment(value, fallback = 'default') {
+  const clean = String(value || fallback)
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .pop()
+    ?.replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return clean || fallback;
+}
 
-  const cleanWd = wd.trim();
+async function ensureDir(dirPath) {
+  await fs.mkdir(dirPath, { recursive: true });
+  return dirPath;
+}
+
+function getUserWorkspaceRoot(user) {
+  const userId = user?.id || 'public';
+  return path.resolve(WORKSPACE_ROOT, `user_${userId}`);
+}
+
+function resolveWorkingDirectory(wd, user) {
+  const userRoot = getUserWorkspaceRoot(user);
+  if (!wd) return path.resolve(userRoot, 'default');
+
+  const cleanWd = String(wd).trim();
+
+  if (
+    cleanWd === '.' ||
+    cleanWd === './sandbox' ||
+    cleanWd === 'sandbox' ||
+    cleanWd.startsWith('workspace://')
+  ) {
+    const workspaceName = cleanWd.startsWith('workspace://')
+      ? safeSegment(cleanWd.replace('workspace://', ''))
+      : 'default';
+    return path.resolve(userRoot, workspaceName);
+  }
+
+  if (!path.isAbsolute(cleanWd) && !cleanWd.includes('\\') && !cleanWd.includes(':')) {
+    return path.resolve(userRoot, safeSegment(cleanWd));
+  }
 
   // If running on Linux (Railway) but path is a macOS/Windows user directory
   if (process.platform === 'linux' && (cleanWd.startsWith('/Users/') || cleanWd.startsWith('/home/') || cleanWd.includes('\\') || cleanWd.includes(':'))) {
-    const folderName = path.basename(cleanWd.replace(/\\/g, '/'));
-    const userPrefix = user && user.id ? `user_${user.id}_` : 'public_';
-    const sandboxPath = path.resolve(__dirname, '../sandbox', `${userPrefix}${folderName || 'default'}`);
-    const legacyPath = path.resolve(__dirname, '../sandbox', folderName || 'default');
+    const folderName = safeSegment(cleanWd);
+    const sandboxPath = path.resolve(userRoot, folderName);
+    const legacyPath = path.resolve(WORKSPACE_ROOT, folderName || 'default');
     
     const fsExtra = require('fs');
 
@@ -106,7 +149,9 @@ function resolveWorkingDirectory(wd, user) {
 function mapPath(originalPath, originalWD, resolvedWD) {
   if (!originalPath) return resolvedWD;
   const resolvedOrigWD = path.resolve(originalWD || '.');
-  const resolvedReqPath = path.resolve(originalPath);
+  const resolvedReqPath = path.isAbsolute(originalPath)
+    ? path.resolve(originalPath)
+    : path.resolve(resolvedOrigWD, originalPath);
 
   if (resolvedOrigWD === resolvedWD) return resolvedReqPath;
 
@@ -127,13 +172,13 @@ function isPathSafe(filePath, workingDirectory, user) {
   const rel = path.relative(resolvedBase, resolvedPath);
   const isInsideProject = !rel.startsWith('..') && !path.isAbsolute(rel);
   
-  // SEC-1: Also check if it's within globally allowed directories from .env
+  // Local standalone mode may need broader filesystem access. Online mode must stay user-scoped.
   const isAllowedGlobally = ALLOWED_DIRS.some(base => {
     const relGlobally = path.relative(base, resolvedPath);
   return !relGlobally.startsWith('..') && !path.isAbsolute(relGlobally);
   });
   
-  const isSafe = isInsideProject || isAllowedGlobally;
+  const isSafe = isInsideProject || (isLocalMode() && isAllowedGlobally);
   
   if (!isSafe) {
     console.warn(`🚨 SECURITY ALERT: Blocked access to ${resolvedPath}`);
@@ -157,6 +202,115 @@ async function readPdfFile(filePath) {
     console.error('PDF Parse Error:', err);
     throw new Error('PDF faylı oxunarkən xəta baş verdi: ' + err.message);
   }
+}
+
+function decodeDataUrl(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return null;
+  const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
+  if (!match) return null;
+  const mimeType = match[1] || 'application/octet-stream';
+  const isBase64 = Boolean(match[2]);
+  const payload = match[3] || '';
+  const buffer = isBase64
+    ? Buffer.from(payload, 'base64')
+    : Buffer.from(decodeURIComponent(payload), 'utf8');
+  return { mimeType, buffer };
+}
+
+async function extractAttachment(attachment) {
+  const decoded = decodeDataUrl(attachment?.url);
+  const mimeType = attachment?.mimeType || decoded?.mimeType || attachment?.type || 'application/octet-stream';
+  const name = attachment?.name || 'attachment';
+
+  if (!decoded) {
+    return { name, mimeType, extractedText: '' };
+  }
+
+  if (mimeType === 'application/pdf' || name.toLowerCase().endsWith('.pdf')) {
+    const data = await pdfParse(decoded.buffer);
+    return { name, mimeType, extractedText: data.text || '' };
+  }
+
+  if (
+    mimeType.startsWith('text/') ||
+    mimeType.includes('json') ||
+    mimeType.includes('xml') ||
+    /\.(log|txt|json|csv|md|yaml|yml|env)$/i.test(name)
+  ) {
+    return { name, mimeType, extractedText: decoded.buffer.toString('utf8') };
+  }
+
+  if (mimeType.startsWith('image/')) {
+    return { name, mimeType, imageUrl: attachment.url, extractedText: `[Şəkil əlavə olunub: ${name}]` };
+  }
+
+  return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}, ${mimeType}]` };
+}
+
+async function normalizeMessagesForModel(messages = []) {
+  const normalized = [];
+
+  for (const message of messages) {
+    if (!message.attachments?.length) {
+      normalized.push(message);
+      continue;
+    }
+
+    const textParts = [message.content || ''];
+    const imageParts = [];
+
+    for (const attachment of message.attachments) {
+      const extracted = await extractAttachment(attachment);
+      if (extracted.extractedText) {
+        textParts.push(`\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 30000)}`);
+      }
+      if (extracted.imageUrl) {
+        imageParts.push({ type: 'image_url', image_url: { url: extracted.imageUrl } });
+      }
+    }
+
+    if (imageParts.length > 0) {
+      normalized.push({
+        ...message,
+        content: [
+          { type: 'text', text: textParts.join('\n').trim() || 'İstifadəçi fayl əlavə edib.' },
+          ...imageParts
+        ],
+        attachments: undefined
+      });
+    } else {
+      normalized.push({
+        ...message,
+        content: textParts.join('\n').trim(),
+        attachments: undefined
+      });
+    }
+  }
+
+  return normalized;
+}
+
+function serializeProject(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    path: row.path,
+    repoUrl: row.repo_url || undefined,
+    lastPort: row.last_port || undefined,
+    archived: Boolean(row.archived),
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now()
+  };
+}
+
+function serializeConversation(row) {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    title: row.title,
+    messages: Array.isArray(row.messages) ? row.messages : [],
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now()
+  };
 }
 
 /**
@@ -478,6 +632,215 @@ async function handleToolCall(toolCall, workingDirectory) {
 // API Endpoints
 // ==========================================
 
+app.get('/api/projects', async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.status(503).json({ error: 'Database aktiv deyil' });
+  }
+
+  try {
+    const projectsResult = await db.query(
+      'SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.user.id]
+    );
+    const conversationsResult = await db.query(
+      'SELECT * FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC',
+      [req.user.id]
+    );
+
+    res.json({
+      projects: projectsResult.rows.map(serializeProject),
+      conversations: conversationsResult.rows.map(serializeConversation)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/projects', async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.status(503).json({ error: 'Database aktiv deyil' });
+  }
+
+  const id = req.body.id || crypto.randomUUID();
+  const name = req.body.name || 'Yeni layihə';
+  const repoUrl = req.body.repoUrl || null;
+  const requestedPath = req.body.path || `workspace://${safeSegment(name)}`;
+  const resolvedPath = resolveWorkingDirectory(requestedPath, req.user);
+
+  try {
+    await ensureDir(resolvedPath);
+    const result = await db.query(
+      `INSERT INTO projects (id, user_id, name, path, repo_url, last_port)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [id, req.user.id, name, requestedPath, repoUrl, req.body.lastPort || 5173]
+    );
+
+    const conversationId = crypto.randomUUID();
+    const title = repoUrl ? `Import: ${name}` : 'Analiz və Planlaşdırma';
+    const conversation = await db.query(
+      `INSERT INTO conversations (id, project_id, user_id, title, messages)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [conversationId, id, req.user.id, title, JSON.stringify([])]
+    );
+
+    res.status(201).json({
+      project: serializeProject(result.rows[0]),
+      conversation: serializeConversation(conversation.rows[0])
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/projects/:id', async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.status(503).json({ error: 'Database aktiv deyil' });
+  }
+
+  const updates = [];
+  const values = [];
+  const allowed = {
+    name: 'name',
+    path: 'path',
+    repoUrl: 'repo_url',
+    lastPort: 'last_port',
+    archived: 'archived'
+  };
+
+  for (const [key, column] of Object.entries(allowed)) {
+    if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+      values.push(req.body[key]);
+      updates.push(`${column} = $${values.length}`);
+    }
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ error: 'Dəyişiklik yoxdur' });
+  }
+
+  values.push(req.params.id, req.user.id);
+
+  try {
+    const result = await db.query(
+      `UPDATE projects SET ${updates.join(', ')}
+       WHERE id = $${values.length - 1} AND user_id = $${values.length}
+       RETURNING *`,
+      values
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Layihə tapılmadı' });
+    res.json({ project: serializeProject(result.rows[0]) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/projects/:id', async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.status(503).json({ error: 'Database aktiv deyil' });
+  }
+
+  try {
+    await db.query('DELETE FROM conversations WHERE project_id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+    const result = await db.query('DELETE FROM projects WHERE id = $1 AND user_id = $2 RETURNING id', [req.params.id, req.user.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Layihə tapılmadı' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/conversations', async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.status(503).json({ error: 'Database aktiv deyil' });
+  }
+
+  const projectCheck = await db.query(
+    'SELECT id FROM projects WHERE id = $1 AND user_id = $2',
+    [req.body.projectId, req.user.id]
+  );
+  if (projectCheck.rows.length === 0) {
+    return res.status(404).json({ error: 'Layihə tapılmadı' });
+  }
+
+  try {
+    const id = req.body.id || crypto.randomUUID();
+    const result = await db.query(
+      `INSERT INTO conversations (id, project_id, user_id, title, messages)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [id, req.body.projectId, req.user.id, req.body.title || 'Yeni söhbət', JSON.stringify(req.body.messages || [])]
+    );
+    res.status(201).json({ conversation: serializeConversation(result.rows[0]) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/conversations/:id', async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.status(503).json({ error: 'Database aktiv deyil' });
+  }
+
+  try {
+    const result = await db.query(
+      `UPDATE conversations
+       SET title = COALESCE($1, title),
+           messages = COALESCE($2, messages),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3 AND user_id = $4
+       RETURNING *`,
+      [
+        req.body.title ?? null,
+        req.body.messages ? JSON.stringify(req.body.messages) : null,
+        req.params.id,
+        req.user.id
+      ]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Söhbət tapılmadı' });
+    res.json({ conversation: serializeConversation(result.rows[0]) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/conversations/:id', async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.status(503).json({ error: 'Database aktiv deyil' });
+  }
+
+  try {
+    const result = await db.query('DELETE FROM conversations WHERE id = $1 AND user_id = $2 RETURNING id', [req.params.id, req.user.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Söhbət tapılmadı' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/attachments/extract', async (req, res) => {
+  try {
+    const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
+    const extracted = [];
+
+    for (const attachment of attachments) {
+      const item = await extractAttachment(attachment);
+      extracted.push({
+        id: attachment.id || crypto.randomUUID(),
+        name: item.name,
+        mimeType: item.mimeType,
+        extractedText: item.extractedText?.slice(0, 50000) || '',
+        imageUrl: item.imageUrl
+      });
+    }
+
+    res.json({ attachments: extracted });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/chat', async (req, res) => {
     const { messages, apiKey, model, workingDirectory, baseUrl, debug } = req.body;
     
@@ -489,6 +852,7 @@ app.post('/api/chat', async (req, res) => {
     })) {
         return res.status(403).json({ error: "Unauthorized working directory" });
     }
+    await ensureDir(resolvedWD);
 
     const effectiveApiKey = apiKey || process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY;
     const effectiveBaseUrl = baseUrl || process.env.OPENAI_BASE_URL || "https://integrate.api.nvidia.com/v1";
@@ -512,7 +876,8 @@ MÜHÜM QAYDALAR:
 5. SERVERİ TƏSDİQLƏ (KRİTİK): check_port_status alətini çağırmadan serverin işlədiyini iddia etmək QADAĞANDIR! Əgər bu aləti çağırmamısansa, "Server işləyir" demə! Əgər port aktiv deyilsə, serverin niyə qalxmadığını (logs) yoxla.
 Azərbaycan dilində cavab ver.`;
 
-    const apiMessages = [{ role: 'system', content: sysPrompt }, ...messages];
+    const modelMessages = await normalizeMessagesForModel(messages);
+    const apiMessages = [{ role: 'system', content: sysPrompt }, ...modelMessages];
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');

@@ -29,7 +29,7 @@ export default function App() {
   const { user, loading: authLoading } = useAuth();
   const settings = useSettings();
   const themeCtx = useTheme();
-  const chat = useChat(settings.settings);
+  const chat = useChat(settings.settings, user?.id);
 
   // Dynamic Layout Logic: Check if any auxiliary window is active
   const isAuxActive = activeFile || showPreview || showTerminal;
@@ -40,7 +40,7 @@ export default function App() {
         chat.activeProject?.name?.toLowerCase().includes('web')) {
       setShowPreview(true);
     }
-  }, [chat.activeProject?.id]);
+  }, [chat.activeProject?.id, chat.activeProject?.name]);
 
   if (authLoading) {
     return <div className="h-screen w-full flex items-center justify-center bg-[#050505] text-blue-500">

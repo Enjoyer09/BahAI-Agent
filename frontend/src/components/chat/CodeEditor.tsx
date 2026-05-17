@@ -40,9 +40,9 @@ export default function CodeEditor({ filePath, projectDir, onClose }: CodeEditor
           headers: getAuthHeader()
         });
         if (!response.ok) throw new Error('Fayl oxuna bilmədi');
-        const data = await response.text();
-        setContent(data);
-        setOriginalContent(data);
+        const data = await response.json();
+        setContent(data.content || '');
+        setOriginalContent(data.content || '');
       } catch (err) {
         console.error(err);
         setContent('Xəta: Fayl yüklənərkən problem yarandı.');
@@ -74,7 +74,7 @@ export default function CodeEditor({ filePath, projectDir, onClose }: CodeEditor
       setOriginalContent(content);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
-    } catch (err) {
+    } catch {
       alert('Xəta: Fayl yadda saxlanılmadı');
     } finally {
       setSaving(false);
