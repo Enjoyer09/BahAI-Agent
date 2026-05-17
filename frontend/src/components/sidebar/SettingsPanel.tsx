@@ -1,4 +1,4 @@
-import { Server, Key, Folder, Code, Zap, ShieldAlert } from 'lucide-react';
+import { Code, Zap } from 'lucide-react';
 import { MODELS } from '../../lib/constants';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -32,29 +32,14 @@ export default function SettingsPanel({
 
   return (
     <div className="space-y-5">
-      {/* Admin-Only Sections */}
-      {isAdmin ? (
-        <>
-          <SettingField icon={Server} label="API Base URL">
-            <input type="text" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} className={cls} />
-          </SettingField>
-          <SettingField icon={Key} label="API Key">
-            <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} className={cls} placeholder="nvapi-..." />
-          </SettingField>
-          <SettingField icon={Folder} label="Workspace Path">
-            <input type="text" value={projectDir} onChange={e => setProjectDir(e.target.value)} className={cls} placeholder="/Users/..." />
-          </SettingField>
-        </>
-      ) : (
-        <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 mb-4">
-          <div className="flex items-center gap-2 text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1">
-            <ShieldAlert size={14} /> Standart İstifadəçi
-          </div>
-          <p className="text-[10px] text-gray-500 leading-relaxed">
-            API sazlamaları administrator tərəfindən idarə olunur. Siz yalnız modellər arasında keçid edə bilərsiniz.
-          </p>
+      <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 mb-4 animate-in fade-in duration-300">
+        <div className="flex items-center gap-2 text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">
+          <Zap size={14} className="animate-pulse" /> Bulud Sazlamaları
         </div>
-      )}
+        <p className="text-[10px] text-gray-500 leading-relaxed">
+          Bütün API açarları və model bağlantıları təhlükəsiz şəkildə <strong>Railway Server</strong> tərəfindən idarə olunur. UI üzərində heç bir məxfi açar daxil etməyə ehtiyac yoxdur.
+        </p>
+      </div>
 
       {/* Everyone can change Model */}
       <SettingField icon={Code} label="AI Model Seçimi">

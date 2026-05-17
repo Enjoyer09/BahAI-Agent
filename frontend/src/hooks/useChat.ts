@@ -75,7 +75,7 @@ export function useChat(settings: Settings) {
 
   const sendMessage = useCallback(async (input: string, attachments: any[] = []) => {
     if (!input.trim() && attachments.length === 0) return;
-    if (!settings.apiKey || !activeConvId) return;
+    if (!activeConvId) return;
 
     const userMsg: Message = { id: generateId(), role: 'user', content: input, attachments, timestamp: Date.now() };
     
