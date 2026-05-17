@@ -21,6 +21,7 @@ import { useAuth } from '../../hooks/useAuth';
 import type { Project, Conversation } from '../../lib/types';
 import type { ThemeMode } from '../../hooks/useTheme';
 import { API_BASE_URL } from '../../lib/constants';
+import { connectGithub, disconnectGithub, getGithubStatus, listGithubRepos } from '../../lib/api';
 import SettingsPanel from './SettingsPanel';
 import ThemeToggle from '../common/ThemeToggle';
 import AdminPanel from './AdminPanel';
@@ -63,6 +64,11 @@ export default function Sidebar(props: SidebarProps) {
   const [newProjName, setNewProjName] = useState('');
   const [newProjPath, setNewProjPath] = useState('');
   const [newProjRepo, setNewProjRepo] = useState('');
+  const [githubToken, setGithubToken] = useState('');
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [githubUsername, setGithubUsername] = useState<string | null>(null);
+  const [githubRepos, setGithubRepos] = useState<Array<{ id: number; name: string; fullName: string; private: boolean; cloneUrl: string }>>([]);
+  const [githubLoading, setGithubLoading] = useState(false);
   
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(true);
 
@@ -85,6 +91,31 @@ export default function Sidebar(props: SidebarProps) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!showSettings) return;
+    getGithubStatus()
+      .then((status) => {
+        setGithubConnected(status.connected);
+        setGithubUsername(status.username);
+      })
+      .catch(() => {
+        setGithubConnected(false);
+        setGithubUsername(null);
+      });
+  }, [showSettings]);
+
+  const loadGithubRepos = async () => {
+    try {
+      setGithubLoading(true);
+      const repos = await listGithubRepos();
+      setGithubRepos(repos);
+    } catch (e: any) {
+      alert(e?.message || 'GitHub repo siyahısı alınmadı');
+    } finally {
+      setGithubLoading(false);
+    }
+  };
 
   const handlePickDir = async () => {
     try {
@@ -278,7 +309,37 @@ export default function Sidebar(props: SidebarProps) {
             </h2>
             <div className="space-y-5">
               <input type="text" value={newProjName} onChange={e => setNewProjName(e.target.value)} placeholder="Layihə Adı" className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50" />
-              {addMode === 'remote' && <input type="text" value={newProjRepo} onChange={e => setNewProjRepo(e.target.value)} placeholder="GitHub URL" className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50" />}
+              {addMode === 'remote' && (
+                <div className="space-y-2">
+                  <input type="text" value={newProjRepo} onChange={e => setNewProjRepo(e.target.value)} placeholder="GitHub URL" className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50" />
+                  <div className="flex items-center gap-2">
+                    <button onClick={loadGithubRepos} className="px-3 py-2 text-[11px] rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-300 hover:bg-blue-600/30">
+                      {githubLoading ? 'Yüklənir...' : 'Repo Siyahısını Yüklə'}
+                    </button>
+                    {githubConnected ? <span className="text-[11px] text-green-400">Qoşulub: @{githubUsername || 'github'}</span> : <span className="text-[11px] text-yellow-400">Əvvəl Settings-dən GitHub qoş</span>}
+                  </div>
+                  {githubRepos.length > 0 && (
+                    <select
+                      value={newProjRepo}
+                      onChange={e => {
+                        setNewProjRepo(e.target.value);
+                        if (!newProjName) {
+                          const nameGuess = e.target.value.split('/').pop()?.replace('.git', '') || '';
+                          setNewProjName(nameGuess);
+                        }
+                      }}
+                      className="w-full bg-black/20 border border-white/5 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500/50"
+                    >
+                      <option value="">Repo seçin...</option>
+                      {githubRepos.map((repo) => (
+                        <option key={repo.id} value={repo.cloneUrl}>
+                          {repo.fullName} {repo.private ? '(private)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">İş Sahəsi (Qovluq)</label>
                 <div className="flex gap-2">
@@ -338,6 +399,55 @@ export default function Sidebar(props: SidebarProps) {
                 model={props.model} setModel={props.setModel}
                 performanceMode={props.performanceMode} setPerformanceMode={props.setPerformanceMode}
               />
+
+              <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+                <label className="text-[11px] font-semibold text-[var(--fg-muted)]">GitHub (Private Repo)</label>
+                {githubConnected ? (
+                  <div className="space-y-2">
+                    <div className="text-xs text-green-400">Qoşulub: @{githubUsername || 'github'}</div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await disconnectGithub();
+                          setGithubConnected(false);
+                          setGithubUsername(null);
+                          setGithubRepos([]);
+                        } catch (e: any) {
+                          alert(e?.message || 'GitHub ayrılmadı');
+                        }
+                      }}
+                      className="px-3 py-2 text-xs rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10"
+                    >
+                      GitHub Ayrılsın
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <input
+                      type="password"
+                      value={githubToken}
+                      onChange={(e) => setGithubToken(e.target.value)}
+                      placeholder="GitHub Personal Access Token (ghp_...)"
+                      className="w-full bg-[var(--bg-surface-alt)] border border-[var(--border)] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500/40"
+                    />
+                    <button
+                      onClick={async () => {
+                        try {
+                          const status = await connectGithub(githubToken.trim());
+                          setGithubConnected(Boolean(status.connected));
+                          setGithubUsername(status.username);
+                          setGithubToken('');
+                        } catch (e: any) {
+                          alert(e?.message || 'GitHub qoşulmadı');
+                        }
+                      }}
+                      className="px-3 py-2 text-xs rounded-lg border border-blue-500/40 text-blue-300 hover:bg-blue-500/10"
+                    >
+                      GitHub Qoş
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Footer Done Action */}
@@ -358,4 +468,3 @@ export default function Sidebar(props: SidebarProps) {
     </aside>
   );
 }
-

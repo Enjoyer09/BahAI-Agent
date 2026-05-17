@@ -222,6 +222,60 @@ export async function getTaskPlan(prompt: string, workingDirectory: string): Pro
   return { items };
 }
 
+export interface GithubStatus {
+  connected: boolean;
+  username: string | null;
+}
+
+export interface GithubRepo {
+  id: number;
+  name: string;
+  fullName: string;
+  private: boolean;
+  cloneUrl: string;
+  defaultBranch?: string;
+}
+
+export async function getGithubStatus(): Promise<GithubStatus> {
+  const response = await fetch(`${API_BASE_URL}/api/github/status`, { headers: getAuthHeader() });
+  if (!response.ok) throw new Error('GitHub status alınmadı');
+  return await response.json();
+}
+
+export async function connectGithub(token: string): Promise<GithubStatus> {
+  const response = await fetch(`${API_BASE_URL}/api/github/connect`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify({ token })
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || 'GitHub qoşulmadı');
+  }
+  return await response.json();
+}
+
+export async function disconnectGithub(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/github/connect`, {
+    method: 'DELETE',
+    headers: getAuthHeader()
+  });
+  if (!response.ok) throw new Error('GitHub ayrılmadı');
+}
+
+export async function listGithubRepos(): Promise<GithubRepo[]> {
+  const response = await fetch(`${API_BASE_URL}/api/github/repos`, { headers: getAuthHeader() });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || 'GitHub repo siyahısı alınmadı');
+  }
+  const data = await response.json();
+  return Array.isArray(data.repos) ? data.repos : [];
+}
+
 export async function previewDiff(input: { path: string; workingDirectory: string; newContent: string }): Promise<{ diff: string }> {
   const response = await fetch(`${API_BASE_URL}/api/diff/preview`, {
     method: 'POST',

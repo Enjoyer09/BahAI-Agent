@@ -50,6 +50,7 @@ app.use('/api/terminal', verifyToken);
 app.use('/api/project-health', verifyToken);
 app.use('/api/project-memory', verifyToken);
 app.use('/api/approvals', verifyToken);
+app.use('/api/github', verifyToken);
 
 // ==========================================
 // Configuration from environment
@@ -87,6 +88,54 @@ function safeSegment(value, fallback = 'default') {
 async function ensureDir(dirPath) {
   await fs.mkdir(dirPath, { recursive: true });
   return dirPath;
+}
+
+const GITHUB_TOKEN_SECRET = crypto
+  .createHash('sha256')
+  .update(process.env.GITHUB_TOKEN_SECRET || process.env.JWT_SECRET || 'bahai_github_secret')
+  .digest();
+
+function encryptSecret(text) {
+  if (!text) return null;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', GITHUB_TOKEN_SECRET, iv);
+  const encrypted = Buffer.concat([cipher.update(String(text), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString('base64')}:${tag.toString('base64')}:${encrypted.toString('base64')}`;
+}
+
+function decryptSecret(payload) {
+  if (!payload) return null;
+  const [ivB64, tagB64, dataB64] = String(payload).split(':');
+  if (!ivB64 || !tagB64 || !dataB64) return null;
+  const iv = Buffer.from(ivB64, 'base64');
+  const tag = Buffer.from(tagB64, 'base64');
+  const encrypted = Buffer.from(dataB64, 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', GITHUB_TOKEN_SECRET, iv);
+  decipher.setAuthTag(tag);
+  const plain = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  return plain.toString('utf8');
+}
+
+async function getUserGithubToken(userId) {
+  if (!db.hasDatabase()) return null;
+  const result = await db.query('SELECT github_token_enc FROM users WHERE id = $1', [userId]);
+  const encrypted = result.rows[0]?.github_token_enc;
+  return decryptSecret(encrypted);
+}
+
+function injectGithubTokenIntoUrl(url, token) {
+  if (!url || !token) return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== 'github.com') return url;
+    if (parsed.username || parsed.password) return url;
+    parsed.username = 'x-access-token';
+    parsed.password = token;
+    return parsed.toString();
+  } catch {
+    return url;
+  }
 }
 
 function getUserWorkspaceRoot(user) {
@@ -680,6 +729,37 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                 }
                 
                 return new Promise((resolve) => {
+                    let cloneUrl = args.url;
+                    try {
+                      if (typeof cloneUrl === 'string' && cloneUrl.includes('github.com') && user?.id) {
+                        // private GitHub repos can be cloned transparently if user connected a token
+                        // token is injected only for the git command, never returned to UI logs.
+                        getUserGithubToken(user.id).then((githubToken) => {
+                          cloneUrl = injectGithubTokenIntoUrl(cloneUrl, githubToken);
+                          const proc = spawn('git', ['clone', cloneUrl, args.folderName], { cwd: workingDirectory });
+                          let out = "", err = "";
+                          proc.stdout.on('data', d => out += d);
+                          proc.stderr.on('data', d => err += d);
+                          proc.on('close', (code) => {
+                              if (code === 0) resolve(`Successfully cloned ${args.url} into ${args.folderName}`);
+                              else resolve(`Error cloning: ${err}`);
+                          });
+                          setTimeout(() => { proc.kill(); resolve(`Timeout reached while cloning`); }, 60000);
+                        }).catch(() => {
+                          const proc = spawn('git', ['clone', args.url, args.folderName], { cwd: workingDirectory });
+                          let out = "", err = "";
+                          proc.stdout.on('data', d => out += d);
+                          proc.stderr.on('data', d => err += d);
+                          proc.on('close', (code) => {
+                              if (code === 0) resolve(`Successfully cloned ${args.url} into ${args.folderName}`);
+                              else resolve(`Error cloning: ${err}`);
+                          });
+                          setTimeout(() => { proc.kill(); resolve(`Timeout reached while cloning`); }, 60000);
+                        });
+                        return;
+                      }
+                    } catch {}
+
                     // SEC-4: Use execFile style for safety
                     const proc = spawn('git', ['clone', args.url, args.folderName], { cwd: workingDirectory });
                     let out = "", err = "";
@@ -1285,6 +1365,93 @@ app.get('/api/pick-directory', async (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ path: stdout.trim() });
     });
+});
+
+app.get('/api/github/status', async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.json({ connected: false, username: null });
+  }
+  try {
+    const result = await db.query('SELECT github_token_enc, github_username FROM users WHERE id = $1', [req.user.id]);
+    const row = result.rows[0] || {};
+    res.json({ connected: Boolean(row.github_token_enc), username: row.github_username || null });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/github/connect', async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.status(503).json({ error: 'Database aktiv deyil' });
+  }
+  const token = String(req.body?.token || '').trim();
+  if (!token) return res.status(400).json({ error: 'GitHub token tələb olunur' });
+
+  try {
+    const meResponse = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'bahAI-Agent'
+      }
+    });
+    if (!meResponse.ok) {
+      return res.status(401).json({ error: 'GitHub token etibarsızdır və ya icazə yoxdur' });
+    }
+    const me = await meResponse.json();
+    const encrypted = encryptSecret(token);
+    await db.query(
+      'UPDATE users SET github_token_enc = $1, github_username = $2 WHERE id = $3',
+      [encrypted, me.login || null, req.user.id]
+    );
+    res.json({ connected: true, username: me.login || null });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/github/connect', async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.status(503).json({ error: 'Database aktiv deyil' });
+  }
+  try {
+    await db.query('UPDATE users SET github_token_enc = NULL, github_username = NULL WHERE id = $1', [req.user.id]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/github/repos', async (req, res) => {
+  try {
+    const token = await getUserGithubToken(req.user.id);
+    if (!token) return res.status(400).json({ error: 'GitHub bağlantısı yoxdur' });
+
+    const ghResp = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'bahAI-Agent'
+      }
+    });
+    if (!ghResp.ok) {
+      return res.status(ghResp.status).json({ error: 'GitHub repos alınmadı' });
+    }
+    const repos = await ghResp.json();
+    const mapped = Array.isArray(repos)
+      ? repos.map((r) => ({
+          id: r.id,
+          name: r.name,
+          fullName: r.full_name,
+          private: Boolean(r.private),
+          cloneUrl: r.clone_url,
+          defaultBranch: r.default_branch
+        }))
+      : [];
+    res.json({ repos: mapped });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Admin verification middleware

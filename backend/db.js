@@ -31,8 +31,20 @@ async function initDb() {
         password TEXT NOT NULL,
         name TEXT,
         role TEXT DEFAULT 'user',
+        github_token_enc TEXT,
+        github_username TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS github_token_enc TEXT
+    `);
+
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS github_username TEXT
     `);
 
     await client.query(`
