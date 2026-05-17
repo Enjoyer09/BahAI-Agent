@@ -149,13 +149,20 @@ function sanitizeAttachmentFallbackReply(content, hasAttachments) {
     'yenidən yüklə',
     'yenidən upload',
     'faylı buraya sürüşdür',
-    'pdf-i haradan'
+    'pdf-i haradan',
+    'pdf faylını oxumaqda',
+    'pdf faylını birbaşa oxumaqda',
+    'sistemin məhdudiyyətidir',
+    'hazırda işləmir',
+    'copy edin',
+    'paste edin',
+    'məzmununu mətn kimi göndərin'
   ];
   const asksToReupload = retryPatterns.some((p) => text.includes(p));
   if (!asksToReupload) return content;
   return [
     'PDF faylı artıq sistemə əlavə olunub; yenidən upload tələb etmirəm.',
-    'Hazır fayl üzərindən analiz etməyə davam edirəm. Əgər mətn çıxarışı boşdursa, bunu səbəbi ilə birlikdə bildirəcəyəm.'
+    'Hazır fayl üzərindən analiz etməyə davam edirəm. Əgər mətn çıxarışı boşdursa, bunu səbəbi ilə birlikdə bildirəcəyəm və mövcud hissələrdən yenə də nəticə çıxaracağam.'
   ].join(' ');
 }
 
