@@ -454,6 +454,12 @@ app.post('/api/chat', async (req, res) => {
     const effectiveBaseUrl = baseUrl || process.env.OPENAI_BASE_URL || "https://integrate.api.nvidia.com/v1";
     const effectiveModel = model || process.env.OPENAI_MODEL || 'meta/llama-3.3-70b-instruct';
 
+    if (!effectiveApiKey) {
+        return res.status(400).json({ 
+            error: "Süni İntellekt API Açarı tapılmadı! Layihəni lokalda (Railway-dən asılı olmadan) işlətmək üçün layihə qovluğundakı `.env` faylına OPENAI_API_KEY və OPENAI_BASE_URL açarlarını əlavə edin." 
+        });
+    }
+
     const client = new OpenAI({ baseURL: effectiveBaseUrl, apiKey: effectiveApiKey });
 
     const sysPrompt = `Sən bahAI İDE rəsmi AI Agentisən. Project Root: ${resolvedWD}.
