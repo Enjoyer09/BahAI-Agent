@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ChevronRight,
   PanelLeftClose,
-  LogOut
+  LogOut,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import type { Project, Conversation } from '../../lib/types';
@@ -22,6 +23,8 @@ import type { ThemeMode } from '../../hooks/useTheme';
 import { API_BASE_URL } from '../../lib/constants';
 import SettingsPanel from './SettingsPanel';
 import ThemeToggle from '../common/ThemeToggle';
+import AdminPanel from './AdminPanel';
+
 
 interface SidebarProps {
   sidebarOpen: boolean;
@@ -52,8 +55,9 @@ interface SidebarProps {
 }
 
 export default function Sidebar(props: SidebarProps) {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const [showSettings, setShowSettings] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addMode, setAddMode] = useState<'local' | 'remote'>('local');
   const [newProjName, setNewProjName] = useState('');
@@ -235,6 +239,16 @@ export default function Sidebar(props: SidebarProps) {
 
       {/* Footer */}
       <div className="p-4 space-y-2 border-t border-white/5">
+        {user && user.role === 'admin' && (
+          <button 
+            onClick={() => setShowAdminPanel(true)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${showAdminPanel ? 'bg-purple-600/10 text-purple-400 border border-purple-500/20' : 'hover:bg-white/5 text-[var(--fg-muted)]'} ${!props.sidebarOpen ? 'justify-center' : ''}`}
+          >
+            <Shield size={20} className={showAdminPanel ? 'text-purple-400' : 'text-gray-400'} />
+            {props.sidebarOpen && <span className="text-xs font-semibold">Admin Panel</span>}
+          </button>
+        )}
+
         <button 
           onClick={signOut}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all hover:bg-red-600/10 text-red-400 group ${!props.sidebarOpen ? 'justify-center' : ''}`}
@@ -251,6 +265,7 @@ export default function Sidebar(props: SidebarProps) {
           {props.sidebarOpen && <span className="text-xs font-medium">Settings</span>}
         </button>
       </div>
+
 
       {/* Add Project Modal */}
       {showAddModal && (
@@ -337,6 +352,10 @@ export default function Sidebar(props: SidebarProps) {
           </div>
         </div>
       )}
+
+      {/* Admin Panel Modal */}
+      <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} />
     </aside>
   );
 }
+

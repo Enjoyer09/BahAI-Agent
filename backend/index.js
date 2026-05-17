@@ -61,7 +61,7 @@ const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
  * Helper to resolve working directory dynamically.
  * Maps local paths (e.g., /Users/macbookair/...) to safe sandboxed container directories on cloud/Linux.
  */
-function resolveWorkingDirectory(wd) {
+function resolveWorkingDirectory(wd, user) {
   if (!wd) return path.resolve(process.cwd());
 
   const cleanWd = wd.trim();
@@ -69,7 +69,8 @@ function resolveWorkingDirectory(wd) {
   // If running on Linux (Railway) but path is a macOS/Windows user directory
   if (process.platform === 'linux' && (cleanWd.startsWith('/Users/') || cleanWd.startsWith('/home/') || cleanWd.includes('\\') || cleanWd.includes(':'))) {
     const folderName = path.basename(cleanWd.replace(/\\/g, '/'));
-    const sandboxPath = path.resolve(__dirname, '../sandbox', folderName || 'default');
+    const userPrefix = user && user.id ? `user_${user.id}_` : 'public_';
+    const sandboxPath = path.resolve(__dirname, '../sandbox', `${userPrefix}${folderName || 'default'}`);
     
     // Ensure sandbox dir exists
     const fsExtra = require('fs');
@@ -103,8 +104,8 @@ function mapPath(originalPath, originalWD, resolvedWD) {
 /**
  * SEC-2: Robust path safety check using path.relative
  */
-function isPathSafe(filePath, workingDirectory) {
-  const resolvedWD = resolveWorkingDirectory(workingDirectory);
+function isPathSafe(filePath, workingDirectory, user) {
+  const resolvedWD = resolveWorkingDirectory(workingDirectory, user);
   if (!resolvedWD) return false;
   const resolvedBase = path.resolve(resolvedWD);
   const resolvedPath = path.resolve(filePath);
@@ -129,6 +130,7 @@ function isPathSafe(filePath, workingDirectory) {
 
   return isSafe;
 }
+
 
 /**
  * Parses and extracts text content from a PDF file using pdf-parse.
@@ -467,7 +469,7 @@ app.post('/api/chat', async (req, res) => {
     const { messages, apiKey, model, workingDirectory, baseUrl, debug } = req.body;
     
     // SEC-1: Verify workingDirectory against ALLOWED_DIRS
-    const resolvedWD = resolveWorkingDirectory(workingDirectory);
+    const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
     if (!ALLOWED_DIRS.some(base => {
         const r = path.relative(base, resolvedWD);
         return !r.startsWith('..') && !path.isAbsolute(r);
@@ -546,10 +548,10 @@ Azərbaycan dilində cavab ver.`;
  */
 app.get('/api/read-file', async (req, res) => {
   const { path: reqPath, workingDirectory } = req.query;
-  const resolvedWD = resolveWorkingDirectory(workingDirectory);
+  const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
   const resolvedPath = mapPath(reqPath, workingDirectory, resolvedWD);
   
-  if (!isPathSafe(resolvedPath, resolvedWD)) {
+  if (!isPathSafe(resolvedPath, workingDirectory, req.user)) {
     return res.status(403).json({ error: "Access denied" });
   }
   try {
@@ -571,10 +573,10 @@ app.get('/api/read-file', async (req, res) => {
  */
 app.get('/api/files', async (req, res) => {
   const { path: reqPath, workingDirectory } = req.query;
-  const resolvedWD = resolveWorkingDirectory(workingDirectory);
+  const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
   const targetDir = mapPath(path.resolve(workingDirectory, reqPath || '.'), workingDirectory, resolvedWD);
   
-  if (!isPathSafe(targetDir, resolvedWD)) {
+  if (!isPathSafe(targetDir, workingDirectory, req.user)) {
     return res.status(403).json({ error: "Access denied" });
   }
 
@@ -593,10 +595,10 @@ app.get('/api/files', async (req, res) => {
 
 app.post('/api/write-file', async (req, res) => {
   const { path: reqPath, content, workingDirectory } = req.body;
-  const resolvedWD = resolveWorkingDirectory(workingDirectory);
+  const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
   const resolvedPath = mapPath(reqPath, workingDirectory, resolvedWD);
   
-  if (!isPathSafe(resolvedPath, resolvedWD)) {
+  if (!isPathSafe(resolvedPath, workingDirectory, req.user)) {
     return res.status(403).json({ error: "Access denied" });
   }
   try {
@@ -617,6 +619,38 @@ app.get('/api/pick-directory', async (req, res) => {
         res.json({ path: stdout.trim() });
     });
 });
+
+// Admin verification middleware
+function verifyAdmin(req, res, next) {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    res.status(403).json({ error: 'Giriş qadağandır: Admin səlahiyyəti lazımdır' });
+  }
+}
+
+// Protected Admin Route to list all registered users
+app.get('/api/admin/users', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+    if (isLocalMode) {
+      // Mock data for local testing
+      return res.json({
+        users: [
+          { id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin', created_at: new Date() },
+          { id: 1, email: 'kamran@gmail.com', name: 'Kamran Məmmədov', role: 'user', created_at: new Date() },
+          { id: 2, email: 'nazim@gmail.com', name: 'Nazim Əliyev', role: 'user', created_at: new Date() }
+        ]
+      });
+    }
+
+    const result = await db.query('SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC');
+    res.json({ users: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 // Serve Static Frontend in Production
 const frontendDist = path.resolve(__dirname, '../frontend/dist');
