@@ -10,6 +10,8 @@ const util = require('util');
 const { glob } = require('glob');
 
 const execFileAsync = util.promisify(execFile);
+const pdfParse = require('pdf-parse');
+
 
 const app = express();
 const db = require('./db');
@@ -113,10 +115,10 @@ function isPathSafe(filePath, workingDirectory) {
   
   // SEC-1: Also check if it's within globally allowed directories from .env
   const isAllowedGlobally = ALLOWED_DIRS.some(base => {
-    const r = path.relative(base, resolvedPath);
-    return !r.startsWith('..') && !path.isAbsolute(r);
+    const relGlobally = path.relative(base, resolvedPath);
+  return !relGlobally.startsWith('..') && !path.isAbsolute(relGlobally);
   });
-
+  
   const isSafe = isInsideProject || isAllowedGlobally;
   
   if (!isSafe) {
@@ -129,6 +131,21 @@ function isPathSafe(filePath, workingDirectory) {
 }
 
 /**
+ * Parses and extracts text content from a PDF file using pdf-parse.
+ */
+async function readPdfFile(filePath) {
+  try {
+    const dataBuffer = await fs.readFile(filePath);
+    const data = await pdfParse(dataBuffer);
+    return data.text;
+  } catch (err) {
+    console.error('PDF Parse Error:', err);
+    throw new Error('PDF faylı oxunarkən xəta baş verdi: ' + err.message);
+  }
+}
+
+/**
+
  * SEC-5: Command Allowlist instead of Blocklist
  */
 const ALLOWED_COMMANDS = ['npm', 'yarn', 'git', 'node', 'ls', 'pwd', 'mkdir', 'touch', 'grep', 'find'];
@@ -329,11 +346,19 @@ async function handleToolCall(toolCall, workingDirectory) {
             case "read_file": {
                 const filePath = path.resolve(workingDirectory, args.path);
                 if (!isPathSafe(filePath, workingDirectory)) return "Error: Path outside workspace";
-                const content = await fs.readFile(filePath, 'utf8');
+                
+                let content;
+                if (filePath.toLowerCase().endsWith('.pdf')) {
+                    content = await readPdfFile(filePath);
+                } else {
+                    content = await fs.readFile(filePath, 'utf8');
+                }
+
                 // PERF: Simple truncation for very large files
                 if (content.length > 50000) return content.slice(0, 50000) + "\n\n[TRUNCATED... File too large]";
                 return content;
             }
+
 
             case "write_file": {
                 const filePath = path.resolve(workingDirectory, args.path);
@@ -528,11 +553,17 @@ app.get('/api/read-file', async (req, res) => {
     return res.status(403).json({ error: "Access denied" });
   }
   try {
-    const content = await fs.readFile(resolvedPath, 'utf8');
+    let content;
+    if (resolvedPath.toLowerCase().endsWith('.pdf')) {
+      content = await readPdfFile(resolvedPath);
+    } else {
+      content = await fs.readFile(resolvedPath, 'utf8');
+    }
     res.json({ content });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+
 });
 
 /**
