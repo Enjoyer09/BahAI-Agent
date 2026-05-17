@@ -9,6 +9,9 @@ const crypto = require('crypto');
 const { exec, execFile, spawn } = require('child_process');
 const util = require('util');
 const { glob } = require('glob');
+const mammoth = require('mammoth');
+const XLSX = require('xlsx');
+const { createWorker } = require('tesseract.js');
 
 const execFileAsync = util.promisify(execFile);
 const pdfParse = require('pdf-parse');
@@ -287,6 +290,43 @@ async function readPdfFile(filePath) {
   }
 }
 
+async function extractDocxText(buffer) {
+  const result = await mammoth.extractRawText({ buffer });
+  return result?.value || '';
+}
+
+function extractSpreadsheetText(buffer) {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  const chunks = [];
+  for (const sheetName of wb.SheetNames.slice(0, 10)) {
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, raw: false });
+    const lines = rows
+      .slice(0, 500)
+      .map((row) => Array.isArray(row) ? row.map((c) => String(c ?? '')).join('\t') : String(row))
+      .join('\n');
+    chunks.push(`[Sheet: ${sheetName}]\n${lines}`);
+  }
+  return chunks.join('\n\n');
+}
+
+let ocrWorkerPromise = null;
+async function getOcrWorker() {
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = (async () => {
+      const worker = await createWorker('eng');
+      return worker;
+    })();
+  }
+  return ocrWorkerPromise;
+}
+
+async function extractImageText(buffer) {
+  const worker = await getOcrWorker();
+  const result = await worker.recognize(buffer);
+  return result?.data?.text || '';
+}
+
 function decodeDataUrl(dataUrl) {
   if (!dataUrl || typeof dataUrl !== 'string') return null;
   const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
@@ -325,6 +365,24 @@ async function extractAttachment(attachment) {
     }
 
     if (
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      name.toLowerCase().endsWith('.docx')
+    ) {
+      const text = await extractDocxText(decoded.buffer);
+      return { name, mimeType, extractedText: text || '' };
+    }
+
+    if (
+      mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      mimeType === 'application/vnd.ms-excel' ||
+      name.toLowerCase().endsWith('.xlsx') ||
+      name.toLowerCase().endsWith('.xls')
+    ) {
+      const text = extractSpreadsheetText(decoded.buffer);
+      return { name, mimeType, extractedText: text || '' };
+    }
+
+    if (
       mimeType.startsWith('text/') ||
       mimeType.includes('json') ||
       mimeType.includes('xml') ||
@@ -334,7 +392,16 @@ async function extractAttachment(attachment) {
     }
 
     if (mimeType.startsWith('image/')) {
-      return { name, mimeType, imageUrl: attachment.url, extractedText: `[Şəkil əlavə olunub: ${name}]` };
+      let ocrText = '';
+      try {
+        ocrText = await extractImageText(decoded.buffer);
+      } catch (e) {
+        ocrText = '';
+      }
+      const extractedText = ocrText?.trim()
+        ? `[Şəkildən OCR mətni]\n${ocrText.trim()}`
+        : `[Şəkil əlavə olunub: ${name}]`;
+      return { name, mimeType, imageUrl: attachment.url, extractedText };
     }
 
     return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}, ${mimeType}]` };
