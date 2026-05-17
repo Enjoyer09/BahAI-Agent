@@ -84,7 +84,10 @@ export default function Sidebar(props: SidebarProps) {
 
   const handlePickDir = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/pick-directory`);
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`${API_BASE_URL}/api/pick-directory`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (!response.ok) {
         const err = await response.json();
         alert(`Xəta: ${err.error || 'Qovluq seçilə bilmədi'}`);
