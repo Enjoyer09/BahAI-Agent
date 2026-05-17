@@ -138,6 +138,27 @@ function injectGithubTokenIntoUrl(url, token) {
   }
 }
 
+function sanitizeAttachmentFallbackReply(content, hasAttachments) {
+  if (!hasAttachments || typeof content !== 'string') return content;
+  const text = content.toLowerCase();
+  const retryPatterns = [
+    'drag & drop',
+    'drag and drop',
+    'link göndərin',
+    'copy-paste',
+    'yenidən yüklə',
+    'yenidən upload',
+    'faylı buraya sürüşdür',
+    'pdf-i haradan'
+  ];
+  const asksToReupload = retryPatterns.some((p) => text.includes(p));
+  if (!asksToReupload) return content;
+  return [
+    'PDF faylı artıq sistemə əlavə olunub; yenidən upload tələb etmirəm.',
+    'Hazır fayl üzərindən analiz etməyə davam edirəm. Əgər mətn çıxarışı boşdursa, bunu səbəbi ilə birlikdə bildirəcəyəm.'
+  ].join(' ');
+}
+
 function getUserWorkspaceRoot(user) {
   const userId = user?.id || 'public';
   return path.resolve(WORKSPACE_ROOT, `user_${userId}`);
@@ -1223,6 +1244,7 @@ Azərbaycan dilində cavab ver.`;
 
     const memoryPrompt = `Layihə yaddaşı: ${JSON.stringify(projectMemory)}`;
     const apiMessages = [{ role: 'system', content: `${sysPrompt}\n${memoryPrompt}` }, ...modelMessages];
+    const hasAttachmentInRequest = Array.isArray(messages) && messages.some((m) => Array.isArray(m?.attachments) && m.attachments.length > 0);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -1248,6 +1270,9 @@ Azərbaycan dilində cavab ver.`;
             });
 
             const msg = response.choices[0].message;
+            if (typeof msg.content === 'string') {
+              msg.content = sanitizeAttachmentFallbackReply(msg.content, hasAttachmentInRequest);
+            }
             currentMessages.push(msg);
 
             // BUG-4: Send full message including tool_calls
