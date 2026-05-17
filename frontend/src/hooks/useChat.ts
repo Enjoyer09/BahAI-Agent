@@ -39,6 +39,42 @@ export function useChat(settings: Settings) {
     return () => { if (storageTimeout.current) clearTimeout(storageTimeout.current); };
   }, [projects, conversations]);
 
+  // Auto-initialize default project & conversation if empty, or select active one
+  useEffect(() => {
+    if (projects.length === 0) {
+      const defaultProjId = generateId();
+      const defaultProj: Project = {
+        id: defaultProjId,
+        name: 'bahAI Sandbox',
+        path: './sandbox',
+        createdAt: Date.now()
+      };
+      
+      const defaultConvId = generateId();
+      const defaultConv: Conversation = {
+        id: defaultConvId,
+        projectId: defaultProjId,
+        title: 'Xoş Gəlmisiniz!',
+        messages: [
+          {
+            id: generateId(),
+            role: 'assistant',
+            content: 'Salam! Mən bahAI agentiyəm. Layihə seçilmədiyi üçün sizin üçün avtomatik olaraq bir "bahAI Sandbox" (Qaralama) iş sahəsi yaratdım. İndi bura nəsə yaza bilərsiniz, sizə kömək etməyə hazıram! 🚀',
+            timestamp: Date.now()
+          }
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      
+      setProjects([defaultProj]);
+      setConversations([defaultConv]);
+      setActiveConvId(defaultConvId);
+    } else if (!activeConvId && conversations.length > 0) {
+      setActiveConvId(conversations[0].id);
+    }
+  }, [projects, conversations, activeConvId]);
+
   const activeConversation = useMemo(() => 
     conversations.find(c => c.id === activeConvId) || null
   , [conversations, activeConvId]);
