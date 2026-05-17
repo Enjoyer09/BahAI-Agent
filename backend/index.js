@@ -71,9 +71,21 @@ function resolveWorkingDirectory(wd, user) {
     const folderName = path.basename(cleanWd.replace(/\\/g, '/'));
     const userPrefix = user && user.id ? `user_${user.id}_` : 'public_';
     const sandboxPath = path.resolve(__dirname, '../sandbox', `${userPrefix}${folderName || 'default'}`);
+    const legacyPath = path.resolve(__dirname, '../sandbox', folderName || 'default');
+    
+    const fsExtra = require('fs');
+
+    // Auto-migration: Move files from legacy folder to user-isolated folder if needed!
+    if (user && user.id && !fsExtra.existsSync(sandboxPath) && fsExtra.existsSync(legacyPath)) {
+      try {
+        console.log(`📦 MIGRATING legacy sandbox from ${legacyPath} to ${sandboxPath}...`);
+        fsExtra.renameSync(legacyPath, sandboxPath);
+      } catch (err) {
+        console.error("Failed to migrate legacy sandbox folder:", err);
+      }
+    }
     
     // Ensure sandbox dir exists
-    const fsExtra = require('fs');
     if (!fsExtra.existsSync(sandboxPath)) {
       try {
         fsExtra.mkdirSync(sandboxPath, { recursive: true });
@@ -86,6 +98,7 @@ function resolveWorkingDirectory(wd, user) {
 
   return path.resolve(cleanWd);
 }
+
 
 /**
  * Maps a file path from a requested original working directory to a resolved one.
