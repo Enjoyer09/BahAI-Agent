@@ -224,6 +224,15 @@ function decodeDataUrl(dataUrl) {
 }
 
 async function extractAttachment(attachment) {
+  if (attachment?.extractedText && typeof attachment.extractedText === 'string') {
+    return {
+      name: attachment?.name || 'attachment',
+      mimeType: attachment?.mimeType || attachment?.type || 'application/octet-stream',
+      extractedText: attachment.extractedText.slice(0, 50000),
+      imageUrl: attachment?.imageUrl
+    };
+  }
+
   const decoded = decodeDataUrl(attachment?.url);
   const mimeType = attachment?.mimeType || decoded?.mimeType || attachment?.type || 'application/octet-stream';
   const name = attachment?.name || 'attachment';
@@ -283,6 +292,8 @@ async function normalizeMessagesForModel(messages = []) {
       }
       if (extracted.extractedText) {
         textParts.push(`\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 30000)}`);
+      } else if (attachment?.extractionError) {
+        textParts.push(`\n\n[Attachment: ${attachment?.name || 'attachment'}]\nOxuma xətası: ${attachment.extractionError}`);
       }
       if (extracted.imageUrl) {
         imageParts.push({ type: 'image_url', image_url: { url: extracted.imageUrl } });
@@ -894,13 +905,24 @@ app.post('/api/attachments/extract', async (req, res) => {
     const extracted = [];
 
     for (const attachment of attachments) {
-      const item = await extractAttachment(attachment);
+      let item;
+      try {
+        item = await extractAttachment(attachment);
+      } catch (error) {
+        item = {
+          name: attachment?.name || 'attachment',
+          mimeType: attachment?.mimeType || attachment?.type || 'application/octet-stream',
+          extractedText: '',
+          extractionError: error?.message || 'Attachment emal edilə bilmədi'
+        };
+      }
       extracted.push({
         id: attachment.id || crypto.randomUUID(),
         name: item.name,
         mimeType: item.mimeType,
         extractedText: item.extractedText?.slice(0, 50000) || '',
-        imageUrl: item.imageUrl
+        imageUrl: item.imageUrl,
+        extractionError: item.extractionError
       });
     }
 

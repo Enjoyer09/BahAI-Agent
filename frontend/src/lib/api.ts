@@ -175,7 +175,13 @@ export async function extractAttachments(attachments: Attachment[]): Promise<Att
     },
     body: JSON.stringify({ attachments })
   });
-  if (!response.ok) return attachments;
+  if (!response.ok) {
+    return attachments.map(attachment => ({
+      ...attachment,
+      extractedText: attachment.extractedText || '',
+      extractionError: 'Attachment extraction failed'
+    }));
+  }
   const data = await response.json();
   const extracted = Array.isArray(data.attachments) ? data.attachments : [];
   return attachments.map(attachment => {

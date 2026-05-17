@@ -15,6 +15,7 @@ export interface Attachment {
   mimeType?: string;
   url: string;
   extractedText?: string;
+  extractionError?: string;
 }
 
 export interface Message {
