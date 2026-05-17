@@ -293,26 +293,43 @@ export default function Sidebar(props: SidebarProps) {
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-xl bg-black/40 animate-in fade-in duration-300">
-          <div className="w-full max-w-md bg-[var(--bg-surface)] border border-white/10 rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.8)] p-10 relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-6 flex gap-2">
-              <ThemeToggle theme={props.themeCtx.theme} setTheme={props.themeCtx.setTheme} />
-              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-white/5 rounded-xl transition-colors"><X size={20} /></button>
-            </div>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-xl bg-black/40 animate-in fade-in duration-300">
+          <div className="w-full max-w-md bg-[#0a0a0c] border border-white/10 rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.8)] p-10 relative flex flex-col max-h-[90vh]">
             
-            <h2 className="text-xl font-black mb-8 flex items-center gap-3">
-              <Settings className="text-blue-500" size={24} /> Settings
-            </h2>
+            {/* Elegant Header Flow */}
+            <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/5 shrink-0">
+              <h2 className="text-xl font-black flex items-center gap-3 text-white">
+                <Settings className="text-blue-500" size={24} /> Settings
+              </h2>
+              <button 
+                onClick={() => setShowSettings(false)} 
+                className="p-2 hover:bg-white/5 rounded-xl text-gray-500 hover:text-white transition-colors"
+                title="Bağla"
+              >
+                <X size={20} />
+              </button>
+            </div>
 
-            <SettingsPanel 
-              model={props.model} setModel={props.setModel}
-              performanceMode={props.performanceMode} setPerformanceMode={props.setPerformanceMode}
-            />
+            {/* Scrollable Content Body */}
+            <div className="flex-1 overflow-y-auto premium-scroll pr-1 space-y-8 min-h-0">
+              {/* Premium Segmented Theme Toggle */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Mühit Görünüşü</label>
+                <ThemeToggle theme={props.themeCtx.theme} setTheme={props.themeCtx.setTheme} />
+              </div>
 
-            <div className="mt-10 pt-6 border-t border-white/5 flex justify-end">
+              {/* Settings Fields */}
+              <SettingsPanel 
+                model={props.model} setModel={props.setModel}
+                performanceMode={props.performanceMode} setPerformanceMode={props.setPerformanceMode}
+              />
+            </div>
+
+            {/* Footer Done Action */}
+            <div className="mt-8 pt-6 border-t border-white/5 flex justify-end shrink-0">
               <button 
                 onClick={() => setShowSettings(false)}
-                className="px-10 py-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-2xl shadow-blue-600/40 transition-all active:scale-95"
+                className="w-full sm:w-auto px-10 py-3.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-2xl shadow-blue-600/40 transition-all active:scale-95"
               >
                 Done
               </button>

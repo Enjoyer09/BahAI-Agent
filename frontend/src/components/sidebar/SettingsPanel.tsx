@@ -25,14 +25,6 @@ export default function SettingsPanel({
 
   return (
     <div className="space-y-5">
-      <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 mb-4 animate-in fade-in duration-300">
-        <div className="flex items-center gap-2 text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">
-          <Zap size={14} className="animate-pulse" /> Bulud Sazlamaları
-        </div>
-        <p className="text-[10px] text-gray-500 leading-relaxed">
-          Bütün API açarları və model bağlantıları təhlükəsiz şəkildə <strong>Railway Server</strong> tərəfindən idarə olunur. UI üzərində heç bir məxfi açar daxil etməyə ehtiyac yoxdur.
-        </p>
-      </div>
 
       {/* Everyone can change Model */}
       <SettingField icon={Code} label="AI Model Seçimi">
