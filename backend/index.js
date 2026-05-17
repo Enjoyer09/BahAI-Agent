@@ -163,10 +163,21 @@ function sanitizeAttachmentFallbackReply(content, hasAttachments) {
   ];
   const asksToReupload = retryPatterns.some((p) => text.includes(p));
   if (!asksToReupload) return content;
-  return [
-    'PDF faylı artıq sistemə əlavə olunub; yenidən upload tələb etmirəm.',
-    'Hazır fayl üzərindən analiz etməyə davam edirəm. Əgər mətn çıxarışı boşdursa, bunu səbəbi ilə birlikdə bildirəcəyəm və mövcud hissələrdən yenə də nəticə çıxaracağam.'
-  ].join(' ');
+  // Do not hard-replace the whole assistant message, otherwise response can stall.
+  // We only strip common retry prompts and keep the rest of model output.
+  const lines = content
+    .split('\n')
+    .filter((line) => {
+      const l = line.toLowerCase();
+      return !retryPatterns.some((p) => l.includes(p));
+    })
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const cleaned = lines.join('\n');
+  if (cleaned) return cleaned;
+
+  return 'Attachment qəbul olundu. Faylın mövcud məzmununa əsasən analizə davam edirəm.';
 }
 
 function getUserWorkspaceRoot(user) {
