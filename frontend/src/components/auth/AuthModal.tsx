@@ -1,10 +1,7 @@
-// ==========================================
-// AuthModal — Integrated with Custom Backend
-// ==========================================
-
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Mail, Lock, User, Github, Loader2, ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { API_BASE_URL } from '../../lib/constants';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -18,8 +15,67 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
 
-  const { login, register } = useAuth();
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+  const { login, googleLogin, register } = useAuth();
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Fetch Auth Configuration from Backend
+    fetch(`${API_BASE_URL}/api/auth/config`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.googleClientId) {
+          setGoogleClientId(data.googleClientId);
+        }
+      })
+      .catch(err => console.error('Error fetching auth config:', err));
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !googleClientId) return;
+
+    const initGoogle = () => {
+      if ((window as any).google?.accounts?.id) {
+        (window as any).google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: async (response: any) => {
+            setLoading(true);
+            setError(null);
+            try {
+              await googleLogin(response.credential);
+              onClose();
+            } catch (err: any) {
+              setError(err.message || 'Google ilə daxil olarkən xəta baş verdi');
+            } finally {
+              setLoading(false);
+            }
+          }
+        });
+
+        if (googleBtnRef.current) {
+          (window as any).google.accounts.id.renderButton(
+            googleBtnRef.current,
+            { 
+              theme: "dark", 
+              size: "large", 
+              type: "standard",
+              shape: "pill",
+              text: "signin_with",
+              logo_alignment: "left",
+              width: 180
+            }
+          );
+        }
+      } else {
+        setTimeout(initGoogle, 100);
+      }
+    };
+
+    initGoogle();
+  }, [isOpen, googleClientId]);
 
   if (!isOpen) return null;
 
@@ -71,19 +127,23 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           )}
 
           {/* Social Auth */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="grid grid-cols-2 gap-4 mb-8 items-center">
             <button 
               onClick={() => alert('GitHub girişi tezliklə aktiv olacaq!')}
-              className="flex items-center justify-center gap-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10 hover:border-white/20 transition-all active:scale-95"
+              className="flex items-center justify-center gap-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10 hover:border-white/20 transition-all active:scale-95 h-[44px]"
             >
               <Github size={16} /> GitHub
             </button>
-            <button 
-              onClick={() => alert('Google girişi tezliklə aktiv olacaq!')}
-              className="flex items-center justify-center gap-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10 hover:border-white/20 transition-all active:scale-95"
-            >
-              Google
-            </button>
+            {googleClientId ? (
+              <div ref={googleBtnRef} className="flex justify-center h-[44px] overflow-hidden rounded-2xl w-full"></div>
+            ) : (
+              <button 
+                onClick={() => alert('Google ilə giriş üçün Railway-də GOOGLE_CLIENT_ID dəyişənini təyin edin!')}
+                className="flex items-center justify-center gap-3 px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white/40 hover:bg-white/5 transition-all active:scale-95 h-[44px]"
+              >
+                Google (Pasif)
+              </button>
+            )}
           </div>
 
           <div className="relative mb-8 text-center">

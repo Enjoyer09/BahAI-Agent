@@ -16,6 +16,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  googleLogin: (credential: string) => Promise<void>;
   register: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => void;
 }
@@ -83,13 +84,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
   };
 
+  const googleLogin = async (credential: string) => {
+    const res = await fetch(`${API_BASE_URL}/api/auth/google-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Google ilə giriş uğursuzdur.');
+
+    localStorage.setItem('auth_token', data.token);
+    setUser(data.user);
+  };
+
   const signOut = () => {
     localStorage.removeItem('auth_token');
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, signOut }}>
+    <AuthContext.Provider value={{ user, loading, login, googleLogin, register, signOut }}>
       {children}
     </AuthContext.Provider>
   );

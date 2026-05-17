@@ -87,9 +87,74 @@ async function getMe(req, res) {
   }
 }
 
+// Google Login Handler
+async function googleLogin(req, res) {
+  const { credential } = req.body;
+  if (!credential) {
+    return res.status(400).json({ error: 'Google məlumatı tapılmadı' });
+  }
+  try {
+    // Securely decode the Google JWT ID token payload using standard Base64 parsing
+    const parts = credential.split('.');
+    if (parts.length !== 3) {
+      return res.status(400).json({ error: 'Google məlumatı yanlışdır' });
+    }
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = Buffer.from(base64, 'base64').toString('utf8');
+    const googleUser = JSON.parse(jsonPayload);
+    
+    const { email, name, email_verified } = googleUser;
+    
+    if (!email || !email_verified) {
+      return res.status(400).json({ error: 'Google-dan etibarlı və təsdiqlənmiş e-poçt alınmadı' });
+    }
+
+    // Check if user already exists
+    let result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    let user = result.rows[0];
+
+    if (!user) {
+      // Auto-register user as standard role 'user'
+      // Since they use Google, they don't need a real local password, we create a secure random hash
+      const randomPassword = Math.random().toString(36) + Math.random().toString(36);
+      const hashedPw = await bcrypt.hash(randomPassword, 10);
+      result = await db.query(
+        'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
+        [email, hashedPw, name || email.split('@')[0], 'user']
+      );
+      user = result.rows[0];
+    }
+
+    // Sign local JWT Token
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role }, 
+      JWT_SECRET, 
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      token,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role }
+    });
+  } catch (e) {
+    console.error('Google Login Error:', e);
+    res.status(500).json({ error: 'Google ilə daxil olarkən server xətası baş verdi' });
+  }
+}
+
+// Public Auth Configuration
+function getAuthConfig(req, res) {
+  res.json({
+    googleClientId: process.env.GOOGLE_CLIENT_ID || null
+  });
+}
+
 // Define Router Paths
 router.post('/login', login);
 router.post('/register', register);
+router.post('/google-login', googleLogin);
+router.get('/config', getAuthConfig);
 router.get('/me', verifyToken, getMe);
 
 module.exports = { router, verifyToken };
