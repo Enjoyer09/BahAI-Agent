@@ -40,6 +40,15 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
 
+  useEffect(() => {
+    // Prevent cross-account bleed in the same browser session.
+    setProjects([]);
+    setConversations([]);
+    setActiveConvId(null);
+    setHydrated(false);
+    setServerBacked(false);
+  }, [userKey]);
+
   // PERF-1: Debounced Persistence
   const storageTimeout = useRef<any>(null);
   useEffect(() => {

@@ -471,7 +471,7 @@ const TOOLS = [
 // Tool Execution Handler
 // ==========================================
 
-async function handleToolCall(toolCall, workingDirectory) {
+async function handleToolCall(toolCall, workingDirectory, user) {
     const { name, arguments: argsJson } = toolCall.function;
     const args = JSON.parse(argsJson);
 
@@ -500,21 +500,21 @@ async function handleToolCall(toolCall, workingDirectory) {
 
             case "list_directory": {
                 const targetPath = path.resolve(workingDirectory, args.path || '.');
-                if (!isPathSafe(targetPath, workingDirectory)) return "Error: Path outside workspace";
+                if (!isPathSafe(targetPath, workingDirectory, user)) return "Error: Path outside workspace";
                 const files = await fs.readdir(targetPath, { withFileTypes: true });
                 return files.map(f => `${f.isDirectory() ? '[DIR] ' : ''}${f.name}`).join('\n');
             }
 
             case "glob_search": {
                 const searchCwd = path.resolve(workingDirectory, args.cwd || '.');
-                if (!isPathSafe(searchCwd, workingDirectory)) return "Error: Path outside workspace";
+                if (!isPathSafe(searchCwd, workingDirectory, user)) return "Error: Path outside workspace";
                 const matches = await glob(args.pattern, { cwd: searchCwd, ignore: ['**/node_modules/**', '**/.git/**'] });
                 return matches.join('\n') || "No matches found";
             }
 
             case "read_file": {
                 const filePath = path.resolve(workingDirectory, args.path);
-                if (!isPathSafe(filePath, workingDirectory)) return "Error: Path outside workspace";
+                if (!isPathSafe(filePath, workingDirectory, user)) return "Error: Path outside workspace";
                 
                 let content;
                 if (filePath.toLowerCase().endsWith('.pdf')) {
@@ -531,7 +531,7 @@ async function handleToolCall(toolCall, workingDirectory) {
 
             case "write_file": {
                 const filePath = path.resolve(workingDirectory, args.path);
-                if (!isPathSafe(filePath, workingDirectory)) return "Error: Path outside workspace";
+                if (!isPathSafe(filePath, workingDirectory, user)) return "Error: Path outside workspace";
                 await fs.mkdir(path.dirname(filePath), { recursive: true });
                 await fs.writeFile(filePath, args.content, 'utf8');
                 return `Successfully created ${args.path}`;
@@ -539,7 +539,7 @@ async function handleToolCall(toolCall, workingDirectory) {
 
             case "file_edit": {
                 const filePath = path.resolve(workingDirectory, args.path);
-                if (!isPathSafe(filePath, workingDirectory)) return "Error: Path outside workspace";
+                if (!isPathSafe(filePath, workingDirectory, user)) return "Error: Path outside workspace";
                 const content = await fs.readFile(filePath, 'utf8');
                 
                 // BUG-9: Check for ambiguity
@@ -610,7 +610,7 @@ async function handleToolCall(toolCall, workingDirectory) {
 
             case "grep_search": {
                 const searchCwd = path.resolve(workingDirectory, args.cwd || '.');
-                if (!isPathSafe(searchCwd, workingDirectory)) return "Error: Path outside workspace";
+                if (!isPathSafe(searchCwd, workingDirectory, user)) return "Error: Path outside workspace";
                 // SEC-4: Use execFile to avoid shell injection
                 try {
                     const { stdout } = await execFileAsync('grep', ['-rnI', args.query, '.'], { cwd: searchCwd, timeout: 10000 });
@@ -904,7 +904,7 @@ Azərbaycan dilində cavab ver.`;
             if (msg.tool_calls && msg.tool_calls.length > 0) {
                 for (const toolCall of msg.tool_calls) {
                     res.write(`data: ${JSON.stringify({ type: 'tool_execution', tool: toolCall.function.name, args: toolCall.function.arguments })}\n\n`);
-                    const result = await handleToolCall(toolCall, resolvedWD);
+                    const result = await handleToolCall(toolCall, resolvedWD, req.user);
                     
                     const toolResultMsg = { role: "tool", tool_call_id: toolCall.id, content: result };
                     currentMessages.push(toolResultMsg);
