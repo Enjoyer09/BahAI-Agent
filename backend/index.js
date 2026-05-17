@@ -276,7 +276,10 @@ async function normalizeMessagesForModel(messages = []) {
       continue;
     }
 
-    const textParts = [message.content || ''];
+    const textParts = [
+      message.content || '',
+      '[Sistem qeydi: İstifadəçi artıq attachment göndərib. Yenidən upload/drag-drop/link istəmədən mövcud attachment məzmununu analiz et.]'
+    ];
     const imageParts = [];
 
     for (const attachment of message.attachments) {
@@ -294,6 +297,8 @@ async function normalizeMessagesForModel(messages = []) {
         textParts.push(`\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 30000)}`);
       } else if (attachment?.extractionError) {
         textParts.push(`\n\n[Attachment: ${attachment?.name || 'attachment'}]\nOxuma xətası: ${attachment.extractionError}`);
+      } else {
+        textParts.push(`\n\n[Attachment: ${attachment?.name || extracted.name || 'attachment'} | ${attachment?.mimeType || extracted.mimeType || 'unknown'}]\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`);
       }
       if (extracted.imageUrl) {
         imageParts.push({ type: 'image_url', image_url: { url: extracted.imageUrl } });
@@ -1113,6 +1118,7 @@ MÜHÜM QAYDALAR:
 3. LIVE PREVIEW HAQQINDA: Bizim LivePreview paneli YALNIZ 'http://localhost:PORT' formatında işləyir. Lokal fayl yollarını (file:///...) aça bilmir.
 4. Əgər bir web səhifə yaratmısansa, onu görmək üçün mütləq bir server başlatmalısan (məs: 'npx serve' və ya 'npm run dev').
 5. SERVERİ TƏSDİQLƏ (KRİTİK): check_port_status alətini çağırmadan serverin işlədiyini iddia etmək QADAĞANDIR! Əgər bu aləti çağırmamısansa, "Server işləyir" demə! Əgər port aktiv deyilsə, serverin niyə qalxmadığını (logs) yoxla.
+6. İstifadəçi attachment/PDF göndəribsə, birbaşa həmin məzmunu analiz et. "Drag & drop et", "link göndər", "yenidən yüklə" kimi cavabları yalnız attachment ümumiyyətlə yoxdursa ver.
 Azərbaycan dilində cavab ver.`;
 
     let modelMessages = [];
