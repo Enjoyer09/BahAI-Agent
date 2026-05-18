@@ -73,6 +73,20 @@ const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
 const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../sandbox'));
 const isLocalMode = () => process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
 
+// Startup diagnostics
+const diagKey = process.env.OPENAI_API_KEY;
+console.log('🔧 Startup Config:', {
+  PORT,
+  LOCAL_MODE: process.env.LOCAL_MODE || '(not set)',
+  DATABASE_URL: process.env.DATABASE_URL ? '✅ set' : '❌ not set',
+  OPENAI_API_KEY: diagKey ? `${diagKey.slice(0, 8)}...${diagKey.slice(-4)}` : '❌ not set',
+  OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || '(not set)',
+  OPENAI_MODEL: process.env.OPENAI_MODEL || '(not set)',
+  JWT_SECRET: process.env.JWT_SECRET ? '✅ set' : '❌ not set',
+  NODE_ENV: process.env.NODE_ENV || '(not set)',
+  isLocalMode: isLocalMode()
+});
+
 // ==========================================
 // Security helpers
 // ==========================================
@@ -1282,9 +1296,12 @@ app.post('/api/chat', async (req, res) => {
     const effectiveBaseUrl = baseUrl || process.env.OPENAI_BASE_URL || "https://integrate.api.nvidia.com/v1";
     const effectiveModel = model || process.env.OPENAI_MODEL || 'meta/llama-3.3-70b-instruct';
 
+    const keySource = apiKey ? 'frontend' : process.env.OPENAI_API_KEY ? 'env' : process.env.NVIDIA_API_KEY ? 'nvidia_env' : 'none';
+    console.log(`🤖 /api/chat | model=${effectiveModel} | base=${effectiveBaseUrl} | key_source=${keySource}`);
+
     if (!effectiveApiKey) {
-        return res.status(400).json({ 
-            error: "Süni İntellekt API Açarı tapılmadı! Layihəni lokalda (Railway-dən asılı olmadan) işlətmək üçün layihə qovluğundakı `.env` faylına OPENAI_API_KEY və OPENAI_BASE_URL açarlarını əlavə edin." 
+        return res.status(400).json({
+            error: "Süni İntellekt API Açarı tapılmadı! Layihəni lokalda (Railway-dən asılı olmadan) işlətmək üçün layihə qovluğundakı `.env` faylına OPENAI_API_KEY və OPENAI_BASE_URL açarlarını əlavə edin."
         });
     }
 
@@ -1372,7 +1389,19 @@ Azərbaycan dilində cavab ver.`;
                     res.write(`data: ${JSON.stringify({ type: 'error', message: 'API cavab vaxtı bitdi (60s). Zəhmət olmasa yenidən cəhd edin.' })}\n\n`);
                     break;
                 }
-                throw apiErr;
+                // Detailed API error logging
+                const status = apiErr.status || apiErr.code || 'unknown';
+                console.error(`❌ API Error [${status}]:`, apiErr.message);
+                let userMsg = `API xətası: ${apiErr.message}`;
+                if (apiErr.status === 401) {
+                    userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
+                } else if (apiErr.status === 429) {
+                    userMsg = 'API limiti aşıldı. Bir az gözləyib yenidən cəhd edin.';
+                } else if (apiErr.status === 404) {
+                    userMsg = `Model tapılmadı: "${effectiveModel}". Ayarlardan model adını yoxlayın.`;
+                }
+                res.write(`data: ${JSON.stringify({ type: 'error', message: userMsg })}\n\n`);
+                break;
             } finally {
                 clearTimeout(timeoutId);
             }

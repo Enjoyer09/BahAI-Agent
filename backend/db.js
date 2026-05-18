@@ -5,10 +5,12 @@
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    })
+  : null;
 
 function hasDatabase() {
   return Boolean(process.env.DATABASE_URL);
@@ -143,7 +145,10 @@ async function initDb() {
 }
 
 module.exports = {
-  query: (text, params) => pool.query(text, params),
+  query: (text, params) => {
+    if (!pool) throw new Error('Database not configured');
+    return pool.query(text, params);
+  },
   initDb,
   pool,
   hasDatabase

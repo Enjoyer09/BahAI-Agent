@@ -265,19 +265,39 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         .then(plan => setTaskPlan(plan.items))
         .catch(() => setTaskPlan([]));
 
-      await sendChatMessage(
-        currentMsgs.map(m => ({ 
-          role: m.role, 
-          content: m.content || '', 
-          attachments: m.attachments,
-          tool_calls: m.tool_calls, 
-          tool_call_id: m.tool_call_id 
+      const MAX_HISTORY_MESSAGES = 24;
+      const historySlice = currentMsgs.slice(-MAX_HISTORY_MESSAGES);
+      const preparedMessages = historySlice.map((m) => ({
+        role: m.role,
+        content: m.content || '',
+        // Prevent multi-megabyte payloads on every turn:
+        // keep parsed attachment text, drop huge base64 data URLs.
+        attachments: m.attachments?.map((at: any) => ({
+          id: at.id,
+          name: at.name,
+          type: at.type,
+          mimeType: at.mimeType,
+          extractedText: at.extractedText || '',
+          extractionError: at.extractionError,
+          url: ''
         })),
+        tool_calls: m.tool_calls,
+        tool_call_id: m.tool_call_id
+      }));
+
+      await sendChatMessage(
+        preparedMessages,
         settings.apiKey, settings.baseUrl, settings.model, activeProject?.path || settings.projectDir,
         { safeMode, projectId: activeProject?.id },
         (event: any) => {
           if (event.type === 'task_plan') {
             setTaskPlan(Array.isArray(event.items) ? event.items : []);
+            return;
+          }
+          if (event.type === 'error') {
+            const errMsg: Message = { id: generateId(), role: 'assistant', content: `❌ Xəta: ${event.message}`, timestamp: Date.now() };
+            currentMsgs = [...currentMsgs, errMsg];
+            setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
             return;
           }
           if (event.type === 'approval_request') {
