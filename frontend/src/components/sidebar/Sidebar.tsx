@@ -201,25 +201,26 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
         <div className="px-3 pt-3 pb-2 shrink-0 flex items-center justify-between">
           <button
             onClick={handleNewChat}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
             style={{
               color: 'var(--fg-main)',
               background: 'transparent',
               border: '1px solid var(--border)',
+              minHeight: '44px',
             }}
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <SquarePen size={16} />
+            <SquarePen size={18} />
             Yeni söhbət
           </button>
           <button
             onClick={onToggle}
-            className="p-2 rounded-lg transition-colors"
-            style={{ color: 'var(--fg-muted)' }}
+            className="p-2.5 rounded-lg transition-colors"
+            style={{ color: 'var(--fg-muted)', minHeight: '44px', minWidth: '44px' }}
             aria-label="Close sidebar"
           >
-            <PanelLeftClose size={16} />
+            <PanelLeftClose size={18} />
           </button>
         </div>
 
@@ -232,11 +233,12 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Söhbət axtar..."
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg outline-none"
+              className="w-full pl-9 pr-3 text-sm rounded-lg outline-none"
               style={{
                 background: 'var(--bg-hover)',
                 border: '1px solid var(--border)',
                 color: 'var(--fg-main)',
+                minHeight: '44px',
               }}
             />
           </div>
@@ -291,7 +293,7 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
         <div className="flex-1 overflow-y-auto premium-scroll px-2 space-y-1">
           {grouped.map(group => (
             <div key={group.label} className="mb-1">
-              <div className="px-2 py-1.5 text-[11px] font-semibold sticky top-0"
+              <div className="px-2 py-2 text-xs font-semibold sticky top-0"
                    style={{ color: 'var(--fg-muted)', background: 'var(--bg-surface)' }}>
                 {group.label}
               </div>
@@ -301,24 +303,25 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
                   <div key={conv.id} className="group relative">
                     <button
                       onClick={() => chat.setActiveConvId(conv.id)}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors truncate"
+                      className="w-full flex items-center gap-2 px-3 py-3 rounded-lg text-left transition-colors truncate"
                       style={{
                         background: isActive ? 'var(--bg-hover)' : 'transparent',
                         color: isActive ? 'var(--fg-main)' : 'var(--fg-secondary)',
+                        minHeight: '44px',
                       }}
                       onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'; }}
                       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                     >
                       <span className="text-sm truncate flex-1">{conv.title || 'Adsız söhbət'}</span>
                     </button>
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 mobile-visible" style={{ opacity: 1 }}>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conv.id); }}
-                        className="p-1 rounded transition-colors"
-                        style={{ color: 'var(--fg-muted)' }}
+                        className="p-2 rounded transition-colors"
+                        style={{ color: 'var(--fg-muted)', minHeight: '44px', minWidth: '44px' }}
                         aria-label="Delete conversation"
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
@@ -340,12 +343,12 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
         <div className="p-2 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
           {/* User info */}
           {user && (
-            <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg mb-1">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center"
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center"
                    style={{ background: 'var(--color-accent-muted)' }}>
-                <User size={14} style={{ color: 'var(--color-accent)' }} />
+                <User size={16} style={{ color: 'var(--color-accent)' }} />
               </div>
-              <span className="text-xs font-medium truncate" style={{ color: 'var(--fg-main)' }}>
+              <span className="text-sm font-medium truncate" style={{ color: 'var(--fg-main)' }}>
                 {user.name || user.email}
               </span>
             </div>
@@ -354,35 +357,35 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
           {/* Theme toggle */}
           <button
             onClick={() => themeCtx.setTheme(themeCtx.resolved === 'dark' ? 'light' : 'dark')}
-            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors"
-            style={{ color: 'var(--fg-secondary)' }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
+            style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            {themeCtx.resolved === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            {themeCtx.resolved === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             {themeCtx.resolved === 'dark' ? 'İşıqlı rejim' : 'Qaranlıq rejim'}
           </button>
 
           {user && user.role === 'admin' && (
             <button
               onClick={() => setShowAdminPanel(true)}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors"
-              style={{ color: 'var(--fg-secondary)' }}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
+              style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
               onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
-              <Shield size={14} /> Admin
+              <Shield size={16} /> Admin
             </button>
           )}
 
           <button
             onClick={() => setShowSettings(true)}
-            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors"
-            style={{ color: 'var(--fg-secondary)' }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
+            style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <Settings size={14} /> Parametrlər
+            <Settings size={16} /> Parametrlər
           </button>
 
           <button

@@ -20,23 +20,42 @@ export async function sendChatMessage(
   onEvent: (event: SSEEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/chat`, {
+  const requestBody = JSON.stringify({
+    messages,
+    apiKey,
+    baseUrl,
+    model,
+    workingDirectory,
+    safeMode: options.safeMode,
+    projectId: options.projectId || undefined,
+  });
+
+  const doFetch = async () => fetch(`${API_BASE_URL}/api/chat`, {
     method: 'POST',
-    headers: { 
+    headers: {
       'Content-Type': 'application/json',
       ...getAuthHeader()
     },
-    body: JSON.stringify({
-      messages,
-      apiKey,
-      baseUrl,
-      model,
-      workingDirectory,
-      safeMode: options.safeMode,
-      projectId: options.projectId || undefined,
-    }),
+    body: requestBody,
     signal,
   });
+
+  let response: Response;
+  try {
+    response = await doFetch();
+  } catch (err: any) {
+    const isAbort = err?.name === 'AbortError';
+    if (isAbort) throw err;
+
+    // transient network errors: retry once
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    try {
+      response = await doFetch();
+    } catch (retryErr: any) {
+      const msg = retryErr?.message || err?.message || 'Network error';
+      throw new Error(`Şəbəkə xətası: serverə qoşulmaq alınmadı (${msg}).`);
+    }
+  }
 
   if (!response.ok) {
     if (response.status === 401) throw new Error('Giriş tələb olunur. Zəhmət olmasa daxil olun.');

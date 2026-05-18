@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu } from 'lucide-react';
+import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen } from 'lucide-react';
 import ChatArea from './components/chat/ChatArea';
 import ChatInput from './components/chat/ChatInput';
 import CodeEditor from './components/chat/CodeEditor';
@@ -26,13 +26,13 @@ function AppContent() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  void setSelectedFile; // used by child components
+  void setSelectedFile;
   const { ConfirmDialog } = useConfirm();
 
   const chat = useChat(settings.settings, auth.user?.id);
 
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1024px)');
+    const mq = window.matchMedia('(max-width: 768px)');
     setIsMobile(mq.matches);
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mq.addEventListener('change', handler);
@@ -60,7 +60,7 @@ function AppContent() {
 
   if (auth.loading) {
     return (
-      <div className="h-screen flex items-center justify-center" style={{ background: 'var(--bg-main)' }}>
+      <div className="dvh-screen flex items-center justify-center" style={{ background: 'var(--bg-main)' }}>
         <div className="animate-pulse-glow w-12 h-12 rounded-full flex items-center justify-center"
              style={{ border: '2px solid var(--color-accent)', borderTopColor: 'transparent' }}>
           <Code size={20} style={{ color: 'var(--color-accent)' }} />
@@ -72,7 +72,7 @@ function AppContent() {
   const autoPreview = chat.activeProject?.name?.match(/site|web|app|frontend|ui/i);
 
   return (
-    <div className="h-screen flex overflow-hidden" style={{ background: 'var(--bg-main)' }}>
+    <div className="dvh-screen flex overflow-hidden" style={{ background: 'var(--bg-main)' }}>
       {/* DESKTOP SIDEBAR */}
       {sidebarOpen && !isMobile && (
         <aside
@@ -91,19 +91,18 @@ function AppContent() {
         </aside>
       )}
 
-      {/* MOBILE SIDEBAR OVERLAY */}
+      {/* MOBILE SIDEBAR OVERLAY — FULL SCREEN */}
       {sidebarOpen && isMobile && (
         <>
           <div
             className="fixed inset-0 z-40"
-            style={{ background: 'rgba(0,0,0,0.5)' }}
+            style={{ background: 'rgba(0,0,0,0.6)' }}
             onClick={() => setSidebarOpen(false)}
           />
           <aside
-            className="fixed inset-y-0 left-0 z-50 flex flex-col overflow-hidden animate-slide-in-left"
+            className="fixed inset-y-0 left-0 z-50 flex flex-col overflow-hidden animate-slide-in-left safe-top safe-bottom"
             style={{
-              width: '85vw',
-              maxWidth: '320px',
+              width: '100vw',
               background: 'var(--bg-surface)',
             }}
           >
@@ -118,54 +117,84 @@ function AppContent() {
 
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        {/* Floating toolbar */}
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
-          {!sidebarOpen && (
+        {/* Floating toolbar — desktop only */}
+        {!isMobile && (
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-1 safe-top">
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2.5 rounded-lg transition-colors"
+                style={{ color: 'var(--fg-muted)', background: 'var(--bg-surface)' }}
+                title="Open sidebar (Ctrl+B)"
+              >
+                <Menu size={18} />
+              </button>
+            )}
+            {autoPreview && (
+              <button
+                onClick={() => setShowPreview(p => !p)}
+                className="p-2.5 rounded-lg transition-colors"
+                style={{
+                  color: showPreview ? 'var(--color-accent)' : 'var(--fg-muted)',
+                  background: showPreview ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
+                }}
+                title="Toggle Preview"
+              >
+                <PanelRight size={16} />
+              </button>
+            )}
+            <button
+              onClick={() => setShowTerminal(p => !p)}
+              className="p-2.5 rounded-lg transition-colors"
+              style={{
+                color: showTerminal ? 'var(--color-accent)' : 'var(--fg-muted)',
+                background: showTerminal ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
+              }}
+              title="Toggle Terminal (Ctrl+`)"
+            >
+              <TermIcon size={16} />
+            </button>
+            <button
+              onClick={() => setShowOps(p => !p)}
+              className="p-2.5 rounded-lg transition-colors"
+              style={{
+                color: showOps ? 'var(--color-accent)' : 'var(--fg-muted)',
+                background: showOps ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
+              }}
+              title="Toggle Ops"
+            >
+              <Settings size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Mobile top bar */}
+        {isMobile && (
+          <div className="flex items-center justify-between px-3 py-2 shrink-0 safe-top"
+               style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-lg transition-colors"
-              style={{ color: 'var(--fg-muted)', background: 'var(--bg-surface)' }}
-              title="Open sidebar (Ctrl+B)"
+              className="p-2.5 rounded-lg transition-colors"
+              style={{ color: 'var(--fg-main)' }}
+              aria-label="Open menu"
             >
-              <Menu size={18} />
+              <Menu size={20} />
             </button>
-          )}
-          {autoPreview && (
+            <span className="text-sm font-medium truncate mx-2" style={{ color: 'var(--fg-main)' }}>
+              bahAI
+            </span>
             <button
-              onClick={() => setShowPreview(p => !p)}
-              className="p-2 rounded-lg transition-colors"
-              style={{
-                color: showPreview ? 'var(--color-accent)' : 'var(--fg-muted)',
-                background: showPreview ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
+              onClick={() => {
+                if (chat.activeProject) chat.createConversation(chat.activeProject.id);
               }}
-              title="Toggle Preview"
+              className="p-2.5 rounded-lg transition-colors"
+              style={{ color: 'var(--fg-main)' }}
+              aria-label="New chat"
             >
-              <PanelRight size={16} />
+              <SquarePen size={20} />
             </button>
-          )}
-          <button
-            onClick={() => setShowTerminal(p => !p)}
-            className="p-2 rounded-lg transition-colors"
-            style={{
-              color: showTerminal ? 'var(--color-accent)' : 'var(--fg-muted)',
-              background: showTerminal ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
-            }}
-            title="Toggle Terminal (Ctrl+`)"
-          >
-            <TermIcon size={16} />
-          </button>
-          <button
-            onClick={() => setShowOps(p => !p)}
-            className="p-2 rounded-lg transition-colors"
-            style={{
-              color: showOps ? 'var(--color-accent)' : 'var(--fg-muted)',
-              background: showOps ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
-            }}
-            title="Toggle Ops"
-          >
-            <Settings size={16} />
-          </button>
-        </div>
+          </div>
+        )}
 
         {/* Chat area */}
         <ChatArea
@@ -182,29 +211,33 @@ function AppContent() {
           loading={chat.loading}
           safeMode={chat.safeMode}
           onSafeModeToggle={() => chat.setSafeMode(!chat.safeMode)}
-          model={settings.model}
-          onModelChange={settings.setModel}
+          model={isMobile ? undefined : settings.model}
+          onModelChange={isMobile ? undefined : settings.setModel}
+          isMobile={isMobile}
         />
       </main>
 
-      {/* AUX PANELS */}
+      {/* AUX PANELS — fixed overlay on mobile */}
       {showEditor && (
         <div
-          className="flex flex-col shrink-0 overflow-hidden animate-in-right"
+          className={isMobile
+            ? 'fixed inset-0 z-30 flex flex-col animate-in-right'
+            : 'flex flex-col shrink-0 overflow-hidden animate-in-right'
+          }
           style={{
-            width: isMobile ? '100vw' : '480px',
+            width: isMobile ? undefined : '480px',
             background: 'var(--bg-surface)',
-            borderLeft: '1px solid var(--border)',
+            borderLeft: isMobile ? undefined : '1px solid var(--border)',
           }}
         >
-          <div className="flex items-center justify-between h-10 px-3 shrink-0"
+          <div className="flex items-center justify-between h-12 px-4 shrink-0 safe-top"
                style={{ borderBottom: '1px solid var(--border)' }}>
-            <span className="text-xs font-medium truncate" style={{ color: 'var(--fg-secondary)' }}>
+            <span className="text-sm font-medium truncate" style={{ color: 'var(--fg-secondary)' }}>
               {selectedFile?.split('/').pop() || 'Editor'}
             </span>
-            <button onClick={() => setShowEditor(false)} className="p-1 rounded"
+            <button onClick={() => setShowEditor(false)} className="p-2 rounded"
                     style={{ color: 'var(--fg-muted)' }}>
-              <X size={14} />
+              <X size={18} />
             </button>
           </div>
           <CodeEditor
@@ -217,13 +250,24 @@ function AppContent() {
 
       {showPreview && (
         <div
-          className="flex flex-col shrink-0 overflow-hidden animate-in-right"
+          className={isMobile
+            ? 'fixed inset-0 z-30 flex flex-col animate-in-right'
+            : 'flex flex-col shrink-0 overflow-hidden animate-in-right'
+          }
           style={{
-            width: isMobile ? '100vw' : '420px',
+            width: isMobile ? undefined : '420px',
             background: 'var(--bg-surface)',
-            borderLeft: '1px solid var(--border)',
+            borderLeft: isMobile ? undefined : '1px solid var(--border)',
           }}
         >
+          <div className="flex items-center justify-between h-12 px-4 shrink-0 safe-top"
+               style={{ borderBottom: '1px solid var(--border)' }}>
+            <span className="text-sm font-medium" style={{ color: 'var(--fg-secondary)' }}>Preview</span>
+            <button onClick={() => setShowPreview(false)} className="p-2 rounded"
+                    style={{ color: 'var(--fg-muted)' }}>
+              <X size={18} />
+            </button>
+          </div>
           <LivePreview
             port={chat.activeProject?.lastPort}
             isVisible={showPreview}
@@ -234,13 +278,24 @@ function AppContent() {
 
       {showOps && (
         <div
-          className="shrink-0 overflow-hidden animate-in-right"
+          className={isMobile
+            ? 'fixed inset-0 z-30 flex flex-col animate-in-right'
+            : 'shrink-0 overflow-hidden animate-in-right'
+          }
           style={{
-            width: isMobile ? '100vw' : '340px',
+            width: isMobile ? undefined : '340px',
             background: 'var(--bg-surface)',
-            borderLeft: '1px solid var(--border)',
+            borderLeft: isMobile ? undefined : '1px solid var(--border)',
           }}
         >
+          <div className="flex items-center justify-between h-12 px-4 shrink-0 safe-top"
+               style={{ borderBottom: '1px solid var(--border)' }}>
+            <span className="text-sm font-medium" style={{ color: 'var(--fg-secondary)' }}>Ops</span>
+            <button onClick={() => setShowOps(false)} className="p-2 rounded"
+                    style={{ color: 'var(--fg-muted)' }}>
+              <X size={18} />
+            </button>
+          </div>
           <OpsPanel
             safeMode={chat.safeMode}
             onToggleSafeMode={() => chat.setSafeMode(!chat.safeMode)}
@@ -257,7 +312,7 @@ function AppContent() {
         <div
           className="shrink-0 overflow-hidden animate-in"
           style={{
-            height: '200px',
+            height: isMobile ? '140px' : '200px',
             background: 'var(--bg-surface)',
             borderTop: '1px solid var(--border)',
           }}

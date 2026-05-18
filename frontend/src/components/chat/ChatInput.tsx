@@ -11,9 +11,10 @@ interface Props {
   onSafeModeToggle?: () => void;
   model?: string;
   onModelChange?: (model: string) => void;
+  isMobile?: boolean;
 }
 
-export default function ChatInput({ onSend, onStop, loading, model, onModelChange }: Props) {
+export default function ChatInput({ onSend, onStop, loading, model, onModelChange, isMobile }: Props) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -24,11 +25,10 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, isMobile ? 120 : 200)}px`;
     }
-  }, [text]);
+  }, [text, isMobile]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     if (!showModelDropdown) return;
     const handler = (e: MouseEvent) => {
@@ -69,7 +69,6 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
     setAttachments(prev => prev.filter((_, i) => i !== idx));
   }, []);
 
-  // Paste image from clipboard
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -105,19 +104,19 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
   const selectedModel = MODELS.find(m => m.id === model);
 
   return (
-    <div className="px-4 pb-4 pt-2 safe-bottom">
+    <div className={isMobile ? 'px-3 pb-3 pt-1 safe-bottom' : 'px-4 pb-4 pt-2'}>
       <div className="max-w-3xl mx-auto">
-        {/* Model selector */}
-        {onModelChange && (
+        {/* Model selector — desktop only */}
+        {onModelChange && model && !isMobile && (
           <div className="flex justify-center mb-2 relative" ref={dropdownRef}>
             <button
               onClick={() => setShowModelDropdown(!showModelDropdown)}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
               style={{ color: 'var(--fg-muted)' }}
               onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
-              {selectedModel?.name || model || 'Model seçin'}
+              {selectedModel?.name || model}
               <ChevronDown size={12} />
             </button>
 
@@ -135,7 +134,7 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
                   <button
                     key={m.id}
                     onClick={() => { onModelChange(m.id); setShowModelDropdown(false); }}
-                    className="w-full text-left px-3 py-2 text-sm transition-colors"
+                    className="w-full text-left px-3 py-2.5 text-sm transition-colors"
                     style={{
                       color: m.id === model ? 'var(--color-accent)' : 'var(--fg-secondary)',
                       background: m.id === model ? 'var(--color-accent-muted)' : 'transparent',
@@ -152,25 +151,30 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
           </div>
         )}
 
-        {/* Input container - pill shape */}
+        {/* Input container — pill shape */}
         <div
-          className="relative flex items-end rounded-3xl px-3 py-2 transition-all"
+          className="relative flex items-end rounded-3xl transition-all"
           style={{
             background: 'var(--bg-surface-alt)',
             border: '1px solid var(--border)',
+            padding: isMobile ? '10px 12px' : '12px 14px',
           }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
         >
-          {/* Attach button - left */}
+          {/* Attach button — left */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-1.5 rounded-full transition-colors shrink-0"
-            style={{ color: 'var(--fg-muted)' }}
+            className="rounded-full transition-colors shrink-0 flex items-center justify-center"
+            style={{
+              color: 'var(--fg-muted)',
+              width: '44px',
+              height: '44px',
+            }}
             title="Fayl əlavə et"
             aria-label="Attach file"
           >
-            <Plus size={18} />
+            <Plus size={20} />
           </button>
           <input
             type="file"
@@ -191,37 +195,45 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
             }}
             placeholder="bahAI-ya yazın..."
-            className="flex-1 bg-transparent border-none outline-none text-sm resize-none min-h-[24px] max-h-[200px] leading-relaxed px-2"
-            style={{ color: 'var(--fg-main)' }}
+            className="flex-1 bg-transparent border-none outline-none resize-none min-h-[24px] leading-relaxed px-2"
+            style={{
+              color: 'var(--fg-main)',
+              fontSize: isMobile ? '16px' : '14px', // 16px prevents iOS zoom
+              maxHeight: isMobile ? '120px' : '200px',
+            }}
             aria-label="Message input"
           />
 
-          {/* Send / Stop button - right */}
+          {/* Send / Stop button — right */}
           {loading ? (
             <button
               onClick={onStop}
-              className="p-1.5 rounded-full transition-colors shrink-0"
+              className="rounded-full transition-colors shrink-0 flex items-center justify-center"
               style={{
                 background: 'rgba(239, 68, 68, 0.1)',
                 color: '#ef4444',
+                width: '44px',
+                height: '44px',
               }}
               aria-label="Stop generation"
             >
-              <Square size={16} fill="currentColor" />
+              <Square size={18} fill="currentColor" />
             </button>
           ) : (
             <button
               onClick={handleSend}
               disabled={!canSend}
-              className="p-1.5 rounded-full transition-all shrink-0"
+              className="rounded-full transition-all shrink-0 flex items-center justify-center"
               style={{
                 background: canSend ? 'var(--color-accent)' : 'transparent',
                 color: canSend ? 'white' : 'var(--fg-muted)',
                 cursor: canSend ? 'pointer' : 'default',
+                width: '44px',
+                height: '44px',
               }}
               aria-label="Send message"
             >
-              <Send size={16} />
+              <Send size={18} />
             </button>
           )}
         </div>
@@ -238,20 +250,20 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
                 {at.type === 'image' ? (
                   <img src={at.url} alt={at.name} className="h-14 w-auto object-cover" />
                 ) : (
-                  <div className="flex items-center gap-2 px-2 py-1.5">
-                    <Paperclip size={10} style={{ color: 'var(--fg-muted)' }} />
-                    <span className="text-[11px] truncate max-w-[80px]" style={{ color: 'var(--fg-secondary)' }}>
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <Paperclip size={12} style={{ color: 'var(--fg-muted)' }} />
+                    <span className="text-xs truncate max-w-[100px]" style={{ color: 'var(--fg-secondary)' }}>
                       {at.name}
                     </span>
                   </div>
                 )}
                 <button
                   onClick={() => removeAttachment(i)}
-                  className="absolute top-0.5 right-0.5 p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ background: 'rgba(239, 68, 68, 0.9)' }}
+                  className="absolute top-1 right-1 p-1.5 rounded-full transition-opacity"
+                  style={{ background: 'rgba(239, 68, 68, 0.9)', opacity: 1 }}
                   aria-label={`Remove ${at.name}`}
                 >
-                  <X size={8} className="text-white" />
+                  <X size={10} className="text-white" />
                 </button>
               </div>
             ))}
@@ -259,8 +271,8 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
         )}
 
         {/* Disclaimer */}
-        <div className="text-center mt-1.5">
-          <span className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+        <div className="text-center mt-2">
+          <span className="text-xs" style={{ color: 'var(--fg-muted)' }}>
             bahAI səhv edə bilər. Vacib məlumatları yoxlayın.
           </span>
         </div>

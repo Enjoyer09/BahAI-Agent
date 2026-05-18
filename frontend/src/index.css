@@ -80,6 +80,11 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  height: 100dvh;
+}
+
 body {
   margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -88,11 +93,20 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+  height: 100%;
+  height: 100dvh;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: none;
 }
 
 input, textarea, button, select {
   font-family: inherit;
   color: inherit;
+}
+
+button, a, [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ==========================================
@@ -114,6 +128,7 @@ input, textarea, button, select {
 .premium-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--fg-faint) transparent;
+  -webkit-overflow-scrolling: touch;
 }
 
 .premium-scroll::-webkit-scrollbar {
@@ -239,11 +254,14 @@ input, textarea, button, select {
   position: fixed;
   bottom: 1.5rem;
   right: 1.5rem;
+  left: 1.5rem;
   z-index: 9999;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   pointer-events: none;
+  max-width: 24rem;
+  margin-left: auto;
 }
 
 .toast-container > * {
@@ -260,7 +278,6 @@ input, textarea, button, select {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   animation: slideInRight 0.3s ease-out;
-  max-width: 24rem;
   font-size: 0.875rem;
   color: var(--fg-main);
 }
@@ -313,6 +330,28 @@ input, textarea, button, select {
 }
 
 /* ==========================================
+   MOBILE: Hover-only elements become visible
+   ========================================== */
+@media (hover: none) and (pointer: coarse) {
+  .group .mobile-visible {
+    opacity: 1 !important;
+  }
+}
+
+/* ==========================================
+   MOBILE: Toast at top to avoid input overlap
+   ========================================== */
+@media (max-width: 768px) {
+  .toast-container {
+    top: env(safe-area-inset-top, 0.5rem);
+    bottom: auto;
+    left: 0.5rem;
+    right: 0.5rem;
+    max-width: 100%;
+  }
+}
+
+/* ==========================================
    UTILITY CLASSES
    ========================================== */
 .truncate-2 {
@@ -349,4 +388,13 @@ input, textarea, button, select {
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Dynamic viewport height fallback */
+.dvh-screen {
+  height: 100vh;
+  height: 100dvh;
 }
