@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo } from 'react';
-import { Terminal as TerminalIcon, Trash2, ChevronDown, X } from 'lucide-react';
+import { Terminal as TerminalIcon, Trash2, X } from 'lucide-react';
 
 interface LogEntry {
   id: string;

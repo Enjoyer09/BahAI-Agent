@@ -76,7 +76,17 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.dataTransfer.files.length > 0) pushFiles(e.dataTransfer.files);
+    const files: File[] = [];
+    if (e.dataTransfer.items) {
+      for (let i = 0; i < e.dataTransfer.items.length; i++) {
+        const item = e.dataTransfer.items[i];
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      }
+    }
+    if (files.length > 0) pushFiles(files as unknown as FileList);
   }, [pushFiles]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

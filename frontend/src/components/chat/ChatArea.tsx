@@ -8,7 +8,7 @@ interface Props {
   messages: Message[];
   loading: boolean;
   onSend: (msg: string) => void;
-  onStop: () => void;
+  onStop?: () => void;
   pendingApprovals: { approvalId: string; tool: string; args: string }[];
   onApprove: (id: string, decision: 'approve' | 'reject') => void;
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
-import { Save, X, FileCode, Check, Loader2 } from 'lucide-react';
+import { Save, Check, Loader2 } from 'lucide-react';
 import { API_BASE_URL } from '../../lib/constants';
 import { useToast } from '../common/Toast';
 import { Spinner } from '../common/UI';
@@ -43,7 +43,7 @@ const LANGUAGE_MAP: Record<string, string> = {
   env: 'ini',
 };
 
-export default function CodeEditor({ filePath, workingDirectory, onClose }: Props) {
+export default function CodeEditor({ filePath, workingDirectory }: Props) {
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -120,7 +120,6 @@ export default function CodeEditor({ filePath, workingDirectory, onClose }: Prop
   }, [content, originalContent, saving]);
 
   const isDirty = content !== originalContent;
-  const fileName = filePath.split('/').pop() || 'Untitled';
   const fileExtension = filePath.split('.').pop()?.toLowerCase() || 'plaintext';
   const language = LANGUAGE_MAP[fileExtension] || 'plaintext';
 

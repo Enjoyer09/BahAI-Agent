@@ -13,13 +13,13 @@ import { useAuth } from './hooks/useAuth';
 import { useChat } from './hooks/useChat';
 import { useTheme } from './hooks/useTheme';
 import { useSettings } from './hooks/useSettings';
-import { ThemeToggle } from './components/common/ThemeToggle';
+import ThemeToggle from './components/common/ThemeToggle';
 import { ToastProvider, useConfirm } from './components/common/Toast';
 
 function AppContent() {
   const auth = useAuth();
   const settings = useSettings();
-  const { theme } = useTheme();
+  const themeCtx = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarMode, setSidebarMode] = useState<'chat' | 'files'>('chat');
   const [showEditor, setShowEditor] = useState(false);
@@ -28,6 +28,7 @@ function AppContent() {
   const [showOps, setShowOps] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const { ConfirmDialog } = useConfirm();
 
   const chat = useChat();
@@ -47,7 +48,6 @@ function AppContent() {
       if (mod && e.key === 'b') { e.preventDefault(); setSidebarOpen(p => !p); }
       if (mod && e.key === '`') { e.preventDefault(); setShowTerminal(p => !p); }
       if (mod && e.key === 'j') { e.preventDefault(); setShowEditor(p => !p); }
-      if (mod && e.shiftKey && e.key === 'P') { e.preventDefault(); setSidebarMode(m => m === 'files' ? 'chat' : 'files'); setSidebarOpen(true); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -58,9 +58,9 @@ function AppContent() {
   }, [auth.user, auth.loading]);
 
   const handleFileSelect = useCallback((path: string) => {
-    chat.setSelectedFile?.(path);
+    setSelectedFile(path);
     setShowEditor(true);
-  }, [chat]);
+  }, []);
 
   if (auth.loading) {
     return (
@@ -163,7 +163,7 @@ function AppContent() {
           </button>
 
           <div className="w-px h-5 mx-1" style={{ background: 'var(--border)' }} />
-          <ThemeToggle />
+          <ThemeToggle theme={themeCtx.theme} setTheme={themeCtx.setTheme} />
         </div>
       </header>
 
@@ -195,16 +195,16 @@ function AppContent() {
             messages={chat.messages}
             loading={chat.loading}
             onSend={chat.sendMessage}
-            onStop={chat.stopGeneration}
+            onStop={chat.stop}
             pendingApprovals={chat.pendingApprovals}
             onApprove={chat.decideApproval}
           />
           <ChatInput
             onSend={chat.sendMessage}
-            onStop={chat.stopGeneration}
+            onStop={chat.stop}
             loading={chat.loading}
             safeMode={chat.safeMode}
-            onSafeModeToggle={chat.toggleSafeMode}
+            onSafeModeToggle={() => chat.setSafeMode(!chat.safeMode)}
           />
         </main>
 
@@ -221,7 +221,7 @@ function AppContent() {
             <div className="flex items-center justify-between h-10 px-3 shrink-0"
                  style={{ borderBottom: '1px solid var(--border)' }}>
               <span className="text-xs font-medium truncate" style={{ color: 'var(--fg-secondary)' }}>
-                {chat.selectedFile?.split('/').pop() || 'Editor'}
+                {selectedFile?.split('/').pop() || 'Editor'}
               </span>
               <button onClick={() => setShowEditor(false)} className="p-1 rounded"
                       style={{ color: 'var(--fg-muted)' }}>
@@ -229,7 +229,7 @@ function AppContent() {
               </button>
             </div>
             <CodeEditor
-              filePath={chat.selectedFile || ''}
+              filePath={selectedFile || ''}
               workingDirectory={chat.activeProject?.path || ''}
               onClose={() => setShowEditor(false)}
             />
@@ -264,7 +264,7 @@ function AppContent() {
           >
             <OpsPanel
               safeMode={chat.safeMode}
-              onToggleSafeMode={chat.toggleSafeMode}
+              onToggleSafeMode={() => chat.setSafeMode(!chat.safeMode)}
               pendingApprovals={chat.pendingApprovals}
               onApprove={chat.decideApproval}
               taskPlan={chat.taskPlan}
