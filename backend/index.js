@@ -472,6 +472,29 @@ function serializeConversation(row) {
 }
 
 const pendingApprovals = new Map();
+const activeChatByUser = new Map();
+let activeChatTotal = 0;
+const MAX_ACTIVE_CHAT_TOTAL = parseInt(process.env.MAX_ACTIVE_CHAT_TOTAL || '20', 10);
+const MAX_ACTIVE_CHAT_PER_USER = parseInt(process.env.MAX_ACTIVE_CHAT_PER_USER || '2', 10);
+
+function acquireChatSlot(userId) {
+  const uid = String(userId || 'anon');
+  const byUser = activeChatByUser.get(uid) || 0;
+  if (activeChatTotal >= MAX_ACTIVE_CHAT_TOTAL || byUser >= MAX_ACTIVE_CHAT_PER_USER) {
+    return false;
+  }
+  activeChatTotal += 1;
+  activeChatByUser.set(uid, byUser + 1);
+  return true;
+}
+
+function releaseChatSlot(userId) {
+  const uid = String(userId || 'anon');
+  const byUser = activeChatByUser.get(uid) || 0;
+  if (byUser <= 1) activeChatByUser.delete(uid);
+  else activeChatByUser.set(uid, byUser - 1);
+  if (activeChatTotal > 0) activeChatTotal -= 1;
+}
 
 function waitForApproval(approvalId, timeoutMs = 300000) {
   return new Promise((resolve, reject) => {
@@ -1281,6 +1304,12 @@ app.post('/api/approvals/:id', async (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
     const { messages, apiKey, model, workingDirectory, baseUrl, projectId, safeMode = true } = req.body;
+    if (!acquireChatSlot(req.user?.id)) {
+      res.setHeader('Retry-After', '5');
+      return res.status(503).json({
+        error: 'Server hazırda yüklənib. Bir neçə saniyə sonra yenidən cəhd edin.'
+      });
+    }
     
     // SEC-1: Verify workingDirectory against ALLOWED_DIRS
     const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
@@ -1566,6 +1595,7 @@ Azərbaycan dilində cavab ver.`;
     } catch (e) {
         res.write(`data: ${JSON.stringify({ type: 'error', message: e.message })}\n\n`);
     } finally {
+        releaseChatSlot(req.user?.id);
         res.end();
     }
 });

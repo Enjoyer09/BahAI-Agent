@@ -267,9 +267,22 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
 
       const MAX_HISTORY_MESSAGES = 24;
       const historySlice = currentMsgs.slice(-MAX_HISTORY_MESSAGES);
-      const preparedMessages = historySlice.map((m) => ({
+      const preparedMessages = historySlice.map((m, idx) => {
+        const isRecent = idx >= historySlice.length - 6;
+        const trimmedToolCalls = isRecent
+          ? m.tool_calls?.map((tc: any) => ({
+              id: tc.id,
+              type: tc.type || 'function',
+              function: {
+                name: tc.function?.name || tc.name || '',
+                arguments: String(tc.function?.arguments || tc.args || '').slice(0, 2000)
+              }
+            }))
+          : undefined;
+
+        return ({
         role: m.role,
-        content: m.content || '',
+        content: String(m.content || '').slice(0, 12000),
         // Prevent multi-megabyte payloads on every turn:
         // keep parsed attachment text, drop huge base64 data URLs.
         attachments: m.attachments?.map((at: any) => ({
@@ -281,9 +294,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
           extractionError: at.extractionError,
           url: ''
         })),
-        tool_calls: m.tool_calls,
+        tool_calls: trimmedToolCalls,
         tool_call_id: m.tool_call_id
-      }));
+      })});
 
       await sendChatMessage(
         preparedMessages,
