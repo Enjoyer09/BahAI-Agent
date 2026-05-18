@@ -1292,11 +1292,13 @@ app.post('/api/chat', async (req, res) => {
     }
     await ensureDir(resolvedWD);
 
-    const effectiveApiKey = apiKey || process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY;
-    const effectiveBaseUrl = baseUrl || process.env.OPENAI_BASE_URL || "https://integrate.api.nvidia.com/v1";
+    const frontendApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+    const envApiKey = process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY || '';
+    let effectiveApiKey = frontendApiKey || envApiKey;
+    const effectiveBaseUrl = (typeof baseUrl === 'string' ? baseUrl.trim() : '') || process.env.OPENAI_BASE_URL || "https://integrate.api.nvidia.com/v1";
     const effectiveModel = model || process.env.OPENAI_MODEL || 'meta/llama-3.3-70b-instruct';
 
-    const keySource = apiKey ? 'frontend' : process.env.OPENAI_API_KEY ? 'env' : process.env.NVIDIA_API_KEY ? 'nvidia_env' : 'none';
+    let keySource = frontendApiKey ? 'frontend' : process.env.OPENAI_API_KEY ? 'env' : process.env.NVIDIA_API_KEY ? 'nvidia_env' : 'none';
     console.log(`🤖 /api/chat | model=${effectiveModel} | base=${effectiveBaseUrl} | key_source=${keySource}`);
 
     if (!effectiveApiKey) {
@@ -1305,7 +1307,7 @@ app.post('/api/chat', async (req, res) => {
         });
     }
 
-    const client = new OpenAI({ baseURL: effectiveBaseUrl, apiKey: effectiveApiKey });
+    let client = new OpenAI({ baseURL: effectiveBaseUrl, apiKey: effectiveApiKey });
 
     const sysPrompt = `Sən bahAI İDE rəsmi AI Agentisən. Project Root: ${resolvedWD}.
 Sən professional proqramçı və UI/UX ekspertisən.
@@ -1384,24 +1386,50 @@ Azərbaycan dilində cavab ver.`;
                     stream: true
                 }, { signal: abortController.signal });
             } catch (apiErr) {
+                // If frontend key is invalid, automatically fallback to server env key once.
+                if (
+                  apiErr?.status === 401 &&
+                  keySource === 'frontend' &&
+                  envApiKey &&
+                  envApiKey !== effectiveApiKey
+                ) {
+                  console.warn('⚠️ Frontend API key failed, falling back to env key');
+                  effectiveApiKey = envApiKey;
+                  keySource = process.env.OPENAI_API_KEY ? 'env' : 'nvidia_env';
+                  client = new OpenAI({ baseURL: effectiveBaseUrl, apiKey: effectiveApiKey });
+                  try {
+                    stream = await client.chat.completions.create({
+                      model: effectiveModel,
+                      messages: currentMessages,
+                      tools: TOOLS,
+                      temperature: 0.2,
+                      stream: true
+                    }, { signal: abortController.signal });
+                  } catch (retryErr) {
+                    apiErr = retryErr;
+                  }
+                }
                 clearTimeout(timeoutId);
-                if (apiErr.name === 'AbortError') {
+                if (stream) {
+                  // fallback succeeded
+                } else if (apiErr.name === 'AbortError') {
                     res.write(`data: ${JSON.stringify({ type: 'error', message: 'API cavab vaxtı bitdi (60s). Zəhmət olmasa yenidən cəhd edin.' })}\n\n`);
                     break;
+                } else {
+                  // Detailed API error logging
+                  const status = apiErr.status || apiErr.code || 'unknown';
+                  console.error(`❌ API Error [${status}]:`, apiErr.message);
+                  let userMsg = `API xətası: ${apiErr.message}`;
+                  if (apiErr.status === 401) {
+                      userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
+                  } else if (apiErr.status === 429) {
+                      userMsg = 'API limiti aşıldı. Bir az gözləyib yenidən cəhd edin.';
+                  } else if (apiErr.status === 404) {
+                      userMsg = `Model tapılmadı: "${effectiveModel}". Ayarlardan model adını yoxlayın.`;
+                  }
+                  res.write(`data: ${JSON.stringify({ type: 'error', message: userMsg })}\n\n`);
+                  break;
                 }
-                // Detailed API error logging
-                const status = apiErr.status || apiErr.code || 'unknown';
-                console.error(`❌ API Error [${status}]:`, apiErr.message);
-                let userMsg = `API xətası: ${apiErr.message}`;
-                if (apiErr.status === 401) {
-                    userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
-                } else if (apiErr.status === 429) {
-                    userMsg = 'API limiti aşıldı. Bir az gözləyib yenidən cəhd edin.';
-                } else if (apiErr.status === 404) {
-                    userMsg = `Model tapılmadı: "${effectiveModel}". Ayarlardan model adını yoxlayın.`;
-                }
-                res.write(`data: ${JSON.stringify({ type: 'error', message: userMsg })}\n\n`);
-                break;
             } finally {
                 clearTimeout(timeoutId);
             }
