@@ -1467,13 +1467,24 @@ Azərbaycan dilində cavab ver.`;
             }
 
             // Tamamlanmış mesajı yarat
+            const normalizedToolCalls = accumulatedToolCalls
+              .filter((tc) => tc && tc.function && tc.function.name)
+              .map((tc, idx) => ({
+                id: tc.id || `toolcall_${step}_${idx}_${Date.now()}`,
+                type: 'function',
+                function: {
+                  name: tc.function.name,
+                  arguments: tc.function.arguments || '{}'
+                }
+              }));
+
             const msg = {
               role: 'assistant',
               content: accumulatedContent || null,
-              tool_calls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined
+              tool_calls: normalizedToolCalls.length > 0 ? normalizedToolCalls : undefined
             };
 
-            const hasToolCalls = accumulatedToolCalls.length > 0;
+            const hasToolCalls = normalizedToolCalls.length > 0;
             const hasTextContent = accumulatedContent.trim().length > 0;
 
             if (hasAttachmentInRequest && !hasToolCalls && !hasTextContent && !attachmentRetryUsed) {
@@ -1529,11 +1540,16 @@ Azərbaycan dilində cavab ver.`;
                         }
                         continue;
                     }
-                    const result = await handleToolCall(toolCall, resolvedWD, req.user);
-
-                    const toolResultMsg = { role: "tool", tool_call_id: toolCall.id, content: result };
-                    currentMessages.push(toolResultMsg);
-                    res.write(`data: ${JSON.stringify({ type: 'tool_result', result })}\n\n`);
+                    try {
+                      const result = await handleToolCall(toolCall, resolvedWD, req.user);
+                      const toolResultMsg = { role: "tool", tool_call_id: toolCall.id, content: result };
+                      currentMessages.push(toolResultMsg);
+                      res.write(`data: ${JSON.stringify({ type: 'tool_result', result })}\n\n`);
+                    } catch (toolErr) {
+                      const errorText = `Tool xətası: ${toolErr?.message || String(toolErr)}`;
+                      currentMessages.push({ role: "tool", tool_call_id: toolCall.id, content: errorText });
+                      res.write(`data: ${JSON.stringify({ type: 'tool_result', result: errorText })}\n\n`);
+                    }
                 }
             } else {
                 break;
