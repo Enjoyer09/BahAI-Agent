@@ -378,13 +378,3 @@ export async function submitApproval(approvalId: string, decision: 'approve' | '
   });
   if (!response.ok) throw new Error('Approval göndərilə bilmədi');
 }
-
-export async function executeApproval(approvalId: string): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/api/approvals/${encodeURIComponent(approvalId)}/execute`, {
-    method: 'POST',
-    headers: getAuthHeader()
-  });
-  if (!response.ok) throw new Error('Approval icra olunmadı');
-  const data = await response.json();
-  return data.result || '';
-}

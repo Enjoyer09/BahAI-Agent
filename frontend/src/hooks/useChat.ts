@@ -10,7 +10,6 @@ import {
   createProjectOnServer,
   deleteConversationOnServer,
   deleteProjectOnServer,
-  executeApproval,
   extractAttachments,
   getProjectMemory,
   getTaskPlan,
@@ -319,8 +318,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
               if (idx === currentMsgs.length - 1 && m.role === 'assistant' && m.tool_calls) {
                 return {
                   ...m,
-                  tool_calls: m.tool_calls.map((tc: any) => 
-                    tc.function.name === event.tool ? { ...tc, status: 'running' } : tc
+                  tool_calls: m.tool_calls.map((tc: any) =>
+                    (event.tool_call_id && tc.id === event.tool_call_id) || (!event.tool_call_id && tc.function.name === event.tool)
+                      ? { ...tc, status: 'running' }
+                      : tc
                   )
                 };
               }
@@ -401,18 +402,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
 
   const decideApproval = useCallback(async (approvalId: string, decision: 'approve' | 'reject') => {
     await submitApproval(approvalId, decision);
-    if (decision === 'approve') {
-      const result = await executeApproval(approvalId);
-      const toolMsg: Message = {
-        id: generateId(),
-        role: 'tool',
-        content: result,
-        timestamp: Date.now()
-      };
-      setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: [...c.messages, toolMsg], updatedAt: Date.now() } : c));
-    }
+    // Backend approval gözləyir və özü icra edir, burada executeApproval çağırmırıq
     setPendingApprovals(prev => prev.filter(item => item.approvalId !== approvalId));
-  }, [activeConvId]);
+  }, []);
 
   const runHealthCheck = useCallback(async () => {
     if (!activeProject?.path) return;

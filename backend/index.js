@@ -452,6 +452,28 @@ function serializeConversation(row) {
 
 const pendingApprovals = new Map();
 
+function waitForApproval(approvalId, timeoutMs = 300000) {
+  return new Promise((resolve, reject) => {
+    const pending = pendingApprovals.get(approvalId);
+    if (!pending) return reject(new Error('Approval tapılmadı'));
+
+    pending._resolve = resolve;
+    pending._reject = reject;
+    pendingApprovals.set(approvalId, pending);
+
+    // 5 dəqiqə timeout
+    setTimeout(() => {
+      if (pendingApprovals.has(approvalId)) {
+        const p = pendingApprovals.get(approvalId);
+        if (p.status === 'pending') {
+          pendingApprovals.delete(approvalId);
+          reject(new Error('Approval vaxtı bitdi (5 dəqiqə)'));
+        }
+      }
+    }, timeoutMs);
+  });
+}
+
 function makeUnifiedDiff(oldContent, newContent, filePath) {
   const oldLines = String(oldContent || '').split('\n');
   const newLines = String(newContent || '').split('\n');
@@ -507,7 +529,7 @@ const ALLOWED_COMMANDS = ['npm', 'yarn', 'git', 'node', 'ls', 'pwd', 'mkdir', 't
 
 function isBashCommandSafe(command) {
   // SEC-Audit: Block shell metacharacters to prevent chaining/injection
-  const unsafeChars = /[;&|`$(){}]/;
+  const unsafeChars = /[;&|`$(){}><]/;
   if (unsafeChars.test(command)) return false;
 
   const baseCmd = command.trim().split(/\s+/)[0];
@@ -740,34 +762,59 @@ async function handleToolCall(toolCall, workingDirectory, user) {
 
             case "run_terminal_command": {
                 if (!isBashCommandSafe(args.command)) return "Error: Command blocked or contains unsafe characters.";
-                
+
                 return new Promise((resolve) => {
                     const isServerCmd = args.command.includes('dev') || args.command.includes('serve') || args.command.includes('npm run') || args.command.includes('yarn');
-                    
-                    const proc = spawn('sh', ['-c', args.command], { 
+
+                    const proc = spawn('sh', ['-c', args.command], {
                         cwd: workingDirectory,
                         detached: true, // Allow process to live independently
                         stdio: 'pipe'
                     });
 
                     let out = "", err = "";
+                    let resolved = false;
+
                     proc.stdout.on('data', d => {
                         out += d;
                         // If it's a server, we don't wait for close, we look for "ready" signals
-                        if (isServerCmd && (out.includes('ready') || out.includes('Local:') || out.includes('localhost:'))) {
+                        if (!resolved && isServerCmd && (out.includes('ready') || out.includes('Local:') || out.includes('localhost:'))) {
+                            resolved = true;
+                            proc.unref(); // Detach so parent can exit independently
                             resolve(`Server started in background.\nSTDOUT Snapshot: ${out}`);
                         }
                     });
                     proc.stderr.on('data', d => err += d);
-                    
-                    proc.on('close', code => resolve(`Exit Code ${code}\nSTDOUT: ${out}\nSTDERR: ${err}`));
+
+                    proc.on('close', code => {
+                        if (!resolved) {
+                            resolved = true;
+                            resolve(`Exit Code ${code}\nSTDOUT: ${out}\nSTDERR: ${err}`);
+                        }
+                    });
+
+                    proc.on('error', (e) => {
+                        if (!resolved) {
+                            resolved = true;
+                            resolve(`Process error: ${e.message}\nSTDOUT: ${out}\nSTDERR: ${err}`);
+                        }
+                    });
 
                     // For non-server commands, keep timeout. For servers, return success early but KEEP ALIVE.
                     setTimeout(() => {
+                        if (resolved) return;
                         if (isServerCmd) {
+                            resolved = true;
+                            proc.unref(); // Detach so parent can exit independently
                             resolve(`Server is likely running in background (Timeout reached, but process kept alive).\nSTDOUT: ${out}`);
                         } else {
-                            proc.kill();
+                            // Kill entire process group for detached processes
+                            try {
+                                process.kill(-proc.pid, 'SIGTERM');
+                            } catch {
+                                proc.kill('SIGTERM');
+                            }
+                            resolved = true;
                             resolve(`Timeout reached: ${out}`);
                         }
                     }, isServerCmd ? 5000 : 30000);
@@ -830,7 +877,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                 if (!isPathSafe(searchCwd, workingDirectory, user)) return "Error: Path outside workspace";
                 // SEC-4: Use execFile to avoid shell injection
                 try {
-                    const { stdout } = await execFileAsync('grep', ['-rnI', args.query, '.'], { cwd: searchCwd, timeout: 10000 });
+                    const { stdout } = await execFileAsync('grep', ['-rnI', args.query, searchCwd], { cwd: workingDirectory, timeout: 10000 });
                     return stdout.split('\n').slice(0, 50).join('\n') || "No matches found";
                 } catch (e) {
                     return "No matches found or grep error";
@@ -1197,25 +1244,19 @@ app.post('/api/approvals/:id', async (req, res) => {
   const pending = pendingApprovals.get(req.params.id);
   if (!pending) return res.status(404).json({ error: 'Approval tapılmadı' });
   if (pending.userId !== req.user.id) return res.status(403).json({ error: 'Access denied' });
-  pending.status = req.body?.decision === 'approve' ? 'approved' : 'rejected';
-  pendingApprovals.set(req.params.id, pending);
-  res.json({ success: true, status: pending.status });
-});
+  const decision = req.body?.decision === 'approve' ? 'approved' : 'rejected';
 
-app.post('/api/approvals/:id/execute', async (req, res) => {
-  const pending = pendingApprovals.get(req.params.id);
-  if (!pending) return res.status(404).json({ error: 'Approval tapılmadı' });
-  if (pending.userId !== req.user.id) return res.status(403).json({ error: 'Access denied' });
-  if (pending.status !== 'approved') return res.status(400).json({ error: 'Approval təsdiqlənməyib' });
-
-  try {
-    const result = await handleToolCall(pending.toolCall, pending.workingDirectory, req.user);
-    pendingApprovals.delete(req.params.id);
-    res.json({ success: true, result });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+  // Agent loop-u oyandır
+  if (pending._resolve) {
+    pending._resolve(decision);
   }
+
+  // Map-dan təmizlə
+  pendingApprovals.delete(req.params.id);
+
+  res.json({ success: true, status: decision });
 });
+
 
 app.post('/api/chat', async (req, res) => {
     const { messages, apiKey, model, workingDirectory, baseUrl, projectId, safeMode = true } = req.body;
@@ -1324,7 +1365,7 @@ Azərbaycan dilində cavab ver.`;
 
             if (msg.tool_calls && msg.tool_calls.length > 0) {
                 for (const toolCall of msg.tool_calls) {
-                    res.write(`data: ${JSON.stringify({ type: 'tool_execution', tool: toolCall.function.name, args: toolCall.function.arguments })}\n\n`);
+                    res.write(`data: ${JSON.stringify({ type: 'tool_execution', tool: toolCall.function.name, args: toolCall.function.arguments, tool_call_id: toolCall.id })}\n\n`);
                     if (safeMode && isSensitiveTool(toolCall.function.name)) {
                         const approvalId = crypto.randomUUID();
                         pendingApprovals.set(approvalId, {
@@ -1335,15 +1376,33 @@ Azərbaycan dilində cavab ver.`;
                           createdAt: Date.now()
                         });
                         res.write(`data: ${JSON.stringify({ type: 'approval_request', approvalId, tool: toolCall.function.name, args: toolCall.function.arguments })}\n\n`);
-                        currentMessages.push({
-                          role: "tool",
-                          tool_call_id: toolCall.id,
-                          content: `Approval required: ${approvalId}`
-                        });
+
+                        try {
+                          const decision = await waitForApproval(approvalId);
+                          if (decision === 'rejected') {
+                            currentMessages.push({
+                              role: "tool",
+                              tool_call_id: toolCall.id,
+                              content: `İstifadəçi tərəfindən rədd edildi. Bu əməliyyatı icra etmə.`
+                            });
+                            res.write(`data: ${JSON.stringify({ type: 'tool_result', result: 'Rədd edildi' })}\n\n`);
+                          } else {
+                            const result = await handleToolCall(toolCall, resolvedWD, req.user);
+                            currentMessages.push({ role: "tool", tool_call_id: toolCall.id, content: result });
+                            res.write(`data: ${JSON.stringify({ type: 'tool_result', result })}\n\n`);
+                          }
+                        } catch (err) {
+                          currentMessages.push({
+                            role: "tool",
+                            tool_call_id: toolCall.id,
+                            content: `Approval xətası: ${err.message}`
+                          });
+                          res.write(`data: ${JSON.stringify({ type: 'tool_result', result: `Approval xətası: ${err.message}` })}\n\n`);
+                        }
                         continue;
                     }
                     const result = await handleToolCall(toolCall, resolvedWD, req.user);
-                    
+
                     const toolResultMsg = { role: "tool", tool_call_id: toolCall.id, content: result };
                     currentMessages.push(toolResultMsg);
                     res.write(`data: ${JSON.stringify({ type: 'tool_result', result })}\n\n`);
