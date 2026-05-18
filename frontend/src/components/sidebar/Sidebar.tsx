@@ -390,12 +390,12 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
 
           <button
             onClick={signOut}
-            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors"
-            style={{ color: 'var(--color-danger)' }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
+            style={{ color: 'var(--color-danger)', minHeight: '44px' }}
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <LogOut size={14} /> Çıxış
+            <LogOut size={16} /> Çıxış
           </button>
         </div>
       </div>
