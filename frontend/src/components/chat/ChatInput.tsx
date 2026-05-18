@@ -59,7 +59,8 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
     const handler = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
-      for (const item of items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
         if (item.type.startsWith('image/')) {
           e.preventDefault();
           const file = item.getAsFile();
@@ -76,17 +77,7 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const files: File[] = [];
-    if (e.dataTransfer.items) {
-      for (let i = 0; i < e.dataTransfer.items.length; i++) {
-        const item = e.dataTransfer.items[i];
-        if (item.kind === 'file') {
-          const file = item.getAsFile();
-          if (file) files.push(file);
-        }
-      }
-    }
-    if (files.length > 0) pushFiles(files as unknown as FileList);
+    if (e.dataTransfer.files.length > 0) pushFiles(e.dataTransfer.files);
   }, [pushFiles]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

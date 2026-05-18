@@ -7,12 +7,9 @@ import {
   PlusCircle,
   Archive,
   GitBranch,
-  ChevronDown,
-  ChevronRight,
   PanelLeftClose,
   LogOut,
   Shield,
-  MessageSquare,
   FolderOpen,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
@@ -20,7 +17,6 @@ import type { Project, Conversation } from '../../lib/types';
 import { API_BASE_URL } from '../../lib/constants';
 import { connectGithub, disconnectGithub, getGithubStatus, listGithubRepos } from '../../lib/api';
 import SettingsPanel from './SettingsPanel';
-import ThemeToggle from '../common/ThemeToggle';
 import AdminPanel from './AdminPanel';
 import { useToast, useConfirm } from '../common/Toast';
 import { Button } from '../common/UI';
@@ -30,12 +26,12 @@ interface ChatState {
   conversations: Conversation[];
   activeConvId: string | null;
   activeProject: Project | null;
-  onSelectConv: (id: string) => void;
-  onCreateProject: (name: string, path: string, repoUrl?: string) => any;
-  onCreateConversation: (projectId: string) => void;
-  onDeleteProject: (id: string) => void;
-  onArchiveProject: (id: string, archived?: boolean) => void;
-  onDeleteConv: (id: string) => void;
+  setActiveConvId: (id: string) => void;
+  createProject: (name: string, path: string, repoUrl?: string) => any;
+  createConversation: (projectId: string) => void;
+  deleteProject: (id: string) => void;
+  archiveProject: (id: string, archived?: boolean) => void;
+  deleteConversation: (id: string) => void;
   sendMessage: (text: string) => void;
 }
 
@@ -48,7 +44,7 @@ interface Props {
   onAuthClick: () => void;
 }
 
-export default function Sidebar({ isOpen, onToggle, mode, onModeChange, chat, onAuthClick }: Props) {
+export default function Sidebar({ isOpen, onToggle, chat }: Props) {
   const { signOut, user } = useAuth();
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
@@ -65,7 +61,6 @@ export default function Sidebar({ isOpen, onToggle, mode, onModeChange, chat, on
   const [githubUsername, setGithubUsername] = useState<string | null>(null);
   const [githubRepos, setGithubRepos] = useState<Array<{ id: number; name: string; fullName: string; private: boolean; cloneUrl: string }>>([]);
   const [githubLoading, setGithubLoading] = useState(false);
-  const [isProjectsExpanded, setIsProjectsExpanded] = useState(true);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
@@ -133,17 +128,16 @@ export default function Sidebar({ isOpen, onToggle, mode, onModeChange, chat, on
       toast.warning('Please enter a name and path.');
       return;
     }
-    chat.onCreateProject(newProjName, newProjPath, addMode === 'remote' ? newProjRepo : undefined);
+    chat.createProject(newProjName, newProjPath, addMode === 'remote' ? newProjRepo : undefined);
     setShowAddModal(false);
     setNewProjName('');
     setNewProjPath('');
     setNewProjRepo('');
-    setIsProjectsExpanded(true);
   };
 
   const handleDeleteProject = async (id: string) => {
     const ok = await confirm('Are you sure you want to delete this project?', 'Delete Project', 'danger');
-    if (ok) chat.onDeleteProject(id);
+    if (ok) chat.deleteProject(id);
   };
 
   if (!isOpen) {
@@ -252,8 +246,8 @@ export default function Sidebar({ isOpen, onToggle, mode, onModeChange, chat, on
                 <button
                   onClick={() => {
                     const conv = safeConversations.find(c => c && c.projectId === project.id);
-                    if (conv) chat.onSelectConv(conv.id);
-                    else chat.onCreateConversation(project.id);
+                    if (conv) chat.setActiveConvId(conv.id);
+                    else chat.createConversation(project.id);
                   }}
                   className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors"
                   style={{
@@ -269,7 +263,7 @@ export default function Sidebar({ isOpen, onToggle, mode, onModeChange, chat, on
                 {/* Actions on hover */}
                 <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
-                    onClick={(e) => { e.stopPropagation(); chat.onArchiveProject(project.id); }}
+                    onClick={(e) => { e.stopPropagation(); chat.archiveProject(project.id); }}
                     className="p-1 rounded transition-colors"
                     style={{ color: 'var(--fg-muted)' }}
                     aria-label="Archive project"

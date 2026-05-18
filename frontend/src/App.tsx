@@ -31,7 +31,7 @@ function AppContent() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const { ConfirmDialog } = useConfirm();
 
-  const chat = useChat();
+  const chat = useChat(settings.settings, auth.user?.id);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 1024px)');

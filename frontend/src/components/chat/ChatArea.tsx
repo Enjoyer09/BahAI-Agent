@@ -13,7 +13,7 @@ interface Props {
   onApprove: (id: string, decision: 'approve' | 'reject') => void;
 }
 
-export default function ChatArea({ messages, loading, onSend, onStop, pendingApprovals, onApprove }: Props) {
+export default function ChatArea({ messages, loading, onSend, pendingApprovals, onApprove }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
 

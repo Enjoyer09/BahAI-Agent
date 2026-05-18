@@ -37,7 +37,7 @@ const LogRow = memo(({ log }: { log: LogEntry }) => {
 
 LogRow.displayName = 'LogRow';
 
-export default function Terminal({ projectPath, isVisible, onClose }: Props) {
+export default function Terminal({ isVisible, onClose }: Props) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
