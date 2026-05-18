@@ -260,12 +260,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     setAbortController(controller);
 
     try {
-      try {
-        const plan = await getTaskPlan(input, activeProject?.path || settings.projectDir);
-        setTaskPlan(plan.items);
-      } catch {
-        setTaskPlan([]);
-      }
+      // Task plan arxa planda — chat-i bloklamır
+      getTaskPlan(input, activeProject?.path || settings.projectDir)
+        .then(plan => setTaskPlan(plan.items))
+        .catch(() => setTaskPlan([]));
 
       await sendChatMessage(
         currentMsgs.map(m => ({ 
@@ -286,15 +284,41 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
             setPendingApprovals(prev => [...prev, { approvalId: event.approvalId, tool: event.tool, args: event.args }]);
             return;
           }
+          if (event.type === 'assistant_delta') {
+            // Streaming — real-time mətn yeniləməsi
+            const lastMsg = currentMsgs[currentMsgs.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.tool_calls) {
+              // Mövcud streaming mesajını yenilə
+              const updatedMsg = { ...lastMsg, content: (lastMsg.content || '') + event.content };
+              currentMsgs = [...currentMsgs.slice(0, -1), updatedMsg];
+            } else {
+              // Yeni streaming mesajı yarat
+              const streamMsg: Message = {
+                id: 'streaming_' + Date.now(),
+                role: 'assistant',
+                content: event.content,
+                timestamp: Date.now()
+              };
+              currentMsgs = [...currentMsgs, streamMsg];
+            }
+            setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+            return;
+          }
           if (event.type === 'assistant_message') {
-            const assistantMsg: Message = { 
-              id: generateId(), 
-              role: 'assistant', 
-              content: event.message.content || '', 
+            const assistantMsg: Message = {
+              id: generateId(),
+              role: 'assistant',
+              content: event.message.content || '',
               tool_calls: event.message.tool_calls?.map((tc: any) => ({ ...tc, status: 'done' })),
-              timestamp: Date.now() 
+              timestamp: Date.now()
             };
-            currentMsgs = [...currentMsgs, assistantMsg];
+            // Streaming mesajı varsa əvəz et, yoxsa əlavə et
+            const lastMsg = currentMsgs[currentMsgs.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
+              currentMsgs = [...currentMsgs.slice(0, -1), assistantMsg];
+            } else {
+              currentMsgs = [...currentMsgs, assistantMsg];
+            }
             
             // AUTO PORT DETECTION: Scan assistant message for new localhost URLs
             const msgContent = typeof event.message === 'string' ? event.message : (event.message.content || '');

@@ -61,6 +61,7 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type SSEEvent =
   | { type: 'assistant_message'; message: any }
+  | { type: 'assistant_delta'; content: string }
   | { type: 'tool_execution'; tool: string; args: string; tool_call_id?: string }
   | { type: 'tool_result'; result: any }
   | { type: 'task_plan'; items: string[] }

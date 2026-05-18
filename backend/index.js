@@ -397,7 +397,8 @@ async function normalizeMessagesForModel(messages = []) {
       '[Sistem qeydi: İstifadəçi artıq attachment göndərib. Yenidən upload/drag-drop/link istəmədən mövcud attachment məzmununu analiz et.]'
     ];
 
-    for (const attachment of message.attachments) {
+    // Attachment-ları paralel emal et
+    const results = await Promise.all(message.attachments.map(async (attachment) => {
       let extracted;
       try {
         extracted = await extractAttachment(attachment);
@@ -409,13 +410,15 @@ async function normalizeMessagesForModel(messages = []) {
         };
       }
       if (extracted.extractedText) {
-        textParts.push(`\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 30000)}`);
+        return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 30000)}`;
       } else if (attachment?.extractionError) {
-        textParts.push(`\n\n[Attachment: ${attachment?.name || 'attachment'}]\nOxuma xətası: ${attachment.extractionError}`);
+        return `\n\n[Attachment: ${attachment?.name || 'attachment'}]\nOxuma xətası: ${attachment.extractionError}`;
       } else {
-        textParts.push(`\n\n[Attachment: ${attachment?.name || extracted.name || 'attachment'} | ${attachment?.mimeType || extracted.mimeType || 'unknown'}]\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`);
+        return `\n\n[Attachment: ${attachment?.name || extracted.name || 'attachment'} | ${attachment?.mimeType || extracted.mimeType || 'unknown'}]\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`;
       }
-    }
+    }));
+
+    textParts.push(...results);
 
     normalized.push({
       ...message,
@@ -1335,19 +1338,57 @@ Azərbaycan dilində cavab ver.`;
     try {
         while (step < MAX_STEPS) {
             step++;
-            const response = await client.chat.completions.create({
+
+            // Streaming ilə API çağırışı
+            const stream = await client.chat.completions.create({
                 model: effectiveModel,
                 messages: currentMessages,
                 tools: TOOLS,
-                temperature: 0.2
+                temperature: 0.2,
+                stream: true
             });
 
-            const msg = response.choices[0].message;
+            let accumulatedContent = '';
+            let accumulatedToolCalls = [];
+            let finishReason = null;
 
-            const hasToolCalls = Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0;
-            const hasTextContent = typeof msg.content === 'string'
-              ? msg.content.trim().length > 0
-              : Array.isArray(msg.content) && msg.content.length > 0;
+            for await (const chunk of stream) {
+              const delta = chunk.choices[0]?.delta;
+              if (!delta) continue;
+
+              // Mətn content-i real-time göndər
+              if (delta.content) {
+                accumulatedContent += delta.content;
+                res.write(`data: ${JSON.stringify({ type: 'assistant_delta', content: delta.content })}\n\n`);
+              }
+
+              // Tool call-ları yığ
+              if (delta.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  const idx = tc.index ?? 0;
+                  if (!accumulatedToolCalls[idx]) {
+                    accumulatedToolCalls[idx] = { id: tc.id || '', type: 'function', function: { name: '', arguments: '' } };
+                  }
+                  if (tc.id) accumulatedToolCalls[idx].id = tc.id;
+                  if (tc.function?.name) accumulatedToolCalls[idx].function.name += tc.function.name;
+                  if (tc.function?.arguments) accumulatedToolCalls[idx].function.arguments += tc.function.arguments;
+                }
+              }
+
+              if (chunk.choices[0]?.finish_reason) {
+                finishReason = chunk.choices[0].finish_reason;
+              }
+            }
+
+            // Tamamlanmış mesajı yarat
+            const msg = {
+              role: 'assistant',
+              content: accumulatedContent || null,
+              tool_calls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined
+            };
+
+            const hasToolCalls = accumulatedToolCalls.length > 0;
+            const hasTextContent = accumulatedContent.trim().length > 0;
 
             if (hasAttachmentInRequest && !hasToolCalls && !hasTextContent && !attachmentRetryUsed) {
               attachmentRetryUsed = true;
@@ -1360,7 +1401,7 @@ Azərbaycan dilində cavab ver.`;
 
             currentMessages.push(msg);
 
-            // BUG-4: Send full message including tool_calls
+            // Tam mesajı göndər (tool_calls ilə birlikdə)
             res.write(`data: ${JSON.stringify({ type: 'assistant_message', message: msg })}\n\n`);
 
             if (msg.tool_calls && msg.tool_calls.length > 0) {
