@@ -1,16 +1,19 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   FolderPlus,
   Trash2,
   Settings,
   X,
   PlusCircle,
-  Archive,
   GitBranch,
   PanelLeftClose,
   LogOut,
   Shield,
-  FolderOpen,
+  Search,
+  SquarePen,
+  Sun,
+  Moon,
+  User,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import type { Project, Conversation } from '../../lib/types';
@@ -35,16 +38,46 @@ interface ChatState {
   sendMessage: (text: string) => void;
 }
 
-interface Props {
-  isOpen: boolean;
-  onToggle: () => void;
-  mode: 'chat' | 'files';
-  onModeChange: (mode: 'chat' | 'files') => void;
-  chat: ChatState;
-  onAuthClick: () => void;
+interface ThemeCtx {
+  theme: string;
+  setTheme: (t: any) => void;
+  resolved: 'light' | 'dark';
 }
 
-export default function Sidebar({ isOpen, onToggle, chat }: Props) {
+interface Props {
+  onToggle: () => void;
+  chat: ChatState;
+  themeCtx: ThemeCtx;
+}
+
+function groupByDate(conversations: Conversation[]): { label: string; items: Conversation[] }[] {
+  const now = Date.now();
+  const day = 86400000;
+  const groups: Record<string, Conversation[]> = {
+    'Bugün': [],
+    'Dünən': [],
+    'Son 7 gün': [],
+    'Son 30 gün': [],
+    'Daha əvvəl': [],
+  };
+
+  const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
+
+  for (const conv of sorted) {
+    const age = now - conv.updatedAt;
+    if (age < day) groups['Bugün'].push(conv);
+    else if (age < 2 * day) groups['Dünən'].push(conv);
+    else if (age < 7 * day) groups['Son 7 gün'].push(conv);
+    else if (age < 30 * day) groups['Son 30 gün'].push(conv);
+    else groups['Daha əvvəl'].push(conv);
+  }
+
+  return Object.entries(groups)
+    .filter(([_, items]) => items.length > 0)
+    .map(([label, items]) => ({ label, items }));
+}
+
+export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
   const { signOut, user } = useAuth();
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
@@ -61,6 +94,7 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
   const [githubUsername, setGithubUsername] = useState<string | null>(null);
   const [githubRepos, setGithubRepos] = useState<Array<{ id: number; name: string; fullName: string; private: boolean; cloneUrl: string }>>([]);
   const [githubLoading, setGithubLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showAddMenu, setShowAddMenu] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
@@ -68,6 +102,15 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
   const safeProjects = Array.isArray(chat.projects) ? chat.projects : [];
   const safeConversations = Array.isArray(chat.conversations) ? chat.conversations : [];
   const activeProjects = safeProjects.filter(p => p && !p.archived);
+
+  // Filter conversations by search
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) return safeConversations;
+    const q = searchQuery.toLowerCase();
+    return safeConversations.filter(c => c.title?.toLowerCase().includes(q));
+  }, [safeConversations, searchQuery]);
+
+  const grouped = useMemo(() => groupByDate(filteredConversations), [filteredConversations]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -135,78 +178,87 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
     setNewProjRepo('');
   };
 
-  const handleDeleteProject = async (id: string) => {
-    const ok = await confirm('Are you sure you want to delete this project?', 'Delete Project', 'danger');
-    if (ok) chat.deleteProject(id);
+  const handleDeleteConversation = async (id: string) => {
+    const ok = await confirm('Are you sure you want to delete this conversation?', 'Delete Conversation', 'danger');
+    if (ok) chat.deleteConversation(id);
   };
 
-  if (!isOpen) {
-    return (
-      <div className="flex flex-col items-center py-2 gap-2">
-        <button
-          onClick={onToggle}
-          className="p-2 rounded-lg transition-colors"
-          style={{ color: 'var(--fg-muted)' }}
-          aria-label="Open sidebar"
-        >
-          <PanelLeftClose size={18} style={{ transform: 'rotate(180deg)' }} />
-        </button>
-        <button
-          onClick={() => { setAddMode('local'); setShowAddModal(true); }}
-          className="p-2 rounded-lg transition-colors"
-          style={{ color: 'var(--color-accent)' }}
-          aria-label="Add project"
-        >
-          <PlusCircle size={18} />
-        </button>
-      </div>
-    );
-  }
+  const handleNewChat = () => {
+    if (chat.activeProject) {
+      chat.createConversation(chat.activeProject.id);
+    } else if (activeProjects.length > 0) {
+      chat.createConversation(activeProjects[0].id);
+    } else {
+      setAddMode('local');
+      setShowAddModal(true);
+    }
+  };
 
   return (
     <>
-      <aside
-        className="flex flex-col h-full overflow-hidden"
-        style={{ background: 'var(--bg-surface-alt)', borderRight: '1px solid var(--border)' }}
-      >
-        {/* Header */}
-        <div
-          className="h-12 flex items-center justify-between px-3 shrink-0"
-          style={{ borderBottom: '1px solid var(--border)' }}
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold" style={{ color: 'var(--fg-main)' }}>Projects</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--fg-faint)', color: 'var(--fg-muted)' }}>
-              {activeProjects.length}
-            </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              ref={addBtnRef}
-              onClick={(e) => { e.stopPropagation(); setShowAddMenu(!showAddMenu); }}
-              className="p-1.5 rounded-md transition-colors"
-              style={{ color: 'var(--color-accent)' }}
-              aria-label="Add project"
-              aria-haspopup="true"
-              aria-expanded={showAddMenu}
-            >
-              <PlusCircle size={14} />
-            </button>
-            <button
-              onClick={onToggle}
-              className="p-1.5 rounded-md transition-colors"
-              style={{ color: 'var(--fg-muted)' }}
-              aria-label="Close sidebar"
-            >
-              <PanelLeftClose size={14} />
-            </button>
-          </div>
+      <div className="flex flex-col h-full overflow-hidden">
+        {/* Top: New chat + Close */}
+        <div className="px-3 pt-3 pb-2 shrink-0 flex items-center justify-between">
+          <button
+            onClick={handleNewChat}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            style={{
+              color: 'var(--fg-main)',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <SquarePen size={16} />
+            Yeni söhbət
+          </button>
+          <button
+            onClick={onToggle}
+            className="p-2 rounded-lg transition-colors"
+            style={{ color: 'var(--fg-muted)' }}
+            aria-label="Close sidebar"
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        </div>
 
-          {/* Add menu dropdown */}
+        {/* Search */}
+        <div className="px-3 pb-2 shrink-0">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--fg-muted)' }} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Söhbət axtar..."
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg outline-none"
+              style={{
+                background: 'var(--bg-hover)',
+                border: '1px solid var(--border)',
+                color: 'var(--fg-main)',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Add project button */}
+        <div className="px-3 pb-1 shrink-0 relative">
+          <button
+            ref={addBtnRef}
+            onClick={(e) => { e.stopPropagation(); setShowAddMenu(!showAddMenu); }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors"
+            style={{ color: 'var(--fg-muted)' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <PlusCircle size={14} /> Layihə əlavə et
+          </button>
+
           {showAddMenu && (
             <div
               ref={addMenuRef}
-              className="absolute right-2 top-10 z-50 rounded-lg overflow-hidden animate-scale-in"
+              className="absolute left-3 right-3 top-full z-50 rounded-lg overflow-hidden animate-scale-in"
               style={{
                 background: 'var(--bg-elevated)',
                 border: '1px solid var(--border)',
@@ -235,71 +287,82 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
           )}
         </div>
 
-        {/* Project list */}
-        <div className="flex-1 overflow-y-auto premium-scroll p-2 space-y-0.5">
-          {activeProjects.map(project => {
-            if (!project) return null;
-            const isActive = chat.activeProject?.id === project.id;
-
-            return (
-              <div key={project.id} className="group relative">
-                <button
-                  onClick={() => {
-                    const conv = safeConversations.find(c => c && c.projectId === project.id);
-                    if (conv) chat.setActiveConvId(conv.id);
-                    else chat.createConversation(project.id);
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors"
-                  style={{
-                    background: isActive ? 'var(--color-accent-muted)' : 'transparent',
-                    color: isActive ? 'var(--color-accent)' : 'var(--fg-secondary)',
-                    border: isActive ? '1px solid var(--border)' : '1px solid transparent',
-                  }}
-                >
-                  {project.repoUrl ? <GitBranch size={14} /> : <FolderOpen size={14} />}
-                  <span className="text-xs font-medium truncate flex-1">{project.name}</span>
-                </button>
-
-                {/* Actions on hover */}
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); chat.archiveProject(project.id); }}
-                    className="p-1 rounded transition-colors"
-                    style={{ color: 'var(--fg-muted)' }}
-                    aria-label="Archive project"
-                  >
-                    <Archive size={12} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
-                    className="p-1 rounded transition-colors"
-                    style={{ color: 'var(--color-danger)' }}
-                    aria-label="Delete project"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
+        {/* Conversation list grouped by date */}
+        <div className="flex-1 overflow-y-auto premium-scroll px-2 space-y-1">
+          {grouped.map(group => (
+            <div key={group.label} className="mb-1">
+              <div className="px-2 py-1.5 text-[11px] font-semibold sticky top-0"
+                   style={{ color: 'var(--fg-muted)', background: 'var(--bg-surface)' }}>
+                {group.label}
               </div>
-            );
-          })}
+              {group.items.map(conv => {
+                const isActive = chat.activeConvId === conv.id;
+                return (
+                  <div key={conv.id} className="group relative">
+                    <button
+                      onClick={() => chat.setActiveConvId(conv.id)}
+                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors truncate"
+                      style={{
+                        background: isActive ? 'var(--bg-hover)' : 'transparent',
+                        color: isActive ? 'var(--fg-main)' : 'var(--fg-secondary)',
+                      }}
+                      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                      onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      <span className="text-sm truncate flex-1">{conv.title || 'Adsız söhbət'}</span>
+                    </button>
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conv.id); }}
+                        className="p-1 rounded transition-colors"
+                        style={{ color: 'var(--fg-muted)' }}
+                        aria-label="Delete conversation"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
 
-          {activeProjects.length === 0 && (
+          {filteredConversations.length === 0 && (
             <div className="text-center py-8">
-              <FolderOpen size={24} className="mx-auto mb-2" style={{ color: 'var(--fg-faint)' }} />
-              <p className="text-xs" style={{ color: 'var(--fg-muted)' }}>No projects yet</p>
-              <button
-                onClick={() => { setAddMode('local'); setShowAddModal(true); }}
-                className="mt-2 text-xs font-medium"
-                style={{ color: 'var(--color-accent)' }}
-              >
-                Create one
-              </button>
+              <p className="text-xs" style={{ color: 'var(--fg-muted)' }}>
+                {searchQuery ? 'Nəticə tapılmadı' : 'Hələ söhbət yoxdur'}
+              </p>
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-2 space-y-0.5 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+        {/* Bottom section */}
+        <div className="p-2 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+          {/* User info */}
+          {user && (
+            <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg mb-1">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center"
+                   style={{ background: 'var(--color-accent-muted)' }}>
+                <User size={14} style={{ color: 'var(--color-accent)' }} />
+              </div>
+              <span className="text-xs font-medium truncate" style={{ color: 'var(--fg-main)' }}>
+                {user.name || user.email}
+              </span>
+            </div>
+          )}
+
+          {/* Theme toggle */}
+          <button
+            onClick={() => themeCtx.setTheme(themeCtx.resolved === 'dark' ? 'light' : 'dark')}
+            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors"
+            style={{ color: 'var(--fg-secondary)' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            {themeCtx.resolved === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            {themeCtx.resolved === 'dark' ? 'İşıqlı rejim' : 'Qaranlıq rejim'}
+          </button>
+
           {user && user.role === 'admin' && (
             <button
               onClick={() => setShowAdminPanel(true)}
@@ -311,6 +374,7 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
               <Shield size={14} /> Admin
             </button>
           )}
+
           <button
             onClick={() => setShowSettings(true)}
             className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors"
@@ -318,8 +382,9 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <Settings size={14} /> Settings
+            <Settings size={14} /> Parametrlər
           </button>
+
           <button
             onClick={signOut}
             className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors"
@@ -327,10 +392,10 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <LogOut size={14} /> Sign Out
+            <LogOut size={14} /> Çıxış
           </button>
         </div>
-      </aside>
+      </div>
 
       {/* Add Project Modal */}
       {showAddModal && (
@@ -343,7 +408,7 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
           >
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-semibold" style={{ color: 'var(--fg-main)' }}>
-                {addMode === 'local' ? 'New Project' : 'Import from GitHub'}
+                {addMode === 'local' ? 'Yeni Layihə' : 'GitHub-dan idxal et'}
               </h2>
               <button onClick={() => setShowAddModal(false)} className="p-1 rounded-md" style={{ color: 'var(--fg-muted)' }}>
                 <X size={16} />
@@ -355,7 +420,7 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
                 type="text"
                 value={newProjName}
                 onChange={e => setNewProjName(e.target.value)}
-                placeholder="Project name"
+                placeholder="Layihə adı"
                 className="w-full px-3 py-2 text-sm rounded-lg outline-none"
                 style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
               />
@@ -372,7 +437,7 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
                   />
                   <div className="flex items-center gap-2">
                     <button onClick={loadGithubRepos} className="text-xs px-2 py-1 rounded-md" style={{ background: 'var(--color-accent-muted)', color: 'var(--color-accent)' }}>
-                      {githubLoading ? 'Loading...' : 'Load Repos'}
+                      {githubLoading ? 'Yüklənir...' : 'Repoları yüklə'}
                     </button>
                     {githubConnected && <span className="text-[11px]" style={{ color: 'var(--color-success)' }}>@{githubUsername}</span>}
                   </div>
@@ -386,9 +451,9 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
                       className="w-full px-3 py-2 text-sm rounded-lg outline-none"
                       style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
                     >
-                      <option value="">Select repo...</option>
+                      <option value="">Repo seçin...</option>
                       {githubRepos.map((repo) => (
-                        <option key={repo.id} value={repo.cloneUrl}>{repo.fullName} {repo.private ? '(private)' : ''}</option>
+                        <option key={repo.id} value={repo.cloneUrl}>{repo.fullName} {repo.private ? '(şəxsi)' : ''}</option>
                       ))}
                     </select>
                   )}
@@ -409,14 +474,14 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
                   className="px-3 py-2 text-xs rounded-lg font-medium"
                   style={{ background: 'var(--color-accent-muted)', color: 'var(--color-accent)' }}
                 >
-                  Browse
+                  Gözdən keçir
                 </button>
               </div>
             </div>
 
             <div className="flex justify-end gap-2 mt-5">
-              <Button variant="ghost" onClick={() => setShowAddModal(false)}>Cancel</Button>
-              <Button variant="primary" onClick={handleCreate}>Create</Button>
+              <Button variant="ghost" onClick={() => setShowAddModal(false)}>Ləğv et</Button>
+              <Button variant="primary" onClick={handleCreate}>Yarat</Button>
             </div>
           </div>
         </div>
@@ -432,7 +497,7 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5 shrink-0">
-              <h2 className="text-base font-semibold" style={{ color: 'var(--fg-main)' }}>Settings</h2>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--fg-main)' }}>Parametrlər</h2>
               <button onClick={() => setShowSettings(false)} className="p-1 rounded-md" style={{ color: 'var(--fg-muted)' }}>
                 <X size={16} />
               </button>
@@ -448,7 +513,7 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
                     <Button size="sm" variant="danger" onClick={async () => {
                       try { await disconnectGithub(); setGithubConnected(false); setGithubUsername(null); }
                       catch (e: any) { toast.error(e?.message); }
-                    }}>Disconnect</Button>
+                    }}>Ayır</Button>
                   </div>
                 ) : (
                   <div className="flex gap-2">
@@ -466,16 +531,16 @@ export default function Sidebar({ isOpen, onToggle, chat }: Props) {
                         setGithubConnected(Boolean(status.connected));
                         setGithubUsername(status.username);
                         setGithubToken('');
-                        toast.success('GitHub connected');
+                        toast.success('GitHub bağlandı');
                       } catch (e: any) { toast.error(e?.message); }
-                    }}>Connect</Button>
+                    }}>Bağla</Button>
                   </div>
                 )}
               </div>
             </div>
 
             <div className="mt-4 pt-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
-              <Button variant="primary" className="w-full" onClick={() => setShowSettings(false)}>Done</Button>
+              <Button variant="primary" className="w-full" onClick={() => setShowSettings(false)}>Bitdi</Button>
             </div>
           </div>
         </div>

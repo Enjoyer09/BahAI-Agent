@@ -1,4 +1,4 @@
-import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw } from 'lucide-react';
+import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Bot } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import MarkdownRenderer from '../common/MarkdownRenderer';
 import ToolCallCard from './ToolCallCard';
@@ -14,7 +14,6 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
   const [copied, setCopied] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const isBot = message.role === 'assistant';
-  const isUser = message.role === 'user';
 
   const copyToClipboard = useCallback(() => {
     navigator.clipboard.writeText(message.content || '');
@@ -22,7 +21,6 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
     setTimeout(() => setCopied(false), 2000);
   }, [message.content]);
 
-  // Tool messages are rendered inside ToolCallCard
   if (message.role === 'tool') return null;
 
   const hasRunningTools = message.tool_calls?.some(tc => tc.status === 'running');
@@ -30,38 +28,27 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
 
   return (
     <div className="group animate-in" style={{ animationDelay: '50ms' }}>
-      <div className="flex items-start gap-3">
-        {/* AVATAR */}
+      <div className="flex items-start gap-4">
+        {/* Avatar - circular */}
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+          className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5"
           style={{
-            background: isBot ? 'var(--color-accent-muted)' : 'var(--bg-hover)',
-            border: '1px solid var(--border)',
+            background: isBot ? 'var(--color-accent)' : '#8e8e8e',
           }}
         >
           {isBot ? (
             hasRunningTools ? (
-              <Loader2 size={14} className="animate-spin" style={{ color: 'var(--color-accent)' }} />
+              <Loader2 size={14} className="animate-spin text-white" />
             ) : (
-              <span className="text-xs font-bold" style={{ color: 'var(--color-accent)' }}>AI</span>
+              <Bot size={14} className="text-white" />
             )
           ) : (
-            <User size={14} style={{ color: 'var(--fg-muted)' }} />
+            <User size={14} className="text-white" />
           )}
         </div>
 
-        {/* CONTENT */}
+        {/* Content - no bubble */}
         <div className="flex-1 min-w-0">
-          {/* Role label */}
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-semibold" style={{ color: 'var(--fg-secondary)' }}>
-              {isBot ? 'bahAI' : 'You'}
-            </span>
-            <span className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
-              {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          </div>
-
           {/* Running indicator */}
           {isBot && hasRunningTools && (
             <div
@@ -73,19 +60,12 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
               }}
             >
               <Loader2 size={12} className="animate-spin" />
-              <span className="font-medium">Executing...</span>
+              <span className="font-medium">İcra olunur...</span>
             </div>
           )}
 
-          {/* Message bubble */}
-          <div
-            className="rounded-xl px-4 py-3 leading-relaxed break-words relative"
-            style={{
-              background: isUser ? 'var(--bubble-user)' : 'var(--bubble-bot)',
-              color: isUser ? 'var(--fg-on-accent)' : 'var(--fg-main)',
-              border: isUser ? 'none' : '1px solid var(--border)',
-            }}
-          >
+          {/* Message content - plain text, no bubble */}
+          <div className="leading-relaxed break-words relative">
             {/* Attachments */}
             {message.attachments && message.attachments.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-3">
@@ -111,15 +91,15 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
             )}
 
             {/* Content */}
-            <div className="prose prose-sm max-w-none" style={{ color: 'inherit' }}>
+            <div className="prose prose-sm max-w-none" style={{ color: 'var(--fg-main)' }}>
               <MarkdownRenderer content={message.content || ''} />
             </div>
 
             {/* Copy button */}
             <button
               onClick={copyToClipboard}
-              className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ background: 'var(--bg-hover)', color: 'var(--fg-muted)' }}
+              className="absolute top-0 right-0 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ color: 'var(--fg-muted)' }}
               aria-label="Copy message"
             >
               {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
@@ -169,7 +149,7 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs font-semibold" style={{ color: '#fbbf24' }}>
-                      Approval Required
+                      Təsdiq tələb olunur
                     </span>
                   </div>
                   <div className="text-xs mb-3" style={{ color: 'var(--fg-secondary)' }}>
@@ -190,14 +170,14 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
                       className="px-3 py-1.5 text-xs rounded-lg transition-colors"
                       style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.2)' }}
                     >
-                      Reject
+                      Rədd et
                     </button>
                     <button
                       onClick={() => onApprove?.(approval.approvalId, 'approve')}
                       className="px-3 py-1.5 text-xs rounded-lg transition-colors"
                       style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.2)' }}
                     >
-                      Approve
+                      Təsdiq et
                     </button>
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Square, Paperclip, X, Shield } from 'lucide-react';
+import { Send, Square, Paperclip, X, Plus, ChevronDown } from 'lucide-react';
 import type { Attachment } from '../../lib/types';
+import { MODELS } from '../../lib/constants';
 
 interface Props {
   onSend: (text: string, attachments?: Attachment[]) => void;
@@ -8,13 +9,17 @@ interface Props {
   loading: boolean;
   safeMode?: boolean;
   onSafeModeToggle?: () => void;
+  model?: string;
+  onModelChange?: (model: string) => void;
 }
 
-export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeModeToggle }: Props) {
+export default function ChatInput({ onSend, onStop, loading, model, onModelChange }: Props) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -22,6 +27,18 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
     }
   }, [text]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!showModelDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowModelDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showModelDropdown]);
 
   const handleSend = useCallback(() => {
     if ((text.trim() || attachments.length > 0) && !loading) {
@@ -73,7 +90,6 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
     return () => el.removeEventListener('paste', handler);
   }, [pushFiles]);
 
-  // Drag and drop
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -86,21 +102,133 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
   }, []);
 
   const canSend = (text.trim() || attachments.length > 0) && !loading;
+  const selectedModel = MODELS.find(m => m.id === model);
 
   return (
-    <div className="px-4 pb-4 pt-2">
-      <div
-        className="max-w-3xl mx-auto rounded-2xl p-3 transition-all"
-        style={{
-          background: 'var(--bg-surface-alt)',
-          border: '1px solid var(--border)',
-        }}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-      >
-        {/* Attachments */}
+    <div className="px-4 pb-4 pt-2 safe-bottom">
+      <div className="max-w-3xl mx-auto">
+        {/* Model selector */}
+        {onModelChange && (
+          <div className="flex justify-center mb-2 relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowModelDropdown(!showModelDropdown)}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+              style={{ color: 'var(--fg-muted)' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              {selectedModel?.name || model || 'Model seçin'}
+              <ChevronDown size={12} />
+            </button>
+
+            {showModelDropdown && (
+              <div
+                className="absolute bottom-full mb-1 rounded-lg overflow-hidden animate-scale-in z-50"
+                style={{
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  boxShadow: 'var(--shadow-lg)',
+                  minWidth: '200px',
+                }}
+              >
+                {MODELS.map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => { onModelChange(m.id); setShowModelDropdown(false); }}
+                    className="w-full text-left px-3 py-2 text-sm transition-colors"
+                    style={{
+                      color: m.id === model ? 'var(--color-accent)' : 'var(--fg-secondary)',
+                      background: m.id === model ? 'var(--color-accent-muted)' : 'transparent',
+                    }}
+                    onMouseEnter={(e) => { if (m.id !== model) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                    onMouseLeave={(e) => { if (m.id !== model) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    {m.name}
+                    <span className="text-[10px] ml-2" style={{ color: 'var(--fg-muted)' }}>{m.provider}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Input container - pill shape */}
+        <div
+          className="relative flex items-end rounded-3xl px-3 py-2 transition-all"
+          style={{
+            background: 'var(--bg-surface-alt)',
+            border: '1px solid var(--border)',
+          }}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+        >
+          {/* Attach button - left */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-1.5 rounded-full transition-colors shrink-0"
+            style={{ color: 'var(--fg-muted)' }}
+            title="Fayl əlavə et"
+            aria-label="Attach file"
+          >
+            <Plus size={18} />
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={(e) => { pushFiles(e.target.files); e.target.value = ''; }}
+            multiple
+            className="hidden"
+            aria-hidden="true"
+          />
+
+          {/* Textarea */}
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+            }}
+            placeholder="bahAI-ya yazın..."
+            className="flex-1 bg-transparent border-none outline-none text-sm resize-none min-h-[24px] max-h-[200px] leading-relaxed px-2"
+            style={{ color: 'var(--fg-main)' }}
+            aria-label="Message input"
+          />
+
+          {/* Send / Stop button - right */}
+          {loading ? (
+            <button
+              onClick={onStop}
+              className="p-1.5 rounded-full transition-colors shrink-0"
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                color: '#ef4444',
+              }}
+              aria-label="Stop generation"
+            >
+              <Square size={16} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!canSend}
+              className="p-1.5 rounded-full transition-all shrink-0"
+              style={{
+                background: canSend ? 'var(--color-accent)' : 'transparent',
+                color: canSend ? 'white' : 'var(--fg-muted)',
+                cursor: canSend ? 'pointer' : 'default',
+              }}
+              aria-label="Send message"
+            >
+              <Send size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* Attachments preview */}
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
+          <div className="flex flex-wrap gap-2 mt-2 px-1">
             {attachments.map((at, i) => (
               <div
                 key={at.id || i}
@@ -108,11 +236,11 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
                 style={{ border: '1px solid var(--border)', background: 'var(--bg-hover)' }}
               >
                 {at.type === 'image' ? (
-                  <img src={at.url} alt={at.name} className="h-16 w-auto object-cover" />
+                  <img src={at.url} alt={at.name} className="h-14 w-auto object-cover" />
                 ) : (
-                  <div className="flex items-center gap-2 px-3 py-2">
-                    <Paperclip size={12} style={{ color: 'var(--fg-muted)' }} />
-                    <span className="text-xs truncate max-w-[100px]" style={{ color: 'var(--fg-secondary)' }}>
+                  <div className="flex items-center gap-2 px-2 py-1.5">
+                    <Paperclip size={10} style={{ color: 'var(--fg-muted)' }} />
+                    <span className="text-[11px] truncate max-w-[80px]" style={{ color: 'var(--fg-secondary)' }}>
                       {at.name}
                     </span>
                   </div>
@@ -123,104 +251,17 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
                   style={{ background: 'rgba(239, 68, 68, 0.9)' }}
                   aria-label={`Remove ${at.name}`}
                 >
-                  <X size={10} className="text-white" />
+                  <X size={8} className="text-white" />
                 </button>
               </div>
             ))}
           </div>
         )}
 
-        {/* Input area */}
-        <div className="flex items-end gap-2">
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-            }}
-            placeholder="Ask anything..."
-            className="flex-1 bg-transparent border-none outline-none text-sm resize-none min-h-[24px] max-h-[200px] leading-relaxed"
-            style={{ color: 'var(--fg-main)' }}
-            aria-label="Message input"
-          />
-
-          <div className="flex items-center gap-1 shrink-0">
-            {/* Safe mode toggle */}
-            {onSafeModeToggle && (
-              <button
-                onClick={onSafeModeToggle}
-                className="p-1.5 rounded-md transition-colors"
-                style={{
-                  color: safeMode ? 'var(--color-warning)' : 'var(--fg-muted)',
-                  background: safeMode ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
-                }}
-                title={safeMode ? 'Safe Mode ON' : 'Safe Mode OFF'}
-                aria-label={`Safe mode ${safeMode ? 'on' : 'off'}`}
-              >
-                <Shield size={14} />
-              </button>
-            )}
-
-            {/* File attach */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-md transition-colors"
-              style={{ color: 'var(--fg-muted)' }}
-              title="Attach file"
-              aria-label="Attach file"
-            >
-              <Paperclip size={14} />
-            </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={(e) => { pushFiles(e.target.files); e.target.value = ''; }}
-              multiple
-              className="hidden"
-              aria-hidden="true"
-            />
-
-            {/* Send / Stop */}
-            {loading ? (
-              <button
-                onClick={onStop}
-                className="p-1.5 rounded-md transition-colors"
-                style={{
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  color: '#ef4444',
-                  border: '1px solid rgba(239, 68, 68, 0.2)',
-                }}
-                aria-label="Stop generation"
-              >
-                <Square size={14} fill="currentColor" />
-              </button>
-            ) : (
-              <button
-                onClick={handleSend}
-                disabled={!canSend}
-                className="p-1.5 rounded-md transition-all"
-                style={{
-                  background: canSend ? 'var(--color-accent)' : 'var(--bg-hover)',
-                  color: canSend ? 'var(--fg-on-accent)' : 'var(--fg-muted)',
-                  cursor: canSend ? 'pointer' : 'default',
-                }}
-                aria-label="Send message"
-              >
-                <Send size={14} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Bottom hints */}
-        <div className="flex items-center justify-between mt-2 px-1">
+        {/* Disclaimer */}
+        <div className="text-center mt-1.5">
           <span className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
-            Shift+Enter for new line
-          </span>
-          <span className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
-            {text.length > 0 ? `${text.length} chars` : ''}
+            bahAI səhv edə bilər. Vacib məlumatları yoxlayın.
           </span>
         </div>
       </div>

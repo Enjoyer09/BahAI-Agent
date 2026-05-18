@@ -1435,6 +1435,7 @@ Azərbaycan dilində cavab ver.`;
             }
 
             let accumulatedContent = '';
+            let accumulatedReasoning = '';
             let accumulatedToolCalls = [];
             let finishReason = null;
 
@@ -1446,6 +1447,12 @@ Azərbaycan dilində cavab ver.`;
               if (delta.content) {
                 accumulatedContent += delta.content;
                 res.write(`data: ${JSON.stringify({ type: 'assistant_delta', content: delta.content })}\n\n`);
+              }
+
+              // DeepSeek thinking mode compatibility:
+              // reasoning_content must be echoed back in subsequent turns.
+              if (delta.reasoning_content) {
+                accumulatedReasoning += delta.reasoning_content;
               }
 
               // Tool call-ları yığ
@@ -1481,6 +1488,7 @@ Azərbaycan dilində cavab ver.`;
             const msg = {
               role: 'assistant',
               content: accumulatedContent || null,
+              reasoning_content: accumulatedReasoning || undefined,
               tool_calls: normalizedToolCalls.length > 0 ? normalizedToolCalls : undefined
             };
 

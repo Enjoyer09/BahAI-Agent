@@ -31,41 +31,42 @@ export default function ChatArea({ messages, loading, onSend, pendingApprovals, 
 
   if (messages.length === 0 && !loading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="text-center max-w-md animate-in">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5"
-            style={{ background: 'var(--color-accent-muted)', border: '1px solid var(--border)' }}
-          >
-            <MessageSquare size={24} style={{ color: 'var(--color-accent)' }} />
-          </div>
-          <h2 className="text-lg font-semibold mb-2" style={{ color: 'var(--fg-main)' }}>
-            How can I help?
-          </h2>
-          <p className="text-sm mb-6" style={{ color: 'var(--fg-muted)' }}>
-            Ask me to write code, fix bugs, explain concepts, or build entire features.
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { label: 'Create a React app', prompt: 'Create a new React app with TypeScript and Tailwind CSS' },
-              { label: 'Fix a bug', prompt: 'Help me fix a bug in my code' },
-              { label: 'Explain code', prompt: 'Explain what this code does' },
-              { label: 'Add a feature', prompt: 'Add a new feature to my project' },
-            ].map((item) => (
-              <button
-                key={item.label}
-                onClick={() => onSend(item.prompt)}
-                className="text-left p-3 rounded-xl text-sm transition-all hover:scale-[1.02]"
-                style={{
-                  background: 'var(--bg-surface-alt)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--fg-secondary)',
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-32">
+        {/* Logo */}
+        <div
+          className="w-16 h-16 rounded-full flex items-center justify-center mb-6"
+          style={{ background: 'var(--color-accent)' }}
+        >
+          <MessageSquare size={32} className="text-white" />
+        </div>
+
+        {/* Heading */}
+        <h2 className="text-2xl font-semibold mb-8" style={{ color: 'var(--fg-main)' }}>
+          Necə kömək edə bilərəm?
+        </h2>
+
+        {/* Suggestion cards */}
+        <div className="flex flex-wrap justify-center gap-3 max-w-2xl">
+          {[
+            { label: 'React app yarat', prompt: 'Create a new React app with TypeScript and Tailwind CSS' },
+            { label: 'Səhv düzəlt', prompt: 'Help me fix a bug in my code' },
+            { label: 'Kodu izah et', prompt: 'Explain what this code does' },
+            { label: 'Funksiya əlavə et', prompt: 'Add a new feature to my project' },
+          ].map((item) => (
+            <button
+              key={item.label}
+              onClick={() => onSend(item.prompt)}
+              className="px-4 py-2.5 rounded-xl text-sm transition-all"
+              style={{
+                border: '1px solid var(--border)',
+                color: 'var(--fg-secondary)',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
       </div>
     );
@@ -89,14 +90,14 @@ export default function ChatArea({ messages, loading, onSend, pendingApprovals, 
         ))}
 
         {loading && messages[messages.length - 1]?.role !== 'assistant' && (
-          <div className="flex items-start gap-3 animate-in">
+          <div className="flex items-start gap-4 animate-in">
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: 'var(--color-accent-muted)', border: '1px solid var(--border)' }}
+              className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: 'var(--color-accent)' }}
             >
-              <Spinner size={14} className="text-blue-400" />
+              <Spinner size={14} className="text-white" />
             </div>
-            <div className="flex-1 pt-1">
+            <div className="flex-1 pt-0.5">
               <div className="typing-indicator">
                 <span /><span /><span />
               </div>

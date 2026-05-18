@@ -1,7 +1,3 @@
-// ==========================================
-// CodeBlock — Syntax highlighted code with copy button
-// ==========================================
-
 import { useState, useCallback } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -27,7 +23,6 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback
       const textarea = document.createElement('textarea');
       textarea.value = code;
       document.body.appendChild(textarea);
@@ -41,24 +36,38 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
 
   if (inline) {
     return (
-      <code className="bg-[#282c34] text-[#e06c75] px-1.5 py-0.5 rounded text-[13px] font-mono border border-gray-700/50">
+      <code
+        className="px-1.5 py-0.5 rounded text-[13px] font-mono"
+        style={{
+          background: 'var(--bg-surface-alt)',
+          color: 'var(--fg-main)',
+          border: '1px solid var(--border)',
+        }}
+      >
         {children}
       </code>
     );
   }
 
   return (
-    <div className="group relative my-3 rounded-lg overflow-hidden border border-gray-700/50 bg-[#1e1e2e] shadow-lg">
+    <div
+      className="group relative my-3 rounded-lg overflow-hidden shadow-lg"
+      style={{
+        border: '1px solid var(--border)',
+        background: '#1e1e1e',
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#181825] border-b border-gray-700/40">
+      <div
+        className="flex items-center justify-between px-4 py-2"
+        style={{
+          background: '#171717',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
         <div className="flex items-center gap-2">
-          <div className="flex gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#f38ba8]/60" />
-            <div className="w-2.5 h-2.5 rounded-full bg-[#f9e2af]/60" />
-            <div className="w-2.5 h-2.5 rounded-full bg-[#a6e3a1]/60" />
-          </div>
           {language && (
-            <span className="text-[11px] text-gray-500 font-mono uppercase tracking-wider ml-2">
+            <span className="text-[11px] text-gray-500 font-mono uppercase tracking-wider">
               {language}
             </span>
           )}
@@ -118,7 +127,7 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
 
       {/* Collapsed fade overlay */}
       {collapsed && (
-        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#1e1e2e] to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#1e1e1e] to-transparent pointer-events-none" />
       )}
     </div>
   );
