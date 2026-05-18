@@ -1460,6 +1460,7 @@ Azərbaycan dilində cavab ver.`;
     let step = 0;
     let attachmentRetryUsed = false;
     let deepSeekRecoveryUsed = false;
+    let providerNoToolsFallbackUsed = false;
     let clientDisconnected = false;
 
     // Client disconnect detection
@@ -1541,6 +1542,24 @@ Azərbaycan dilində cavab ver.`;
                   if (shouldRetryWithDeepSeekRecovery) {
                     res.write(`data: ${JSON.stringify({ type: 'debug', info: 'DeepSeek recovery retry activated' })}\n\n`);
                     continue;
+                  }
+
+                  // Generic provider 400 fallback: retry once with no tools and non-stream request.
+                  if (!providerNoToolsFallbackUsed && String(status) === '400' && errText.includes('provider returned error')) {
+                    providerNoToolsFallbackUsed = true;
+                    try {
+                      const basic = await client.chat.completions.create({
+                        model: effectiveModel,
+                        messages: buildDeepSeekRecoveryMessages(currentMessages),
+                        temperature: 0.2
+                      });
+                      const simpleMsg = basic?.choices?.[0]?.message || { role: 'assistant', content: 'Cavab alınmadı.' };
+                      currentMessages.push(simpleMsg);
+                      res.write(`data: ${JSON.stringify({ type: 'assistant_message', message: simpleMsg })}\n\n`);
+                      break;
+                    } catch (fallbackErr) {
+                      apiErr = fallbackErr;
+                    }
                   }
 
                   // Detailed API error logging
