@@ -448,6 +448,23 @@ async function normalizeMessagesForModel(messages = []) {
   return normalized;
 }
 
+function buildDeepSeekRecoveryMessages(messages = []) {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+  const sys = messages.find((m) => m?.role === 'system');
+  const recent = messages
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
+    .slice(-8)
+    .map((m) => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : ''
+    }));
+
+  if (sys) {
+    return [{ role: 'system', content: typeof sys.content === 'string' ? sys.content : '' }, ...recent];
+  }
+  return recent;
+}
+
 function serializeProject(row) {
   return {
     id: row.id,
@@ -476,6 +493,8 @@ const activeChatByUser = new Map();
 let activeChatTotal = 0;
 const MAX_ACTIVE_CHAT_TOTAL = parseInt(process.env.MAX_ACTIVE_CHAT_TOTAL || '20', 10);
 const MAX_ACTIVE_CHAT_PER_USER = parseInt(process.env.MAX_ACTIVE_CHAT_PER_USER || '2', 10);
+const CHAT_QUEUE_TIMEOUT_MS = parseInt(process.env.CHAT_QUEUE_TIMEOUT_MS || '30000', 10);
+const chatQueue = [];
 
 function acquireChatSlot(userId) {
   const uid = String(userId || 'anon');
@@ -494,6 +513,59 @@ function releaseChatSlot(userId) {
   if (byUser <= 1) activeChatByUser.delete(uid);
   else activeChatByUser.set(uid, byUser - 1);
   if (activeChatTotal > 0) activeChatTotal -= 1;
+  drainChatQueue();
+}
+
+function removeFromChatQueue(ticketId) {
+  const idx = chatQueue.findIndex((x) => x.id === ticketId);
+  if (idx >= 0) chatQueue.splice(idx, 1);
+}
+
+function drainChatQueue() {
+  let progressed = true;
+  while (progressed && chatQueue.length > 0) {
+    progressed = false;
+    for (let i = 0; i < chatQueue.length; i += 1) {
+      const item = chatQueue[i];
+      if (acquireChatSlot(item.userId)) {
+        chatQueue.splice(i, 1);
+        if (item.timer) clearTimeout(item.timer);
+        item.resolve(true);
+        progressed = true;
+        break;
+      }
+    }
+  }
+}
+
+async function acquireChatSlotQueued(userId, req) {
+  if (acquireChatSlot(userId)) return true;
+
+  const ticketId = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    const onClose = () => {
+      removeFromChatQueue(ticketId);
+      reject(new Error('Client disconnected while waiting in queue'));
+    };
+
+    const timer = setTimeout(() => {
+      removeFromChatQueue(ticketId);
+      req.off('close', onClose);
+      reject(new Error('Queue timeout'));
+    }, CHAT_QUEUE_TIMEOUT_MS);
+
+    chatQueue.push({
+      id: ticketId,
+      userId: String(userId || 'anon'),
+      resolve: () => {
+        req.off('close', onClose);
+        resolve(true);
+      },
+      reject,
+      timer
+    });
+    req.on('close', onClose);
+  });
 }
 
 function waitForApproval(approvalId, timeoutMs = 300000) {
@@ -1304,11 +1376,16 @@ app.post('/api/approvals/:id', async (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
     const { messages, apiKey, model, workingDirectory, baseUrl, projectId, safeMode = true } = req.body;
-    if (!acquireChatSlot(req.user?.id)) {
+    let slotAcquired = false;
+    try {
+      await acquireChatSlotQueued(req.user?.id, req);
+      slotAcquired = true;
+    } catch (queueErr) {
       res.setHeader('Retry-After', '5');
-      return res.status(503).json({
-        error: 'Server hazırda yüklənib. Bir neçə saniyə sonra yenidən cəhd edin.'
-      });
+      const msg = queueErr?.message === 'Queue timeout'
+        ? 'Server hazırda yüklənib. Sorğu növbə vaxtını keçdi, zəhmət olmasa yenidən cəhd edin.'
+        : 'Sorğu növbəyə alınmadı. Yenidən cəhd edin.';
+      return res.status(503).json({ error: msg });
     }
     
     // SEC-1: Verify workingDirectory against ALLOWED_DIRS
@@ -1382,6 +1459,7 @@ Azərbaycan dilində cavab ver.`;
     let currentMessages = [...apiMessages];
     let step = 0;
     let attachmentRetryUsed = false;
+    let deepSeekRecoveryUsed = false;
     let clientDisconnected = false;
 
     // Client disconnect detection
@@ -1406,6 +1484,7 @@ Azərbaycan dilində cavab ver.`;
             const timeoutId = setTimeout(() => abortController.abort(), 60000);
 
             let stream;
+            let shouldRetryWithDeepSeekRecovery = false;
             try {
                 stream = await client.chat.completions.create({
                     model: effectiveModel,
@@ -1445,8 +1524,26 @@ Azərbaycan dilində cavab ver.`;
                     res.write(`data: ${JSON.stringify({ type: 'error', message: 'API cavab vaxtı bitdi (60s). Zəhmət olmasa yenidən cəhd edin.' })}\n\n`);
                     break;
                 } else {
-                  // Detailed API error logging
                   const status = apiErr.status || apiErr.code || 'unknown';
+                  const errText = String(apiErr.message || '').toLowerCase();
+                  const isDeepSeekModel = String(effectiveModel || '').toLowerCase().includes('deepseek');
+                  if (
+                    !deepSeekRecoveryUsed &&
+                    isDeepSeekModel &&
+                    String(status) === '400' &&
+                    (errText.includes('provider returned error') || errText.includes('reasoning_content') || errText.includes('tool_call'))
+                  ) {
+                    deepSeekRecoveryUsed = true;
+                    currentMessages = buildDeepSeekRecoveryMessages(currentMessages);
+                    shouldRetryWithDeepSeekRecovery = true;
+                  }
+
+                  if (shouldRetryWithDeepSeekRecovery) {
+                    res.write(`data: ${JSON.stringify({ type: 'debug', info: 'DeepSeek recovery retry activated' })}\n\n`);
+                    continue;
+                  }
+
+                  // Detailed API error logging
                   console.error(`❌ API Error [${status}]:`, apiErr.message);
                   let userMsg = `API xətası: ${apiErr.message}`;
                   if (apiErr.status === 401) {
@@ -1595,7 +1692,7 @@ Azərbaycan dilində cavab ver.`;
     } catch (e) {
         res.write(`data: ${JSON.stringify({ type: 'error', message: e.message })}\n\n`);
     } finally {
-        releaseChatSlot(req.user?.id);
+        if (slotAcquired) releaseChatSlot(req.user?.id);
         res.end();
     }
 });

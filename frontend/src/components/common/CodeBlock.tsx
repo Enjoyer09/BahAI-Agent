@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
@@ -12,6 +12,15 @@ interface CodeBlockProps {
 export default function CodeBlock({ language, children, inline }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const code = children.replace(/\n$/, '');
   const lineCount = code.split('\n').length;
@@ -59,7 +68,7 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-2"
+        className="flex items-center justify-between px-3 sm:px-4 py-2"
         style={{
           background: '#171717',
           borderBottom: '1px solid var(--border)',
@@ -76,43 +85,46 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
           {isLong && (
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="p-1.5 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
+              className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
+              style={{ minHeight: '44px', minWidth: '44px' }}
               title={collapsed ? 'Genişlət' : 'Yığ'}
             >
-              {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
             </button>
           )}
           <button
             onClick={handleCopy}
-            className="p-1.5 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
+            className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
+            style={{ minHeight: '44px', minWidth: '44px' }}
             title="Kopyala"
           >
             {copied ? (
-              <Check size={14} className="text-green-400" />
+              <Check size={16} className="text-green-400" />
             ) : (
-              <Copy size={14} />
+              <Copy size={16} />
             )}
           </button>
         </div>
       </div>
 
-      {/* Code */}
+      {/* Code — horizontal scroll on mobile, no line numbers */}
       <div
-        className={`transition-all duration-300 ${
+        className={`transition-all duration-300 overflow-x-auto ${
           collapsed ? 'max-h-[120px] overflow-hidden' : ''
         }`}
       >
         <SyntaxHighlighter
           language={language || 'text'}
           style={oneDark}
-          showLineNumbers={lineCount > 3}
-          wrapLines
+          showLineNumbers={!isMobile && lineCount > 3}
+          wrapLines={!isMobile}
           customStyle={{
             margin: 0,
-            padding: '16px',
+            padding: isMobile ? '12px' : '16px',
             background: 'transparent',
-            fontSize: '13px',
+            fontSize: isMobile ? '12px' : '13px',
             lineHeight: '1.6',
+            minWidth: 0,
           }}
           lineNumberStyle={{
             minWidth: '2.5em',

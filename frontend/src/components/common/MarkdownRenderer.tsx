@@ -26,10 +26,10 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
       return <thead style={{ background: 'var(--bg-surface-alt)', borderBottom: '1px solid var(--border)' }}>{children}</thead>;
     },
     th({ children }) {
-      return <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--fg-secondary)' }}>{children}</th>;
+      return <th className="text-left px-2 sm:px-4 py-2 sm:py-2.5 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--fg-secondary)' }}>{children}</th>;
     },
     td({ children }) {
-      return <td className="px-4 py-2.5" style={{ color: 'var(--fg-main)', borderTop: '1px solid var(--border-subtle)' }}>{children}</td>;
+      return <td className="px-2 sm:px-4 py-2 sm:py-2.5" style={{ color: 'var(--fg-main)', borderTop: '1px solid var(--border-subtle)' }}>{children}</td>;
     },
     h1({ children }) {
       return <h1 className="text-xl font-bold mt-6 mb-3" style={{ color: 'var(--fg-main)' }}>{children}</h1>;
@@ -87,7 +87,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   };
 
   return (
-    <div className="markdown-content text-[15px] leading-relaxed">
+    <div className="markdown-content text-[14px] sm:text-[15px] leading-relaxed">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{content}</ReactMarkdown>
     </div>
   );
