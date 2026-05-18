@@ -1,4 +1,8 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection:', reason);
+});
 
 const express = require('express');
 const cors = require('cors');
@@ -1323,10 +1327,20 @@ Azərbaycan dilində cavab ver.`;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
 
     let currentMessages = [...apiMessages];
     let step = 0;
     let attachmentRetryUsed = false;
+    let clientDisconnected = false;
+
+    // Client disconnect detection
+    req.on('close', () => {
+        clientDisconnected = true;
+    });
+
     const initialPlan = [
       'Oxunacaq faylları müəyyən et',
       'Dəyişiklik planını hazırla',
@@ -1336,17 +1350,32 @@ Azərbaycan dilində cavab ver.`;
     res.write(`data: ${JSON.stringify({ type: 'task_plan', items: initialPlan })}\n\n`);
 
     try {
-        while (step < MAX_STEPS) {
+        while (step < MAX_STEPS && !clientDisconnected) {
             step++;
 
-            // Streaming ilə API çağırışı
-            const stream = await client.chat.completions.create({
-                model: effectiveModel,
-                messages: currentMessages,
-                tools: TOOLS,
-                temperature: 0.2,
-                stream: true
-            });
+            // Streaming ilə API çağırışı (60 saniyə timeout)
+            const abortController = new AbortController();
+            const timeoutId = setTimeout(() => abortController.abort(), 60000);
+
+            let stream;
+            try {
+                stream = await client.chat.completions.create({
+                    model: effectiveModel,
+                    messages: currentMessages,
+                    tools: TOOLS,
+                    temperature: 0.2,
+                    stream: true
+                }, { signal: abortController.signal });
+            } catch (apiErr) {
+                clearTimeout(timeoutId);
+                if (apiErr.name === 'AbortError') {
+                    res.write(`data: ${JSON.stringify({ type: 'error', message: 'API cavab vaxtı bitdi (60s). Zəhmət olmasa yenidən cəhd edin.' })}\n\n`);
+                    break;
+                }
+                throw apiErr;
+            } finally {
+                clearTimeout(timeoutId);
+            }
 
             let accumulatedContent = '';
             let accumulatedToolCalls = [];
@@ -1406,6 +1435,7 @@ Azərbaycan dilində cavab ver.`;
 
             if (msg.tool_calls && msg.tool_calls.length > 0) {
                 for (const toolCall of msg.tool_calls) {
+                    if (clientDisconnected) break;
                     res.write(`data: ${JSON.stringify({ type: 'tool_execution', tool: toolCall.function.name, args: toolCall.function.arguments, tool_call_id: toolCall.id })}\n\n`);
                     if (safeMode && isSensitiveTool(toolCall.function.name)) {
                         const approvalId = crypto.randomUUID();
