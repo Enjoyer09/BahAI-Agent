@@ -1,51 +1,59 @@
-// ==========================================
-// Terminal — High Performance Optimized Version
-// ==========================================
-
 import { useState, useEffect, useRef, memo } from 'react';
-import { Terminal as TerminalIcon, Trash2, ChevronDown } from 'lucide-react';
+import { Terminal as TerminalIcon, Trash2, ChevronDown, X } from 'lucide-react';
 
 interface LogEntry {
   id: string;
   type: 'info' | 'error' | 'success' | 'command';
   content: string;
-  timestamp: string; // Already formatted
+  timestamp: string;
 }
 
-const LogRow = memo(({ log }: { log: LogEntry }) => (
-  <div className="mb-1 flex gap-3 animate-in fade-in duration-200">
-    <span className="text-gray-600 shrink-0 opacity-40 font-mono text-[10px]">
-      {log.timestamp}
-    </span>
-    <span className={`break-words ${
-      log.type === 'error' ? 'text-red-400' : 
-      log.type === 'success' ? 'text-green-400' : 
-      log.type === 'command' ? 'text-blue-400 font-bold' : 
-      'text-gray-300'
-    }`}>
-      {log.type === 'command' && <span className="mr-2 text-gray-500">$</span>}
-      {log.content}
-    </span>
-  </div>
-));
+interface Props {
+  projectPath: string;
+  isVisible: boolean;
+  onClose: () => void;
+}
 
-const Terminal = memo(() => {
+const LogRow = memo(({ log }: { log: LogEntry }) => {
+  const colors: Record<string, string> = {
+    error: 'var(--color-danger)',
+    success: 'var(--color-success)',
+    command: 'var(--color-accent)',
+    info: 'var(--fg-secondary)',
+  };
+
+  return (
+    <div className="flex gap-2 py-0.5">
+      <span className="shrink-0 text-[10px] font-mono" style={{ color: 'var(--fg-muted)', opacity: 0.5 }}>
+        {log.timestamp}
+      </span>
+      <span className="break-words text-xs font-mono" style={{ color: colors[log.type] || colors.info }}>
+        {log.type === 'command' && <span style={{ color: 'var(--fg-muted)' }}>$ </span>}
+        {log.content}
+      </span>
+    </div>
+  );
+});
+
+LogRow.displayName = 'LogRow';
+
+export default function Terminal({ projectPath, isVisible, onClose }: Props) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [isOpen, setIsOpen] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleLog = (e: any) => {
+    const handleLog = (e: CustomEvent) => {
       const timeStr = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
       const newLog: LogEntry = {
-        id: Math.random().toString(36).slice(2),
-        ...e.detail,
-        timestamp: timeStr
+        id: crypto.randomUUID(),
+        type: e.detail?.type || 'info',
+        content: e.detail?.content || '',
+        timestamp: timeStr,
       };
-      setLogs(prev => [...prev.slice(-100), newLog]);
+      setLogs(prev => [...prev.slice(-200), newLog]);
     };
-    window.addEventListener('terminal-log', handleLog);
-    return () => window.removeEventListener('terminal-log', handleLog);
+    window.addEventListener('terminal-log', handleLog as EventListener);
+    return () => window.removeEventListener('terminal-log', handleLog as EventListener);
   }, []);
 
   useEffect(() => {
@@ -54,44 +62,54 @@ const Terminal = memo(() => {
     }
   }, [logs]);
 
-  if (!isOpen) {
-    return (
-      <button 
-        onClick={() => setIsOpen(true)}
-        className="absolute bottom-6 right-6 h-10 px-5 flex items-center gap-3 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:scale-105 transition-all shadow-2xl z-40 active:scale-95"
-      >
-        <TerminalIcon size={14} /> Open Terminal
-      </button>
-    );
-  }
+  if (!isVisible) return null;
 
   return (
-    <div className="h-48 flex flex-col bg-black/20 border-t border-white/10 backdrop-blur-md">
-      <div className="h-10 flex items-center justify-between px-5 bg-white/[0.02] border-b border-white/5 shrink-0">
-        <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-gray-400">
-          <TerminalIcon size={12} className="text-blue-500" /> Terminal / Output
+    <div className="h-full flex flex-col" style={{ background: 'var(--bg-surface)' }}>
+      {/* Header */}
+      <div
+        className="h-9 flex items-center justify-between px-3 shrink-0"
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
+        <div className="flex items-center gap-1.5">
+          <TerminalIcon size={13} style={{ color: 'var(--color-accent)' }} />
+          <span className="text-[11px] font-medium" style={{ color: 'var(--fg-secondary)' }}>Terminal</span>
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setLogs([])} className="p-1 text-gray-600 hover:text-red-400 transition-colors" title="Clear">
-            <Trash2 size={13} />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setLogs([])}
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--fg-muted)' }}
+            title="Clear"
+            aria-label="Clear terminal"
+          >
+            <Trash2 size={12} />
           </button>
-          <button onClick={() => setIsOpen(false)} className="p-1 text-gray-600 hover:text-white transition-colors">
-            <ChevronDown size={16} />
+          <button
+            onClick={onClose}
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--fg-muted)' }}
+            aria-label="Close terminal"
+          >
+            <X size={12} />
           </button>
         </div>
       </div>
-      <div 
-        ref={scrollRef} 
-        className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-relaxed custom-scrollbar bg-black/10"
+
+      {/* Log output */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto premium-scroll p-3"
+        style={{ background: 'var(--bg-main)' }}
       >
         {logs.length === 0 ? (
-          <div className="text-gray-700 italic opacity-50">Waiting for terminal output...</div>
+          <div className="text-xs italic" style={{ color: 'var(--fg-muted)' }}>
+            Waiting for output...
+          </div>
         ) : (
           logs.map(log => <LogRow key={log.id} log={log} />)
         )}
       </div>
     </div>
   );
-});
-
-export default Terminal;
+}

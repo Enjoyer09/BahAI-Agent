@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { Shield, CheckCircle2, Clock, ListChecks } from 'lucide-react';
+import type { Project } from '../../lib/types';
 
 interface PendingApproval {
   approvalId: string;
@@ -6,121 +7,162 @@ interface PendingApproval {
   args: string;
 }
 
-interface OpsPanelProps {
+interface Props {
   safeMode: boolean;
-  setSafeMode: (value: boolean) => void;
-  taskPlan: string[];
+  onToggleSafeMode: () => void;
   pendingApprovals: PendingApproval[];
-  onDecideApproval: (approvalId: string, decision: 'approve' | 'reject') => Promise<void>;
-  onHealthCheck: () => Promise<void>;
-  onTerminalRun: (command: string) => Promise<void>;
-  onDiffPreview: (path: string, newContent: string) => Promise<{ diff: string }>;
-  onDiffApply: (path: string, newContent: string) => Promise<void>;
+  onApprove: (id: string, decision: 'approve' | 'reject') => void;
+  taskPlan: string[];
+  activeProject: Project | null;
 }
 
-export default function OpsPanel({
-  safeMode,
-  setSafeMode,
-  taskPlan,
-  pendingApprovals,
-  onDecideApproval,
-  onHealthCheck,
-  onTerminalRun,
-  onDiffPreview,
-  onDiffApply
-}: OpsPanelProps) {
-  const [command, setCommand] = useState('npm run build');
-  const [diffPath, setDiffPath] = useState('');
-  const [diffContent, setDiffContent] = useState('');
-  const [diffPreview, setDiffPreview] = useState('');
-  const [running, setRunning] = useState(false);
-
-  const handleHealthCheck = async () => {
-    setRunning(true);
-    try {
-      await onHealthCheck();
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  const handleRun = async () => {
-    setRunning(true);
-    try {
-      await onTerminalRun(command);
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  const handlePreview = async () => {
-    const result = await onDiffPreview(diffPath, diffContent);
-    setDiffPreview(result.diff || '');
-  };
-
-  const handleApply = async () => {
-    await onDiffApply(diffPath, diffContent);
-    setDiffPreview('');
-  };
-
+export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals, onApprove, taskPlan, activeProject }: Props) {
   return (
-    <div className="w-96 bg-[var(--bg-surface)]/40 backdrop-blur-xl border border-white/5 rounded-3xl p-4 overflow-y-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-black uppercase tracking-widest text-blue-400">Ops Panel</h3>
-        <label className="flex items-center gap-2 text-xs">
-          <span>Safe Mode</span>
-          <input type="checkbox" checked={safeMode} onChange={(e) => setSafeMode(e.target.checked)} />
-        </label>
+    <div className="h-full flex flex-col overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
+      {/* Header */}
+      <div
+        className="h-9 flex items-center justify-between px-3 shrink-0"
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
+        <span className="text-[11px] font-medium" style={{ color: 'var(--fg-secondary)' }}>Operations</span>
       </div>
 
-      <div className="space-y-2">
-        <div className="text-[10px] uppercase tracking-widest text-gray-500">Task Plan</div>
-        <ul className="space-y-1 text-xs text-gray-300">
-          {(taskPlan.length ? taskPlan : ['Hələ plan yoxdur']).map((item, idx) => (
-            <li key={idx} className="p-2 rounded-lg bg-white/5">{item}</li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="space-y-2">
-        <div className="text-[10px] uppercase tracking-widest text-gray-500">Pending Approvals</div>
-        <div className="space-y-2">
-          {pendingApprovals.length === 0 && <div className="text-xs text-gray-500">Pending approval yoxdur</div>}
-          {pendingApprovals.map((item) => (
-            <div key={item.approvalId} className="p-2 rounded-lg bg-white/5 text-xs space-y-2">
-              <div className="font-semibold">{item.tool}</div>
-              <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-gray-400">{item.args}</pre>
-              <div className="flex gap-2">
-                <button className="px-2 py-1 bg-green-600 rounded text-white" onClick={() => onDecideApproval(item.approvalId, 'approve')}>Apply</button>
-                <button className="px-2 py-1 bg-red-600 rounded text-white" onClick={() => onDecideApproval(item.approvalId, 'reject')}>Reject</button>
-              </div>
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto premium-scroll p-3 space-y-4">
+        {/* Safe Mode */}
+        <div
+          className="rounded-lg p-3"
+          style={{ background: 'var(--bg-surface-alt)', border: '1px solid var(--border)' }}
+        >
+          <button
+            onClick={onToggleSafeMode}
+            className="w-full flex items-center justify-between"
+            role="switch"
+            aria-checked={safeMode}
+          >
+            <div className="flex items-center gap-2">
+              <Shield size={14} style={{ color: safeMode ? 'var(--color-warning)' : 'var(--fg-muted)' }} />
+              <span className="text-xs font-medium" style={{ color: 'var(--fg-main)' }}>Safe Mode</span>
             </div>
-          ))}
+            <div
+              className="w-8 h-4 rounded-full relative transition-colors"
+              style={{ background: safeMode ? 'var(--color-warning)' : 'var(--fg-faint)' }}
+            >
+              <div
+                className="absolute top-0.5 w-3 h-3 rounded-full transition-all"
+                style={{ background: 'white', left: safeMode ? '16px' : '2px' }}
+              />
+            </div>
+          </button>
+          <p className="text-[10px] mt-1.5" style={{ color: 'var(--fg-muted)' }}>
+            Requires approval for sensitive operations.
+          </p>
         </div>
-      </div>
 
-      <div className="space-y-2">
-        <div className="text-[10px] uppercase tracking-widest text-gray-500">Project Health Check</div>
-        <button className="w-full px-3 py-2 bg-blue-600 rounded text-white text-xs font-bold" onClick={handleHealthCheck} disabled={running}>
-          Layihəni Yoxla
-        </button>
-      </div>
-
-      <div className="space-y-2">
-        <div className="text-[10px] uppercase tracking-widest text-gray-500">Terminal Command</div>
-        <input value={command} onChange={(e) => setCommand(e.target.value)} className="w-full px-2 py-2 rounded bg-black/20 border border-white/10 text-xs" />
-        <button className="w-full px-3 py-2 bg-white/10 rounded text-xs font-bold" onClick={handleRun} disabled={running}>Run</button>
-      </div>
-
-      <div className="space-y-2">
-        <div className="text-[10px] uppercase tracking-widest text-gray-500">Diff Preview</div>
-        <input value={diffPath} onChange={(e) => setDiffPath(e.target.value)} placeholder="src/App.tsx" className="w-full px-2 py-2 rounded bg-black/20 border border-white/10 text-xs" />
-        <textarea value={diffContent} onChange={(e) => setDiffContent(e.target.value)} placeholder="Yeni fayl məzmunu..." className="w-full px-2 py-2 rounded bg-black/20 border border-white/10 text-xs h-28" />
-        <div className="flex gap-2">
-          <button className="flex-1 px-3 py-2 bg-white/10 rounded text-xs font-bold" onClick={handlePreview}>Preview</button>
-          <button className="flex-1 px-3 py-2 bg-green-600 rounded text-xs font-bold text-white" onClick={handleApply}>Apply</button>
+        {/* Task Plan */}
+        <div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <ListChecks size={13} style={{ color: 'var(--fg-muted)' }} />
+            <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--fg-muted)' }}>
+              Task Plan
+            </span>
+          </div>
+          {taskPlan.length > 0 ? (
+            <ul className="space-y-1">
+              {taskPlan.map((item, idx) => (
+                <li
+                  key={idx}
+                  className="flex items-start gap-2 px-2.5 py-1.5 rounded-md text-xs"
+                  style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)' }}
+                >
+                  <CheckCircle2 size={12} className="shrink-0 mt-0.5" style={{ color: 'var(--color-success)' }} />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs" style={{ color: 'var(--fg-muted)' }}>No plan yet</p>
+          )}
         </div>
-        {diffPreview && <pre className="text-[11px] whitespace-pre-wrap overflow-x-auto p-2 rounded bg-black/20 border border-white/10">{diffPreview}</pre>}
+
+        {/* Pending Approvals */}
+        <div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Clock size={13} style={{ color: 'var(--fg-muted)' }} />
+            <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--fg-muted)' }}>
+              Pending Approvals
+            </span>
+            {pendingApprovals.length > 0 && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded-full"
+                style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--color-warning)' }}
+              >
+                {pendingApprovals.length}
+              </span>
+            )}
+          </div>
+          {pendingApprovals.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--fg-muted)' }}>None pending</p>
+          ) : (
+            <div className="space-y-2">
+              {pendingApprovals.map((item) => (
+                <div
+                  key={item.approvalId}
+                  className="rounded-lg p-3"
+                  style={{
+                    background: 'rgba(245, 158, 11, 0.05)',
+                    border: '1px solid rgba(245, 158, 11, 0.15)',
+                  }}
+                >
+                  <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--fg-main)' }}>
+                    {item.tool}
+                  </div>
+                  <pre
+                    className="text-[10px] font-mono rounded p-2 mb-2 overflow-auto max-h-24"
+                    style={{ background: 'var(--bg-hover)', color: 'var(--fg-muted)' }}
+                  >
+                    {(() => { try { return JSON.stringify(JSON.parse(item.args), null, 2); } catch { return item.args; } })()}
+                  </pre>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => onApprove(item.approvalId, 'reject')}
+                      className="flex-1 px-2 py-1.5 text-[11px] rounded-md font-medium transition-colors"
+                      style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171' }}
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => onApprove(item.approvalId, 'approve')}
+                      className="flex-1 px-2 py-1.5 text-[11px] rounded-md font-medium transition-colors"
+                      style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80' }}
+                    >
+                      Approve
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Project Info */}
+        {activeProject && (
+          <div>
+            <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--fg-muted)' }}>
+              Project
+            </span>
+            <div
+              className="mt-1.5 rounded-lg p-2.5 text-xs"
+              style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)' }}
+            >
+              <div className="font-medium" style={{ color: 'var(--fg-main)' }}>{activeProject.name}</div>
+              <div className="text-[10px] mt-0.5 truncate">{activeProject.path}</div>
+              {activeProject.lastPort && (
+                <div className="text-[10px] mt-0.5">Port: {activeProject.lastPort}</div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

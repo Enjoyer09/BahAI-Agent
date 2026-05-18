@@ -1,40 +1,35 @@
-// ==========================================
-// Sidebar — Project & Conversation Management
-// ==========================================
-
 import { useState, useRef, useEffect } from 'react';
-import { 
-  FolderPlus, 
-  Trash2, 
+import {
+  FolderPlus,
+  Trash2,
   Settings,
-  X, 
-  PlusCircle, 
-  Archive, 
+  X,
+  PlusCircle,
+  Archive,
   GitBranch,
   ChevronDown,
   ChevronRight,
   PanelLeftClose,
   LogOut,
-  Shield
+  Shield,
+  MessageSquare,
+  FolderOpen,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import type { Project, Conversation } from '../../lib/types';
-import type { ThemeMode } from '../../hooks/useTheme';
 import { API_BASE_URL } from '../../lib/constants';
 import { connectGithub, disconnectGithub, getGithubStatus, listGithubRepos } from '../../lib/api';
 import SettingsPanel from './SettingsPanel';
 import ThemeToggle from '../common/ThemeToggle';
 import AdminPanel from './AdminPanel';
+import { useToast, useConfirm } from '../common/Toast';
+import { Button } from '../common/UI';
 
-
-interface SidebarProps {
-  sidebarOpen: boolean;
-  setSidebarOpen: (open: boolean) => void;
-  sidebarMode: 'projects' | 'files';
-  setSidebarMode: (mode: 'projects' | 'files') => void;
+interface ChatState {
   projects: Project[];
   conversations: Conversation[];
   activeConvId: string | null;
+  activeProject: Project | null;
   onSelectConv: (id: string) => void;
   onCreateProject: (name: string, path: string, repoUrl?: string) => any;
   onCreateConversation: (projectId: string) => void;
@@ -42,21 +37,22 @@ interface SidebarProps {
   onArchiveProject: (id: string, archived?: boolean) => void;
   onDeleteConv: (id: string) => void;
   sendMessage: (text: string) => void;
-  themeCtx: { theme: ThemeMode; setTheme: (m: ThemeMode) => void };
-  apiKey: string;
-  setApiKey: (k: string) => void;
-  baseUrl: string;
-  setBaseUrl: (u: string) => void;
-  model: string;
-  setModel: (m: string) => void;
-  projectDir: string;
-  setProjectDir: (d: string) => void;
-  performanceMode: boolean;
-  setPerformanceMode: (p: boolean) => void;
 }
 
-export default function Sidebar(props: SidebarProps) {
+interface Props {
+  isOpen: boolean;
+  onToggle: () => void;
+  mode: 'chat' | 'files';
+  onModeChange: (mode: 'chat' | 'files') => void;
+  chat: ChatState;
+  onAuthClick: () => void;
+}
+
+export default function Sidebar({ isOpen, onToggle, mode, onModeChange, chat, onAuthClick }: Props) {
   const { signOut, user } = useAuth();
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
+
   const [showSettings, setShowSettings] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -69,21 +65,18 @@ export default function Sidebar(props: SidebarProps) {
   const [githubUsername, setGithubUsername] = useState<string | null>(null);
   const [githubRepos, setGithubRepos] = useState<Array<{ id: number; name: string; fullName: string; private: boolean; cloneUrl: string }>>([]);
   const [githubLoading, setGithubLoading] = useState(false);
-  
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(true);
-
   const [showAddMenu, setShowAddMenu] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
 
-  const safeProjects = Array.isArray(props.projects) ? props.projects : [];
-  const safeConversations = Array.isArray(props.conversations) ? props.conversations : [];
-
+  const safeProjects = Array.isArray(chat.projects) ? chat.projects : [];
+  const safeConversations = Array.isArray(chat.conversations) ? chat.conversations : [];
   const activeProjects = safeProjects.filter(p => p && !p.archived);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node) && 
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node) &&
           addBtnRef.current && !addBtnRef.current.contains(e.target as Node)) {
         setShowAddMenu(false);
       }
@@ -95,14 +88,8 @@ export default function Sidebar(props: SidebarProps) {
   useEffect(() => {
     if (!showSettings) return;
     getGithubStatus()
-      .then((status) => {
-        setGithubConnected(status.connected);
-        setGithubUsername(status.username);
-      })
-      .catch(() => {
-        setGithubConnected(false);
-        setGithubUsername(null);
-      });
+      .then((status) => { setGithubConnected(status.connected); setGithubUsername(status.username); })
+      .catch(() => { setGithubConnected(false); setGithubUsername(null); });
   }, [showSettings]);
 
   const loadGithubRepos = async () => {
@@ -111,7 +98,7 @@ export default function Sidebar(props: SidebarProps) {
       const repos = await listGithubRepos();
       setGithubRepos(repos);
     } catch (e: any) {
-      alert(e?.message || 'GitHub repo siyahısı alınmadı');
+      toast.error(e?.message || 'Failed to load GitHub repos');
     } finally {
       setGithubLoading(false);
     }
@@ -125,7 +112,7 @@ export default function Sidebar(props: SidebarProps) {
       });
       if (!response.ok) {
         const err = await response.json();
-        alert(`Xəta: ${err.error || 'Qovluq seçilə bilmədi'}`);
+        toast.error(err.error || 'Failed to pick directory');
         return;
       }
       const data = await response.json();
@@ -137,17 +124,16 @@ export default function Sidebar(props: SidebarProps) {
         }
       }
     } catch (e) {
-      console.error('Picker error:', e);
-      alert('Backend ilə rabitə qurulmadı. Serverin işlədiyindən əmin olun.');
+      toast.error('Backend connection failed. Make sure the server is running.');
     }
   };
 
   const handleCreate = () => {
     if (!newProjName || !newProjPath) {
-      alert('Zəhmət olmasa ad və qovluq yolunu daxil edin.');
+      toast.warning('Please enter a name and path.');
       return;
     }
-    props.onCreateProject(newProjName, newProjPath, addMode === 'remote' ? newProjRepo : undefined);
+    chat.onCreateProject(newProjName, newProjPath, addMode === 'remote' ? newProjRepo : undefined);
     setShowAddModal(false);
     setNewProjName('');
     setNewProjPath('');
@@ -155,213 +141,288 @@ export default function Sidebar(props: SidebarProps) {
     setIsProjectsExpanded(true);
   };
 
+  const handleDeleteProject = async (id: string) => {
+    const ok = await confirm('Are you sure you want to delete this project?', 'Delete Project', 'danger');
+    if (ok) chat.onDeleteProject(id);
+  };
+
+  if (!isOpen) {
+    return (
+      <div className="flex flex-col items-center py-2 gap-2">
+        <button
+          onClick={onToggle}
+          className="p-2 rounded-lg transition-colors"
+          style={{ color: 'var(--fg-muted)' }}
+          aria-label="Open sidebar"
+        >
+          <PanelLeftClose size={18} style={{ transform: 'rotate(180deg)' }} />
+        </button>
+        <button
+          onClick={() => { setAddMode('local'); setShowAddModal(true); }}
+          className="p-2 rounded-lg transition-colors"
+          style={{ color: 'var(--color-accent)' }}
+          aria-label="Add project"
+        >
+          <PlusCircle size={18} />
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <aside className={`flex flex-col bg-[var(--bg-surface-alt)]/80 backdrop-blur-2xl border border-white/5 shadow-2xl transition-all duration-500 relative z-40 rounded-3xl my-2 ml-2 overflow-hidden ${props.sidebarOpen ? 'w-80 max-lg:w-[85vw] max-lg:ml-0 max-lg:my-0 max-lg:rounded-none max-lg:h-full' : 'w-20 max-lg:w-0 max-lg:ml-0 max-lg:my-0 max-lg:border-0'}`}>
-      
-      {/* Premium Logo Header */}
-      <div className={`h-20 flex items-center border-b border-white/5 shrink-0 transition-all px-4 ${props.sidebarOpen ? 'justify-between' : 'justify-center'}`}>
-        <div className="flex items-center gap-2 overflow-hidden cursor-pointer group" onClick={() => !props.sidebarOpen && props.setSidebarOpen(true)}>
-          <div className="w-12 h-12 rounded-2xl bg-white/5 p-1 flex items-center justify-center border border-white/5 group-hover:border-blue-500/30 transition-all duration-500 shadow-inner overflow-hidden">
-            <img 
-              src="/logo.png" 
-              alt="bahAI Logo" 
-              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-            />
+    <>
+      <aside
+        className="flex flex-col h-full overflow-hidden"
+        style={{ background: 'var(--bg-surface-alt)', borderRight: '1px solid var(--border)' }}
+      >
+        {/* Header */}
+        <div
+          className="h-12 flex items-center justify-between px-3 shrink-0"
+          style={{ borderBottom: '1px solid var(--border)' }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold" style={{ color: 'var(--fg-main)' }}>Projects</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--fg-faint)', color: 'var(--fg-muted)' }}>
+              {activeProjects.length}
+            </span>
           </div>
-          {props.sidebarOpen && (
-            <div className="flex flex-col animate-in fade-in slide-in-from-left-2 duration-500">
-              <span className="font-black text-sm tracking-tighter text-white leading-none mb-1">bahAI</span>
-              <span className="text-[8px] font-bold text-blue-400 uppercase tracking-[0.2em] leading-none opacity-80">INTELLIGENCE</span>
-            </div>
-          )}
-        </div>
-        
-        {props.sidebarOpen && (
-          <button 
-            onClick={() => props.setSidebarOpen(false)}
-            className="p-2 rounded-xl transition-all hover:bg-white/5 text-[var(--fg-muted)] hover:text-blue-400 active:scale-90"
-            title="Yığ"
-          >
-            <PanelLeftClose size={18} />
-          </button>
-        )}
-      </div>
-
-      {/* Projects List */}
-      <div className="flex-1 overflow-y-auto py-4 px-3 space-y-6 premium-scroll">
-        <div className="space-y-2">
-          <div className={`flex items-center mb-2 relative ${props.sidebarOpen ? 'justify-between px-2' : 'justify-center'}`}>
-            {props.sidebarOpen && (
-              <button 
-                onClick={() => setIsProjectsExpanded(!isProjectsExpanded)}
-                className="flex items-center gap-2 text-[10px] font-bold text-[var(--fg-muted)] uppercase tracking-widest hover:text-[var(--fg-main)] transition-colors"
-              >
-                {isProjectsExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                Projects
-              </button>
-            )}
-            
-            <button 
+          <div className="flex items-center gap-1">
+            <button
               ref={addBtnRef}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowAddMenu(!showAddMenu);
-              }}
-              className={`p-1.5 hover:bg-white/10 rounded-lg transition-all active:scale-90 ${showAddMenu ? 'text-blue-400 bg-white/5' : 'text-blue-400/60'}`}
-              title="Yeni Layihə"
+              onClick={(e) => { e.stopPropagation(); setShowAddMenu(!showAddMenu); }}
+              className="p-1.5 rounded-md transition-colors"
+              style={{ color: 'var(--color-accent)' }}
+              aria-label="Add project"
+              aria-haspopup="true"
+              aria-expanded={showAddMenu}
             >
-              <PlusCircle size={20} />
+              <PlusCircle size={14} />
             </button>
-            
-            {showAddMenu && (
-              <div 
-                ref={addMenuRef} 
-                className={`absolute ${props.sidebarOpen ? 'right-0 top-10' : 'left-14 top-0'} w-48 bg-[#1a1a1c] border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-150`}
-              >
-                <button 
-                  onClick={() => { setAddMode('local'); setShowAddModal(true); setShowAddMenu(false); }} 
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-xs font-bold hover:bg-blue-600 hover:text-white transition-all group border-b border-white/5"
-                >
-                  <FolderPlus size={16} className="text-blue-400 group-hover:text-white" /> Local Folder
-                </button>
-                <button 
-                  onClick={() => { setAddMode('remote'); setShowAddModal(true); setShowAddMenu(false); }} 
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-xs font-bold hover:bg-blue-600 hover:text-white transition-all group"
-                >
-                  <GitBranch size={16} className="text-blue-400 group-hover:text-white" /> GitHub Repo
-                </button>
-              </div>
-            )}
+            <button
+              onClick={onToggle}
+              className="p-1.5 rounded-md transition-colors"
+              style={{ color: 'var(--fg-muted)' }}
+              aria-label="Close sidebar"
+            >
+              <PanelLeftClose size={14} />
+            </button>
           </div>
 
-          {(isProjectsExpanded || !props.sidebarOpen) && (
-            <div className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
-              {activeProjects.map(project => {
-                if (!project) return null;
-                const isActive = safeConversations.find(c => c && c.id === props.activeConvId)?.projectId === project.id;
-                
-                return (
-                  <div key={project.id} className="group relative">
-                    <button 
-                      onClick={() => {
-                        const conv = safeConversations.find(c => c && c.projectId === project.id);
-                        if (conv) props.onSelectConv(conv.id);
-                        else props.onCreateConversation(project.id);
-                      }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border ${isActive ? 'bg-blue-600/10 text-blue-400 border-blue-500/20' : 'hover:bg-white/5 text-[var(--fg-muted)] border-transparent'} ${!props.sidebarOpen ? 'justify-center' : ''}`}
-                    >
-                      {project.repoUrl ? <GitBranch size={18} /> : <FolderPlus size={18} />}
-                      {props.sidebarOpen && <span className="text-xs font-semibold truncate flex-1 text-left pr-10">{project.name}</span>}
-                    </button>
-                    
-                    {props.sidebarOpen && (
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); props.onArchiveProject(project.id); }} className="p-1 hover:text-yellow-400"><Archive size={14} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); if(confirm('Silinsin?')) props.onDeleteProject(project.id); }} className="p-1 hover:text-red-400"><Trash2 size={14} /></button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+          {/* Add menu dropdown */}
+          {showAddMenu && (
+            <div
+              ref={addMenuRef}
+              className="absolute right-2 top-10 z-50 rounded-lg overflow-hidden animate-scale-in"
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                boxShadow: 'var(--shadow-lg)',
+              }}
+            >
+              <button
+                onClick={() => { setAddMode('local'); setShowAddModal(true); setShowAddMenu(false); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors"
+                style={{ color: 'var(--fg-secondary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <FolderPlus size={14} /> Local Folder
+              </button>
+              <button
+                onClick={() => { setAddMode('remote'); setShowAddModal(true); setShowAddMenu(false); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors"
+                style={{ color: 'var(--fg-secondary)', borderTop: '1px solid var(--border)' }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <GitBranch size={14} /> GitHub Repo
+              </button>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Footer */}
-      <div className="p-4 space-y-2 border-t border-white/5">
-        {user && user.role === 'admin' && (
-          <button 
-            onClick={() => setShowAdminPanel(true)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${showAdminPanel ? 'bg-purple-600/10 text-purple-400 border border-purple-500/20' : 'hover:bg-white/5 text-[var(--fg-muted)]'} ${!props.sidebarOpen ? 'justify-center' : ''}`}
+        {/* Project list */}
+        <div className="flex-1 overflow-y-auto premium-scroll p-2 space-y-0.5">
+          {activeProjects.map(project => {
+            if (!project) return null;
+            const isActive = chat.activeProject?.id === project.id;
+
+            return (
+              <div key={project.id} className="group relative">
+                <button
+                  onClick={() => {
+                    const conv = safeConversations.find(c => c && c.projectId === project.id);
+                    if (conv) chat.onSelectConv(conv.id);
+                    else chat.onCreateConversation(project.id);
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors"
+                  style={{
+                    background: isActive ? 'var(--color-accent-muted)' : 'transparent',
+                    color: isActive ? 'var(--color-accent)' : 'var(--fg-secondary)',
+                    border: isActive ? '1px solid var(--border)' : '1px solid transparent',
+                  }}
+                >
+                  {project.repoUrl ? <GitBranch size={14} /> : <FolderOpen size={14} />}
+                  <span className="text-xs font-medium truncate flex-1">{project.name}</span>
+                </button>
+
+                {/* Actions on hover */}
+                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); chat.onArchiveProject(project.id); }}
+                    className="p-1 rounded transition-colors"
+                    style={{ color: 'var(--fg-muted)' }}
+                    aria-label="Archive project"
+                  >
+                    <Archive size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
+                    className="p-1 rounded transition-colors"
+                    style={{ color: 'var(--color-danger)' }}
+                    aria-label="Delete project"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {activeProjects.length === 0 && (
+            <div className="text-center py-8">
+              <FolderOpen size={24} className="mx-auto mb-2" style={{ color: 'var(--fg-faint)' }} />
+              <p className="text-xs" style={{ color: 'var(--fg-muted)' }}>No projects yet</p>
+              <button
+                onClick={() => { setAddMode('local'); setShowAddModal(true); }}
+                className="mt-2 text-xs font-medium"
+                style={{ color: 'var(--color-accent)' }}
+              >
+                Create one
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-2 space-y-0.5 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+          {user && user.role === 'admin' && (
+            <button
+              onClick={() => setShowAdminPanel(true)}
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors"
+              style={{ color: 'var(--fg-secondary)' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <Shield size={14} /> Admin
+            </button>
+          )}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors"
+            style={{ color: 'var(--fg-secondary)' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <Shield size={20} className={showAdminPanel ? 'text-purple-400' : 'text-gray-400'} />
-            {props.sidebarOpen && <span className="text-xs font-semibold">Admin Panel</span>}
+            <Settings size={14} /> Settings
           </button>
-        )}
-
-        <button 
-          onClick={signOut}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all hover:bg-red-600/10 text-red-400 group ${!props.sidebarOpen ? 'justify-center' : ''}`}
-        >
-          <LogOut size={20} className="group-hover:scale-110 transition-transform" />
-          {props.sidebarOpen && <span className="text-xs font-bold uppercase tracking-widest">Çıxış Et</span>}
-        </button>
-
-        <button 
-          onClick={() => setShowSettings(!showSettings)}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${showSettings ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-[var(--fg-muted)]'} ${!props.sidebarOpen ? 'justify-center' : ''}`}
-        >
-          <Settings size={20} />
-          {props.sidebarOpen && <span className="text-xs font-medium">Settings</span>}
-        </button>
-      </div>
-
+          <button
+            onClick={signOut}
+            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors"
+            style={{ color: 'var(--color-danger)' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <LogOut size={14} /> Sign Out
+          </button>
+        </div>
+      </aside>
 
       {/* Add Project Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 backdrop-blur-md bg-black/60 animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-[var(--bg-surface)] border border-white/10 rounded-3xl shadow-2xl p-8 relative">
-            <button onClick={() => setShowAddModal(false)} className="absolute top-6 right-6 p-2 hover:bg-white/5 rounded-xl"><X size={20} /></button>
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-3">
-              {addMode === 'local' ? <FolderPlus className="text-blue-500" /> : <GitBranch className="text-blue-500" />}
-              {addMode === 'local' ? 'Yeni Layihə' : 'GitHub-dan İdxal'}
-            </h2>
-            <div className="space-y-5">
-              <input type="text" value={newProjName} onChange={e => setNewProjName(e.target.value)} placeholder="Layihə Adı" className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-md rounded-2xl p-6 animate-scale-in"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-semibold" style={{ color: 'var(--fg-main)' }}>
+                {addMode === 'local' ? 'New Project' : 'Import from GitHub'}
+              </h2>
+              <button onClick={() => setShowAddModal(false)} className="p-1 rounded-md" style={{ color: 'var(--fg-muted)' }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={newProjName}
+                onChange={e => setNewProjName(e.target.value)}
+                placeholder="Project name"
+                className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+                style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
+              />
+
               {addMode === 'remote' && (
                 <div className="space-y-2">
-                  <input type="text" value={newProjRepo} onChange={e => setNewProjRepo(e.target.value)} placeholder="GitHub URL" className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50" />
+                  <input
+                    type="text"
+                    value={newProjRepo}
+                    onChange={e => setNewProjRepo(e.target.value)}
+                    placeholder="GitHub URL"
+                    className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+                    style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
+                  />
                   <div className="flex items-center gap-2">
-                    <button onClick={loadGithubRepos} className="px-3 py-2 text-[11px] rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-300 hover:bg-blue-600/30">
-                      {githubLoading ? 'Yüklənir...' : 'Repo Siyahısını Yüklə'}
+                    <button onClick={loadGithubRepos} className="text-xs px-2 py-1 rounded-md" style={{ background: 'var(--color-accent-muted)', color: 'var(--color-accent)' }}>
+                      {githubLoading ? 'Loading...' : 'Load Repos'}
                     </button>
-                    {githubConnected ? <span className="text-[11px] text-green-400">Qoşulub: @{githubUsername || 'github'}</span> : <span className="text-[11px] text-yellow-400">Əvvəl Settings-dən GitHub qoş</span>}
+                    {githubConnected && <span className="text-[11px]" style={{ color: 'var(--color-success)' }}>@{githubUsername}</span>}
                   </div>
                   {githubRepos.length > 0 && (
                     <select
                       value={newProjRepo}
                       onChange={e => {
                         setNewProjRepo(e.target.value);
-                        if (!newProjName) {
-                          const nameGuess = e.target.value.split('/').pop()?.replace('.git', '') || '';
-                          setNewProjName(nameGuess);
-                        }
+                        if (!newProjName) setNewProjName(e.target.value.split('/').pop()?.replace('.git', '') || '');
                       }}
-                      className="w-full bg-black/20 border border-white/5 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500/50"
+                      className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+                      style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
                     >
-                      <option value="">Repo seçin...</option>
+                      <option value="">Select repo...</option>
                       {githubRepos.map((repo) => (
-                        <option key={repo.id} value={repo.cloneUrl}>
-                          {repo.fullName} {repo.private ? '(private)' : ''}
-                        </option>
+                        <option key={repo.id} value={repo.cloneUrl}>{repo.fullName} {repo.private ? '(private)' : ''}</option>
                       ))}
                     </select>
                   )}
                 </div>
               )}
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">İş Sahəsi (Qovluq)</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={newProjPath} 
-                    onChange={e => setNewProjPath(e.target.value)} 
-                    placeholder="/Users/path/to/project" 
-                    className="flex-1 bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50" 
-                  />
-                  <button 
-                    onClick={handlePickDir} 
-                    className="px-4 bg-blue-600/20 border border-blue-500/40 text-blue-400 rounded-xl hover:bg-blue-600/30 transition-all text-[10px] font-black whitespace-nowrap"
-                  >
-                    QOVLUQ SEÇ
-                  </button>
-                </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newProjPath}
+                  onChange={e => setNewProjPath(e.target.value)}
+                  placeholder="/path/to/project"
+                  className="flex-1 px-3 py-2 text-sm rounded-lg outline-none"
+                  style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
+                />
+                <button
+                  onClick={handlePickDir}
+                  className="px-3 py-2 text-xs rounded-lg font-medium"
+                  style={{ background: 'var(--color-accent-muted)', color: 'var(--color-accent)' }}
+                >
+                  Browse
+                </button>
               </div>
             </div>
-            <div className="mt-8 flex justify-end gap-3">
-              <button onClick={() => setShowAddModal(false)} className="px-6 py-3 text-xs font-bold hover:text-white transition-colors">LƏĞV ET</button>
-              <button onClick={handleCreate} className="px-10 py-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg active:scale-95 transition-all">YARAT</button>
+
+            <div className="flex justify-end gap-2 mt-5">
+              <Button variant="ghost" onClick={() => setShowAddModal(false)}>Cancel</Button>
+              <Button variant="primary" onClick={handleCreate}>Create</Button>
             </div>
           </div>
         </div>
@@ -369,102 +430,65 @@ export default function Sidebar(props: SidebarProps) {
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-xl bg-black/40 animate-in fade-in duration-300">
-          <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border)] rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.8)] p-10 relative flex flex-col max-h-[90vh]">
-            
-            {/* Elegant Header Flow */}
-            <div className="flex items-center justify-between mb-8 pb-4 border-b border-[var(--border)] shrink-0">
-              <h2 className="text-xl font-black flex items-center gap-3 text-[var(--fg-main)]">
-                <Settings className="text-blue-500" size={24} /> Settings
-              </h2>
-              <button 
-                onClick={() => setShowSettings(false)} 
-                className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl text-[var(--fg-muted)] hover:text-[var(--fg-main)] transition-colors"
-                title="Bağla"
-              >
-                <X size={20} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowSettings(false)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-md rounded-2xl p-6 animate-scale-in max-h-[85vh] flex flex-col"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5 shrink-0">
+              <h2 className="text-base font-semibold" style={{ color: 'var(--fg-main)' }}>Settings</h2>
+              <button onClick={() => setShowSettings(false)} className="p-1 rounded-md" style={{ color: 'var(--fg-muted)' }}>
+                <X size={16} />
               </button>
             </div>
 
-            {/* Scrollable Content Body */}
-            <div className="flex-1 overflow-y-auto premium-scroll pr-1 space-y-8 min-h-0">
-              {/* Premium Segmented Theme Toggle */}
+            <div className="flex-1 overflow-y-auto premium-scroll space-y-5">
+              <SettingsPanel />
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--fg-muted)] ml-1">Mühit Görünüşü</label>
-                <ThemeToggle theme={props.themeCtx.theme} setTheme={props.themeCtx.setTheme} />
-              </div>
-
-              {/* Settings Fields */}
-              <SettingsPanel 
-                model={props.model} setModel={props.setModel}
-                performanceMode={props.performanceMode} setPerformanceMode={props.setPerformanceMode}
-              />
-
-              <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
-                <label className="text-[11px] font-semibold text-[var(--fg-muted)]">GitHub (Private Repo)</label>
+                <label className="text-xs font-medium" style={{ color: 'var(--fg-muted)' }}>GitHub</label>
                 {githubConnected ? (
-                  <div className="space-y-2">
-                    <div className="text-xs text-green-400">Qoşulub: @{githubUsername || 'github'}</div>
-                    <button
-                      onClick={async () => {
-                        try {
-                          await disconnectGithub();
-                          setGithubConnected(false);
-                          setGithubUsername(null);
-                          setGithubRepos([]);
-                        } catch (e: any) {
-                          alert(e?.message || 'GitHub ayrılmadı');
-                        }
-                      }}
-                      className="px-3 py-2 text-xs rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10"
-                    >
-                      GitHub Ayrılsın
-                    </button>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs" style={{ color: 'var(--color-success)' }}>@{githubUsername}</span>
+                    <Button size="sm" variant="danger" onClick={async () => {
+                      try { await disconnectGithub(); setGithubConnected(false); setGithubUsername(null); }
+                      catch (e: any) { toast.error(e?.message); }
+                    }}>Disconnect</Button>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="flex gap-2">
                     <input
                       type="password"
                       value={githubToken}
                       onChange={(e) => setGithubToken(e.target.value)}
-                      placeholder="GitHub Personal Access Token (ghp_...)"
-                      className="w-full bg-[var(--bg-surface-alt)] border border-[var(--border)] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500/40"
+                      placeholder="ghp_..."
+                      className="flex-1 px-3 py-2 text-sm rounded-lg outline-none"
+                      style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
                     />
-                    <button
-                      onClick={async () => {
-                        try {
-                          const status = await connectGithub(githubToken.trim());
-                          setGithubConnected(Boolean(status.connected));
-                          setGithubUsername(status.username);
-                          setGithubToken('');
-                        } catch (e: any) {
-                          alert(e?.message || 'GitHub qoşulmadı');
-                        }
-                      }}
-                      className="px-3 py-2 text-xs rounded-lg border border-blue-500/40 text-blue-300 hover:bg-blue-500/10"
-                    >
-                      GitHub Qoş
-                    </button>
+                    <Button size="sm" variant="primary" onClick={async () => {
+                      try {
+                        const status = await connectGithub(githubToken.trim());
+                        setGithubConnected(Boolean(status.connected));
+                        setGithubUsername(status.username);
+                        setGithubToken('');
+                        toast.success('GitHub connected');
+                      } catch (e: any) { toast.error(e?.message); }
+                    }}>Connect</Button>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Footer Done Action */}
-            <div className="mt-8 pt-6 border-t border-[var(--border)] flex justify-end shrink-0">
-              <button 
-                onClick={() => setShowSettings(false)}
-                className="w-full sm:w-auto px-10 py-3.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-2xl shadow-blue-600/40 transition-all active:scale-95"
-              >
-                Done
-              </button>
+            <div className="mt-4 pt-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+              <Button variant="primary" className="w-full" onClick={() => setShowSettings(false)}>Done</Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Admin Panel Modal */}
       <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} />
-    </aside>
+      {ConfirmDialog}
+    </>
   );
 }

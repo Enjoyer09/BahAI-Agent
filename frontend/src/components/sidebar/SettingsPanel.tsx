@@ -1,27 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Code2, Zap, Search } from 'lucide-react';
 import { MODELS } from '../../lib/constants';
+import { useSettings } from '../../hooks/useSettings';
 
-interface SettingsPanelProps {
-  model: string; setModel: (v: string) => void;
-  performanceMode: boolean; setPerformanceMode: (v: boolean) => void;
-}
-
-function SettingField({ icon: Icon, label, children }: { icon: any; label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-2">
-      <label className="text-[11px] font-semibold flex items-center gap-2 text-[var(--fg-muted)]">
-        <Icon size={12} /> {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-export default function SettingsPanel({ 
-  model, setModel, performanceMode, setPerformanceMode 
-}: SettingsPanelProps) {
+export default function SettingsPanel() {
+  const { model, setModel, performanceMode, setPerformanceMode } = useSettings();
   const [query, setQuery] = useState('');
+
   const filteredModels = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return MODELS;
@@ -33,50 +18,77 @@ export default function SettingsPanel({
   }, [query]);
 
   const selected = MODELS.find(m => m.id === model);
-  const inputCls = 'w-full bg-[var(--bg-surface-alt)] border border-[var(--border)] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500/40 transition-colors text-[var(--fg-main)]';
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    background: 'var(--bg-hover)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)',
+    padding: '8px 12px',
+    fontSize: '13px',
+    outline: 'none',
+    color: 'var(--fg-main)',
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 space-y-3">
-        <SettingField icon={Code2} label="Model seçimi">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fg-muted)]" />
-            <input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Model axtar..."
-              className={`${inputCls} pl-9`}
-            />
-          </div>
-
-          <select value={model} onChange={e => setModel(e.target.value)} className={`${inputCls} appearance-none cursor-pointer`}>
-            {filteredModels.map(m => (
-              <option key={m.id} value={m.id} className="bg-[var(--bg-surface)] text-[var(--fg-main)]">
-                {m.name} ({m.provider})
-              </option>
-            ))}
-          </select>
-
-          <div className="text-xs text-[var(--fg-muted)]">
-            Aktiv model: <span className="font-medium text-[var(--fg-main)]">{selected?.name || model}</span>
-          </div>
-        </SettingField>
+    <div className="space-y-4">
+      {/* Model selection */}
+      <div className="space-y-2">
+        <label className="text-xs font-medium flex items-center gap-1.5" style={{ color: 'var(--fg-muted)' }}>
+          <Code2 size={12} /> Model
+        </label>
+        <div className="relative">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--fg-muted)' }} />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search models..."
+            style={{ ...inputStyle, paddingLeft: '32px' }}
+          />
+        </div>
+        <select
+          value={model}
+          onChange={e => setModel(e.target.value)}
+          style={{ ...inputStyle, cursor: 'pointer', appearance: 'none' as any }}
+        >
+          {filteredModels.map(m => (
+            <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>
+          ))}
+        </select>
+        <div className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>
+          Active: <span style={{ color: 'var(--fg-main)' }}>{selected?.name || model}</span>
+        </div>
       </div>
 
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
-        <button 
+      {/* Performance mode */}
+      <div className="space-y-1.5">
+        <button
           onClick={() => setPerformanceMode(!performanceMode)}
-          className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 bg-[var(--bg-surface-alt)] border border-[var(--border)] hover:border-blue-500/30 transition-colors"
+          className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors"
+          style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
+          role="switch"
+          aria-checked={performanceMode}
         >
-          <div className="flex items-center gap-2 text-sm font-medium text-[var(--fg-main)]">
-            <Zap size={15} className={performanceMode ? 'text-blue-500' : 'text-[var(--fg-muted)]'} />
-            Performance mode
+          <div className="flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--fg-main)' }}>
+            <Zap size={14} style={{ color: performanceMode ? 'var(--color-accent)' : 'var(--fg-muted)' }} />
+            Performance Mode
           </div>
-          <div className={`w-9 h-5 rounded-full relative transition-colors ${performanceMode ? 'bg-blue-500' : 'bg-gray-500/40'}`}>
-            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${performanceMode ? 'right-0.5' : 'left-0.5'}`} />
+          <div
+            className="w-9 h-5 rounded-full relative transition-colors"
+            style={{ background: performanceMode ? 'var(--color-accent)' : 'var(--fg-faint)' }}
+          >
+            <div
+              className="absolute top-0.5 w-4 h-4 rounded-full transition-all"
+              style={{
+                background: 'white',
+                left: performanceMode ? '18px' : '2px',
+              }}
+            />
           </div>
         </button>
-        <p className="mt-2 text-xs text-[var(--fg-muted)]">Açıq olduqda agent daha aqressiv plan/execution edə bilər.</p>
+        <p className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>
+          Disables animations and backdrop blur for better performance.
+        </p>
       </div>
     </div>
   );
