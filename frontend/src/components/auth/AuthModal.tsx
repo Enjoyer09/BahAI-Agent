@@ -1,6 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Mail, Lock, User, Loader2, ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { API_BASE_URL } from '../../lib/constants';
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
 
 interface Props {
   isOpen: boolean;
@@ -15,8 +22,76 @@ export default function AuthModal({ isOpen, onClose }: Props) {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const [googleLoaded, setGoogleLoaded] = useState(false);
 
-  const { login, register } = useAuth();
+  const { login, register, googleLogin } = useAuth();
+
+  // Load Google Client ID from backend
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/auth/config`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.googleClientId) {
+          setGoogleClientId(data.googleClientId);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  // Load Google Sign-In script
+  useEffect(() => {
+    if (!googleClientId) return;
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => setGoogleLoaded(true);
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, [googleClientId]);
+
+  // Initialize Google Sign-In button
+  useEffect(() => {
+    if (!googleLoaded || !googleClientId || !window.google) return;
+
+    try {
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleResponse,
+      });
+
+      window.google.accounts.id.renderButton(
+        document.getElementById('google-signin-button'),
+        {
+          theme: 'outline',
+          size: 'large',
+          width: '100%',
+          text: 'signin_with',
+          locale: 'az',
+        }
+      );
+    } catch (err) {
+      console.error('Google Sign-In initialization error:', err);
+    }
+  }, [googleLoaded, googleClientId]);
+
+  const handleGoogleResponse = async (response: any) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await googleLogin(response.credential);
+      onClose();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -93,6 +168,23 @@ export default function AuthModal({ isOpen, onClose }: Props) {
           >
             <AlertCircle size={16} />
             <span>{error}</span>
+          </div>
+        )}
+
+        {/* Google Sign-In */}
+        {googleClientId && (
+          <div className="mb-4">
+            <div id="google-signin-button" className="w-full flex justify-center"></div>
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full" style={{ borderTop: '1px solid var(--border)' }}></div>
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="px-2" style={{ background: 'var(--bg-elevated)', color: 'var(--fg-muted)' }}>
+                  və ya e-poçt ilə
+                </span>
+              </div>
+            </div>
           </div>
         )}
 
