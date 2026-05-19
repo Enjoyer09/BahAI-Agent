@@ -7,9 +7,9 @@ export const API_BASE_URL = import.meta.env.MODE === 'production'
 export const DEFAULT_BASE_URL = 'https://opencode.ai/zen/v1';
 
 export const MODELS: ModelOption[] = [
-  { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', provider: 'OpenCode' },
-  { id: 'deepseek-v4-flash-free', name: 'DeepSeek V4 Flash Free', provider: 'OpenCode' },
-  { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', provider: 'OpenCode' }
+  { id: 'minimax-m2.5-free', name: 'MiniMax M2.5', provider: 'bahAI' },
+  { id: 'deepseek-v4-flash-free', name: 'DeepSeek V4 Flash', provider: 'bahAI' },
+  { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super', provider: 'bahAI' }
 ];
 
 export const DEFAULT_SETTINGS = {
