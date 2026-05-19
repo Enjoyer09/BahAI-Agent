@@ -16,7 +16,7 @@ export async function sendChatMessage(
   baseUrl: string,
   model: string,
   workingDirectory: string,
-  options: { safeMode: boolean; projectId?: string | null },
+  options: { safeMode: boolean; projectId?: string | null; conversationId?: string | null },
   onEvent: (event: SSEEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
@@ -28,6 +28,7 @@ export async function sendChatMessage(
     workingDirectory,
     safeMode: options.safeMode,
     projectId: options.projectId || undefined,
+    conversationId: options.conversationId || undefined,
   });
 
   const doFetch = async () => fetch(`${API_BASE_URL}/api/chat`, {

@@ -8,10 +8,17 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const db = require('./db');
 
+const crypto = require('crypto');
 const JWT_SECRET = process.env.JWT_SECRET || 'bahai_secret_key_99';
 
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET production mühitində mütləq təyin olunmalıdır.');
+}
+
+// Generate consistent user ID from email for local mode
+function localUserId(email) {
+  const hash = crypto.createHash('md5').update(email || 'admin@bahai.local').digest('hex');
+  return parseInt(hash.substring(0, 8), 16); // 32-bit integer from first 8 hex chars
 }
 
 // SEC-1: Login with Role
@@ -21,7 +28,8 @@ async function login(req, res) {
 
   // In local mode, auto-authenticate with any credentials
   if (isLocalMode) {
-    const localUser = { id: 9999, email: email || 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' };
+    const uid = localUserId(email);
+    const localUser = { id: uid, email: email || 'admin@bahai.local', name: email?.split('@')[0] || 'User', role: 'admin' };
     const token = jwt.sign(localUser, JWT_SECRET, { expiresIn: '30d' });
     return res.json({ token, user: localUser });
   }

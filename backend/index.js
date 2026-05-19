@@ -566,25 +566,41 @@ function serializeConversation(row) {
 
 const pendingApprovals = new Map();
 const activeChatByUser = new Map();
+const activeChatByConversation = new Map(); // Track by conversation ID instead of just user
 let activeChatTotal = 0;
-const MAX_ACTIVE_CHAT_TOTAL = parseInt(process.env.MAX_ACTIVE_CHAT_TOTAL || '20', 10);
-const MAX_ACTIVE_CHAT_PER_USER = parseInt(process.env.MAX_ACTIVE_CHAT_PER_USER || '2', 10);
+const MAX_ACTIVE_CHAT_TOTAL = parseInt(process.env.MAX_ACTIVE_CHAT_TOTAL || '50', 10);
+const MAX_ACTIVE_CHAT_PER_USER = parseInt(process.env.MAX_ACTIVE_CHAT_PER_USER || '5', 10);
 const CHAT_QUEUE_TIMEOUT_MS = parseInt(process.env.CHAT_QUEUE_TIMEOUT_MS || '30000', 10);
 const chatQueue = [];
 
-function acquireChatSlot(userId) {
+function acquireChatSlot(userId, conversationId) {
   const uid = String(userId || 'anon');
+  const cid = String(conversationId || 'default');
+  
+  // Allow multiple conversations per user to run in parallel
+  // Only block if the SAME conversation is already running
+  if (activeChatByConversation.has(cid)) {
+    return false; // Same conversation already running
+  }
+  
   const byUser = activeChatByUser.get(uid) || 0;
   if (activeChatTotal >= MAX_ACTIVE_CHAT_TOTAL || byUser >= MAX_ACTIVE_CHAT_PER_USER) {
     return false;
   }
+  
   activeChatTotal += 1;
   activeChatByUser.set(uid, byUser + 1);
+  activeChatByConversation.set(cid, { userId: uid, startedAt: Date.now() });
   return true;
 }
 
-function releaseChatSlot(userId) {
+function releaseChatSlot(userId, conversationId) {
   const uid = String(userId || 'anon');
+  const cid = String(conversationId || 'default');
+  
+  // Remove conversation lock
+  activeChatByConversation.delete(cid);
+  
   const byUser = activeChatByUser.get(uid) || 0;
   if (byUser <= 1) activeChatByUser.delete(uid);
   else activeChatByUser.set(uid, byUser - 1);
@@ -603,7 +619,7 @@ function drainChatQueue() {
     progressed = false;
     for (let i = 0; i < chatQueue.length; i += 1) {
       const item = chatQueue[i];
-      if (acquireChatSlot(item.userId)) {
+      if (acquireChatSlot(item.userId, item.conversationId)) {
         chatQueue.splice(i, 1);
         if (item.timer) clearTimeout(item.timer);
         item.resolve(true);
@@ -614,8 +630,8 @@ function drainChatQueue() {
   }
 }
 
-async function acquireChatSlotQueued(userId, req) {
-  if (acquireChatSlot(userId)) return true;
+async function acquireChatSlotQueued(userId, conversationId, req) {
+  if (acquireChatSlot(userId, conversationId)) return true;
 
   const ticketId = crypto.randomUUID();
   return new Promise((resolve, reject) => {
@@ -633,6 +649,7 @@ async function acquireChatSlotQueued(userId, req) {
     chatQueue.push({
       id: ticketId,
       userId: String(userId || 'anon'),
+      conversationId: String(conversationId || 'default'),
       resolve: () => {
         req.off('close', onClose);
         resolve(true);
@@ -1451,10 +1468,10 @@ app.post('/api/approvals/:id', async (req, res) => {
 
 
 app.post('/api/chat', async (req, res) => {
-    const { messages, apiKey, model, workingDirectory, baseUrl, projectId, safeMode = true } = req.body;
+    const { messages, apiKey, model, workingDirectory, baseUrl, projectId, conversationId, safeMode = true } = req.body;
     let slotAcquired = false;
     try {
-      await acquireChatSlotQueued(req.user?.id, req);
+      await acquireChatSlotQueued(req.user?.id, conversationId, req);
       slotAcquired = true;
     } catch (queueErr) {
       res.setHeader('Retry-After', '5');
@@ -1803,7 +1820,7 @@ Azərbaycan dilində cavab ver.`;
     } catch (e) {
         res.write(`data: ${JSON.stringify({ type: 'error', message: e.message })}\n\n`);
     } finally {
-        if (slotAcquired) releaseChatSlot(req.user?.id);
+        if (slotAcquired) releaseChatSlot(req.user?.id, conversationId);
         res.end();
     }
 });

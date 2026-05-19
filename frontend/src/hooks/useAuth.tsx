@@ -119,6 +119,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('auth_token');
     localStorage.setItem('signed_out', '1');
     setUser(null);
+    // Redirect to landing page
+    window.history.pushState({}, '', '/');
+    window.location.href = '/';
   };
 
   return (

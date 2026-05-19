@@ -301,7 +301,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       await sendChatMessage(
         preparedMessages,
         settings.apiKey, settings.baseUrl, settings.model, activeProject?.path || settings.projectDir,
-        { safeMode, projectId: activeProject?.id },
+        { safeMode, projectId: activeProject?.id, conversationId: activeConvId },
         (event: any) => {
           if (event.type === 'task_plan') {
             setTaskPlan(Array.isArray(event.items) ? event.items : []);
