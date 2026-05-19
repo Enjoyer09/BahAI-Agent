@@ -8,6 +8,7 @@ import OpsPanel from './components/chat/OpsPanel';
 import Terminal from './components/chat/Terminal';
 import AuthModal from './components/auth/AuthModal';
 import Sidebar from './components/sidebar/Sidebar';
+import LandingPage from './components/landing/LandingPage';
 import { useAuth } from './hooks/useAuth';
 import { useChat } from './hooks/useChat';
 import { useTheme } from './hooks/useTheme';
@@ -18,6 +19,9 @@ function AppContent() {
   const auth = useAuth();
   const settings = useSettings();
   const themeCtx = useTheme();
+  const [showLanding, setShowLanding] = useState(() => {
+    return !localStorage.getItem('skip_landing');
+  });
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -70,6 +74,18 @@ function AppContent() {
   }
 
   const autoPreview = chat.activeProject?.name?.match(/site|web|app|frontend|ui/i);
+
+  // Landing page
+  if (showLanding) {
+    return (
+      <LandingPage
+        onGetStarted={() => {
+          localStorage.setItem('skip_landing', '1');
+          setShowLanding(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="dvh-screen flex overflow-hidden" style={{ background: 'var(--bg-main)' }}>

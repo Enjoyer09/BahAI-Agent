@@ -1,187 +1,487 @@
-// ==========================================
-// LandingPage — Premium SaaS Entrance
-// ==========================================
-
-import { useEffect, useState } from 'react';
-import { ArrowRight, Zap, Code2, Cpu, Globe, Rocket, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import {
+  ArrowRight,
+  Zap,
+  Code2,
+  Cpu,
+  Globe,
+  Rocket,
+  ChevronDown,
+  CheckCircle2,
+  Terminal,
+  Shield,
+  Sparkles,
+  Bot,
+  Play,
+} from 'lucide-react';
 
 interface LandingPageProps {
   onGetStarted: () => void;
 }
 
-export default function LandingPage({ onGetStarted }: LandingPageProps) {
-  const [scrollY, setScrollY] = useState(0);
+function AnimateIn({ children, delay = 0, className = '' }: { children: React.ReactNode; delay?: number; className?: string }) {
+  const [visible, setVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleScroll = () => setScrollY(window.scrollY);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setVisible(true); },
+      { threshold: 0.1 }
+    );
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
   }, []);
 
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(24px)',
+        transition: `opacity 0.6s ease-out ${delay}s, transform 0.6s ease-out ${delay}s`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function GridDots() {
+  return (
+    <div className="absolute inset-0 pointer-events-none" style={{ opacity: 0.03 }}>
+      <svg width="100%" height="100%">
+        <defs>
+          <pattern id="grid-dots" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="1" fill="white" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid-dots)" />
+      </svg>
+    </div>
+  );
+}
+
+export default function LandingPage({ onGetStarted }: LandingPageProps) {
   const features = [
-    { icon: <Code2 className="text-blue-400" />, title: 'Avtonom Kodlaşdırma', desc: 'Sizin üçün faylları yaradır, redaktə edir və layihəni sıfırdan qurur.' },
-    { icon: <Cpu className="text-purple-400" />, title: 'Yerli Kod Asistenti', desc: 'Məlumatlarınızın təhlükəsizliyi üçün özəl serverlərdə işləyən daxili AI modelləri.' },
-    { icon: <Globe className="text-emerald-400" />, title: 'Canlı Önizləmə', desc: 'Yazılan kodu anında brauzerdə görün və real vaxtda test edin.' },
-    { icon: <Rocket className="text-orange-400" />, title: 'Sürətli Deployment', desc: 'Layihənizi tək kliklə GitHub və Railway-ə göndərin.' }
+    {
+      icon: <Code2 size={22} />,
+      title: 'Avtonom Kodlaşdırma',
+      desc: 'Faylları yaradır, redaktə edir və layihəni sıfırdan qurur. Siz sadəcə təsvir edin.',
+      color: '#10a37f',
+    },
+    {
+      icon: <Terminal size={22} />,
+      title: 'Terminal və Git',
+      desc: 'Əmrləri icra edir, repoları klonlayır və layihəni avtomatik qurur.',
+      color: '#3b82f6',
+    },
+    {
+      icon: <Globe size={22} />,
+      title: 'Canlı Önizləmə',
+      desc: 'Yazılan kodu anında brauzerdə görün. Real vaxtda dəyişikliklər.',
+      color: '#8b5cf6',
+    },
+    {
+      icon: <Shield size={22} />,
+      title: 'Təhlükəsiz Rejim',
+      desc: 'Həssas əməliyyatlar üçün təsdiq sistemi. Nəzarət sizdə qalır.',
+      color: '#f59e0b',
+    },
+    {
+      icon: <Cpu size={22} />,
+      title: 'Çoxsaylı AI Modelləri',
+      desc: 'DeepSeek, MiniMax, Nemotron və digər modellər — bir yerdə.',
+      color: '#ec4899',
+    },
+    {
+      icon: <Rocket size={22} />,
+      title: 'Bir Kliklə Deploy',
+      desc: 'Layihənizi GitHub və Railway-ə göndərin. Dünyada yayımlayın.',
+      color: '#06b6d4',
+    },
   ];
 
   const steps = [
-    { num: '01', title: 'İdeyanı Yaz', desc: 'Nə yaratmaq istədiyinizi sadə dildə (məs: "Bir POS sistemi qur") agentə bildirin.' },
-    { num: '02', title: 'Agent İcra Edir', desc: 'bahAI bütün faylları yaradır, lazımi kitabxanaları quraşdırır və kodu yazır.' },
-    { num: '03', title: 'Canlıya Çıx', desc: 'Nəticəni dərhal yoxlayın və tək düymə ilə dünyada yayımlayın.' }
+    {
+      num: '01',
+      title: 'İdeyanı Yaz',
+      desc: 'Nə yaratmaq istədiyinizi sadə dildə agentə bildirin. Məsələn: "Bir POS sistemi qur"',
+    },
+    {
+      num: '02',
+      title: 'Agent İşləyir',
+      desc: 'bahAI faylları yaradır, kitabxanaları quraşdırır, kodu yazır və test edir.',
+    },
+    {
+      num: '03',
+      title: 'Canlıya Çıx',
+      desc: 'Nəticəni dərhal yoxlayın və tək düymə ilə dünyada yayımlayın.',
+    },
+  ];
+
+  const stats = [
+    { value: '9', label: 'AI ALƏTİ' },
+    { value: '15', label: 'ADDIMLI AGENT' },
+    { value: '0 AZN', label: 'PULSUZ' },
   ];
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white selection:bg-blue-500/30 overflow-x-hidden font-sans scroll-smooth">
-      
-      {/* Dynamic Background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[120px] animate-pulse" />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-purple-600/10 rounded-full blur-[100px] delay-1000" />
-      </div>
+    <div className="min-h-screen text-white overflow-x-hidden font-sans scroll-smooth" style={{ background: '#09090b' }}>
 
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 h-16 md:h-20 flex items-center justify-between px-4 md:px-20 z-50 backdrop-blur-md bg-black/20 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="bahAI" className="w-8 h-8 md:w-10 md:h-10 rounded-xl shadow-lg shadow-blue-600/20" />
-          <span className="text-lg md:text-2xl font-black tracking-tighter uppercase">bah<span className="text-blue-500">AI</span></span>
+      <nav
+        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 md:px-10 h-14 md:h-16"
+        style={{
+          background: 'rgba(9,9,11,0.8)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          borderBottom: '1px solid rgba(255,255,255,0.05)',
+        }}
+      >
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: 'var(--color-accent)' }}
+          >
+            <Bot size={18} className="text-white" />
+          </div>
+          <span className="text-base font-bold tracking-tight uppercase">
+            bah<span style={{ color: 'var(--color-accent)' }}>AI</span>
+          </span>
         </div>
-        <div className="hidden md:flex items-center gap-10 text-sm font-medium text-gray-400">
+
+        <div className="hidden md:flex items-center gap-8 text-sm text-zinc-400">
           <a href="#features" className="hover:text-white transition-colors">Xüsusiyyətlər</a>
-          <a href="#how-it-works" className="hover:text-white transition-colors">Necə İşləyir?</a>
+          <a href="#how" className="hover:text-white transition-colors">Necə İşləyir</a>
           <a href="#pricing" className="hover:text-white transition-colors">Qiymət</a>
         </div>
-        <button 
+
+        <button
           onClick={onGetStarted}
-          className="px-4 md:px-6 py-2 md:py-2.5 bg-white text-black text-xs md:text-sm font-bold rounded-full hover:bg-blue-500 hover:text-white transition-all duration-500 active:scale-95 shadow-xl shadow-white/5"
+          className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-lg transition-all active:scale-[0.97]"
+          style={{
+            background: 'var(--color-accent)',
+            color: 'white',
+          }}
         >
-          Giriş Et
+          Daxil ol
+          <ArrowRight size={14} />
         </button>
       </nav>
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center pt-16 md:pt-20 px-4 md:px-6 overflow-hidden">
-        <div className="animate-in fade-in slide-in-from-top-4 duration-1000">
-          <div className="px-3 md:px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-blue-400 mb-6 md:mb-8 flex items-center gap-2">
+      <section className="relative min-h-screen flex flex-col items-center justify-center px-5 md:px-10 pt-16 overflow-hidden">
+        <GridDots />
+
+        {/* Ambient glow */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full pointer-events-none"
+             style={{ background: 'radial-gradient(circle, rgba(16,163,127,0.08) 0%, transparent 70%)' }} />
+
+        <AnimateIn delay={0}>
+          <div
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest mb-8"
+            style={{
+              background: 'rgba(16,163,127,0.1)',
+              border: '1px solid rgba(16,163,127,0.2)',
+              color: '#10a37f',
+            }}
+          >
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#10a37f' }} />
+              <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#10a37f' }} />
             </span>
             PRE-BETA AKTİVDİR
           </div>
-        </div>
+        </AnimateIn>
 
-        <h1 className="text-3xl sm:text-4xl md:text-8xl font-black text-center max-w-5xl leading-[1.15] md:leading-[1.1] tracking-tight md:tracking-tighter mb-6 md:mb-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
-          Azərbaycanın ilk və tək <br/> 
-          <span className="bg-gradient-to-r from-blue-400 via-purple-500 to-blue-600 bg-clip-text text-transparent underline decoration-white/10 underline-offset-8">Yerli sizin kod asistentiniz</span>
-        </h1>
-
-        <p className="text-gray-400 text-center max-w-2xl text-sm sm:text-base md:text-xl mb-8 md:mb-12 animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500">
-          bahAI ilə cəmi bir neçə saniyə ərzində mürəkkəb proqram təminatları yaradın. 
-          Siz sadəcə ideyanızı deyin, qalanını AI həll etsin.
-        </p>
-
-        <div className="flex flex-col md:flex-row items-center gap-6 animate-in fade-in slide-in-from-bottom-2 duration-1000 delay-700">
-          <button 
-            onClick={onGetStarted}
-            className="group px-6 md:px-10 py-3.5 md:py-5 bg-blue-600 rounded-2xl md:rounded-3xl font-black text-base md:text-lg flex items-center gap-3 hover:bg-blue-500 transition-all duration-500 shadow-2xl shadow-blue-600/30 active:scale-95"
+        <AnimateIn delay={0.1}>
+          <h1
+            className="text-4xl sm:text-5xl md:text-7xl font-bold text-center max-w-4xl leading-[1.08] tracking-tight mb-6"
+            style={{ color: '#f0f0f0' }}
           >
-            Pulsuz Yoxla
-            <ArrowRight className="group-hover:translate-x-2 transition-transform" />
-          </button>
-        </div>
+            Azərbaycanın ilk və tək
+            <br />
+            <span
+              className="font-black"
+              style={{
+                background: 'linear-gradient(135deg, #10a37f 0%, #06b6d4 50%, #8b5cf6 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}
+            >
+              AI kod agenti
+            </span>
+          </h1>
+        </AnimateIn>
 
-        <div className="absolute bottom-10 animate-bounce opacity-40">
-          <ChevronDown size={32} />
+        <AnimateIn delay={0.2}>
+          <p className="text-zinc-400 text-center max-w-xl text-base md:text-lg mb-10 leading-relaxed">
+            Proqram təminatını sıfırdan qurun. Sadəcə ideyanızı deyin,
+            bahAI qalanını həll etsin — pulsuz.
+          </p>
+        </AnimateIn>
+
+        <AnimateIn delay={0.3}>
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <button
+              onClick={onGetStarted}
+              className="group flex items-center gap-2.5 px-7 py-3.5 rounded-lg text-sm font-bold transition-all active:scale-[0.97] shadow-lg"
+              style={{
+                background: 'var(--color-accent)',
+                color: 'white',
+                boxShadow: '0 8px 32px rgba(16,163,127,0.3)',
+              }}
+            >
+              <Sparkles size={16} />
+              Pulsuz Proqramını Qur
+              <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+            <button
+              onClick={onGetStarted}
+              className="flex items-center gap-2 px-6 py-3.5 rounded-lg text-sm font-semibold transition-all active:scale-[0.97]"
+              style={{
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#b4b4b4',
+              }}
+            >
+              <Play size={14} />
+              Canlı Bax
+            </button>
+          </div>
+        </AnimateIn>
+
+        {/* Scroll indicator */}
+        <div className="absolute bottom-8 animate-bounce" style={{ opacity: 0.3 }}>
+          <ChevronDown size={24} />
         </div>
       </section>
 
-      {/* Visual Showcase */}
-      <section className="px-4 md:px-20 py-10 md:py-20">
-        <div 
-          className="relative group rounded-[3rem] overflow-hidden border border-white/5 shadow-2xl shadow-blue-600/5 aspect-video md:aspect-[21/9]"
-          style={{ transform: `perspective(1000px) rotateX(${Math.max(0, 10 - scrollY/100)}deg)` }}
-        >
-          <img src="/landing_hero.png" alt="Showcase" className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-[2s]" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-transparent" />
-        </div>
-      </section>
-
-      {/* Features Grid */}
-      <section id="features" className="px-4 md:px-20 py-16 md:py-32 scroll-mt-24">
-        <div className="mb-10 md:mb-20 text-center">
-          <h2 className="text-2xl sm:text-3xl md:text-6xl font-black mb-4 md:mb-6">Nələr Mümkündür?</h2>
-          <p className="text-gray-500 max-w-xl mx-auto">İstər veb sayt, istər mürəkkəb proqram təminatı — bahAI hər şeyi sizin üçün edə bilər.</p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
-          {features.map((f, i) => (
-            <div key={i} className="p-5 md:p-8 rounded-2xl md:rounded-[2.5rem] bg-white/[0.02] border border-white/5 hover:border-blue-500/30 transition-all duration-500 group">
-              <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-6 transition-all duration-500">
-                {f.icon}
+      {/* Stats Bar */}
+      <section className="border-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+        <div className="max-w-5xl mx-auto grid grid-cols-3 divide-x" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+          {stats.map((s, i) => (
+            <div key={i} className="py-8 md:py-12 text-center" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+              <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1" style={{ color: '#f0f0f0' }}>
+                {s.value}
               </div>
-              <h3 className="text-xl font-bold mb-4">{f.title}</h3>
-              <p className="text-gray-500 text-sm leading-relaxed">{f.desc}</p>
+              <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-zinc-500">
+                {s.label}
+              </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* How it Works */}
-      <section id="how-it-works" className="px-4 md:px-20 py-16 md:py-32 bg-white/[0.01] border-y border-white/5 scroll-mt-24">
-        <div className="mb-10 md:mb-20 text-center">
-          <h2 className="text-2xl sm:text-3xl md:text-6xl font-black mb-4 md:mb-6">Necə İşləyir?</h2>
-          <p className="text-gray-500">Sadəcə 3 addımda öz layihənizi işə salın.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-12">
-          {steps.map((s, i) => (
-            <div key={i} className="relative p-6 md:p-10 rounded-2xl md:rounded-[3rem] bg-black border border-white/5 shadow-inner">
-              <span className="absolute top-10 right-10 text-5xl font-black text-white/5 leading-none">{s.num}</span>
-              <h3 className="text-2xl font-bold mb-4 text-blue-500">{s.title}</h3>
-              <p className="text-gray-400 leading-relaxed">{s.desc}</p>
+      {/* Features Section */}
+      <section id="features" className="relative px-5 md:px-10 py-20 md:py-32 scroll-mt-16">
+        <GridDots />
+        <div className="max-w-5xl mx-auto">
+          <AnimateIn>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-2 h-2 rounded-full" style={{ background: 'var(--color-accent)' }} />
+              <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">XÜSUSİYYƏTLƏR</span>
             </div>
-          ))}
+            <h2 className="text-3xl md:text-5xl font-bold mb-4" style={{ color: '#f0f0f0' }}>
+              Hər şey bir yerdə
+            </h2>
+            <p className="text-zinc-400 max-w-xl mb-16 text-base md:text-lg leading-relaxed">
+              bahAI sadəcə kod yazmır — o, bütün inkişaf prosesini idarə edir.
+            </p>
+          </AnimateIn>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+            {features.map((f, i) => (
+              <AnimateIn key={i} delay={i * 0.05}>
+                <div
+                  className="group p-6 rounded-xl transition-all duration-300 hover:translate-y-[-2px]"
+                  style={{
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                  }}
+                >
+                  <div
+                    className="w-10 h-10 rounded-lg flex items-center justify-center mb-4"
+                    style={{ background: `${f.color}15`, color: f.color }}
+                  >
+                    {f.icon}
+                  </div>
+                  <h3 className="text-base font-bold mb-2" style={{ color: '#f0f0f0' }}>{f.title}</h3>
+                  <p className="text-sm leading-relaxed text-zinc-400">{f.desc}</p>
+                </div>
+              </AnimateIn>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section id="how" className="relative px-5 md:px-10 py-20 md:py-32 scroll-mt-16" style={{ background: 'rgba(255,255,255,0.01)' }}>
+        <div className="max-w-5xl mx-auto">
+          <AnimateIn>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-2 h-2 rounded-full" style={{ background: 'var(--color-accent)' }} />
+              <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">NECƏ İŞLƏYİR</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold mb-4" style={{ color: '#f0f0f0' }}>
+              3 sadə addım
+            </h2>
+            <p className="text-zinc-400 max-w-xl mb-16 text-base md:text-lg">
+              Kod yazmağı bilmirsiniz? Problem deyil. bahAI hər şeyi edir.
+            </p>
+          </AnimateIn>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            {steps.map((s, i) => (
+              <AnimateIn key={i} delay={i * 0.1}>
+                <div
+                  className="relative p-6 md:p-8 rounded-xl"
+                  style={{
+                    background: 'rgba(0,0,0,0.4)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                  }}
+                >
+                  <span
+                    className="absolute top-5 right-6 text-4xl font-black leading-none"
+                    style={{ color: 'rgba(255,255,255,0.04)' }}
+                  >
+                    {s.num}
+                  </span>
+                  <h3 className="text-lg font-bold mb-3" style={{ color: 'var(--color-accent)' }}>{s.title}</h3>
+                  <p className="text-sm leading-relaxed text-zinc-400">{s.desc}</p>
+                </div>
+              </AnimateIn>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="px-4 md:px-20 py-16 md:py-32 scroll-mt-24">
-        <div className="mb-10 md:mb-20 text-center">
-          <h2 className="text-2xl sm:text-3xl md:text-6xl font-black mb-4 md:mb-6">Qiymətlər</h2>
-          <p className="text-blue-400 font-bold tracking-widest uppercase text-sm">Beta Mərhələsi</p>
-        </div>
-        <div className="max-w-xl mx-auto p-6 md:p-12 rounded-2xl md:rounded-[3.5rem] bg-gradient-to-b from-blue-600 to-blue-800 border border-blue-400/30 shadow-2xl shadow-blue-600/40 text-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-10">
-            <Zap size={100} />
-          </div>
-          <h3 className="text-2xl md:text-3xl font-black mb-4">Beta Test Rejimi</h3>
-          <p className="text-white/80 mb-8 leading-relaxed">
-            Platforma hazırda Beta sınaq mərhələsindədir. Bizim missiyamız hər kəsə kod yazmaq imkanı verməkdir.
-          </p>
-          <div className="text-4xl md:text-6xl font-black mb-8 flex items-baseline justify-center gap-2">
-            0 AZN <span className="text-sm font-medium text-white/50">/ həmişə</span>
-          </div>
-          <div className="space-y-4 mb-10 text-left">
-            <div className="flex items-center gap-3"><CheckCircle2 size={18} className="text-blue-200" /> <span>Limitsiz layihə yaratmaq</span></div>
-            <div className="flex items-center gap-3"><CheckCircle2 size={18} className="text-blue-200" /> <span>Bütün AI modellərinə giriş</span></div>
-            <div className="flex items-center gap-3"><CheckCircle2 size={18} className="text-blue-200" /> <span>Testlər tamamilə pulsuzdur</span></div>
-          </div>
-          <button 
-            onClick={onGetStarted}
-            className="w-full py-4 md:py-5 bg-white text-blue-700 rounded-2xl md:rounded-3xl font-black text-base md:text-lg hover:scale-[1.02] active:scale-95 transition-all shadow-xl"
-          >
-            İndi Başla
-          </button>
+      <section id="pricing" className="relative px-5 md:px-10 py-20 md:py-32 scroll-mt-16">
+        <GridDots />
+        <div className="max-w-2xl mx-auto">
+          <AnimateIn>
+            <div className="text-center mb-12">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="w-2 h-2 rounded-full" style={{ background: 'var(--color-accent)' }} />
+                <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">QİYMƏT</span>
+              </div>
+              <h2 className="text-3xl md:text-5xl font-bold mb-3" style={{ color: '#f0f0f0' }}>
+                Tamamilə pulsuz
+              </h2>
+              <p className="text-zinc-400 text-base md:text-lg">
+                PreBeta mərhələsində bütün xüsusiyyətlər açıqdır.
+              </p>
+            </div>
+          </AnimateIn>
+
+          <AnimateIn delay={0.1}>
+            <div
+              className="relative p-8 md:p-12 rounded-2xl text-center overflow-hidden"
+              style={{
+                background: 'linear-gradient(180deg, rgba(16,163,127,0.12) 0%, rgba(16,163,127,0.03) 100%)',
+                border: '1px solid rgba(16,163,127,0.2)',
+              }}
+            >
+              <div className="absolute top-0 right-0 opacity-5">
+                <Zap size={120} />
+              </div>
+
+              <h3 className="text-xl md:text-2xl font-bold mb-2" style={{ color: '#f0f0f0' }}>PreBeta Test Rejimi</h3>
+              <p className="text-zinc-400 mb-8 text-sm leading-relaxed max-w-md mx-auto">
+                Missiyamız hər kəsə kod yazmaq imkanı verməkdir. Bu səbəbdən platforma tamamilə pulsuzdur.
+              </p>
+
+              <div className="flex items-baseline justify-center gap-2 mb-8">
+                <span className="text-5xl md:text-6xl font-black" style={{ color: '#f0f0f0' }}>0</span>
+                <span className="text-lg font-medium text-zinc-500">AZN / həmişə</span>
+              </div>
+
+              <div className="space-y-3 mb-10 text-left max-w-sm mx-auto">
+                {[
+                  'Limitsiz layihə yaratmaq',
+                  'Bütün AI modellərinə giriş',
+                  'Terminal və Git inteqrasiyası',
+                  'Canlı önizləmə və deploy',
+                  'GitHub repo klonlama',
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <CheckCircle2 size={16} style={{ color: 'var(--color-accent)' }} />
+                    <span className="text-sm text-zinc-300">{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={onGetStarted}
+                className="group w-full flex items-center justify-center gap-2.5 py-4 rounded-xl text-base font-bold transition-all active:scale-[0.97] shadow-lg"
+                style={{
+                  background: 'var(--color-accent)',
+                  color: 'white',
+                  boxShadow: '0 8px 32px rgba(16,163,127,0.3)',
+                }}
+              >
+                <Sparkles size={18} />
+                Pulsuz Proqramını Qur
+                <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+          </AnimateIn>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 py-12 md:py-20 px-4 md:px-20 bg-black/40">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-10">
-          <div className="flex items-center gap-3 grayscale opacity-50 hover:grayscale-0 hover:opacity-100 transition-all">
-            <img src="/logo.png" alt="bahAI" className="w-8 h-8 rounded-lg" />
-            <span className="text-lg font-black tracking-tighter uppercase">bahAI</span>
+      {/* Final CTA */}
+      <section className="px-5 md:px-10 py-20 md:py-28">
+        <AnimateIn>
+          <div
+            className="max-w-3xl mx-auto text-center p-8 md:p-14 rounded-2xl relative overflow-hidden"
+            style={{
+              background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(255,255,255,0.06)',
+            }}
+          >
+            <GridDots />
+            <h2 className="text-2xl md:text-4xl font-bold mb-4 relative z-10" style={{ color: '#f0f0f0' }}>
+              İdeyanızı kod çevirin
+            </h2>
+            <p className="text-zinc-400 mb-8 text-sm md:text-base max-w-md mx-auto relative z-10">
+              bahAI ilə proqram qurmaq heç vaxt bu qədər asan olmayıb. Pulsuz başlayın.
+            </p>
+            <button
+              onClick={onGetStarted}
+              className="group relative z-10 inline-flex items-center gap-2.5 px-8 py-4 rounded-xl text-base font-bold transition-all active:scale-[0.97] shadow-lg"
+              style={{
+                background: 'var(--color-accent)',
+                color: 'white',
+                boxShadow: '0 8px 32px rgba(16,163,127,0.3)',
+              }}
+            >
+              Daxil ol
+              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+            </button>
           </div>
-          <p className="text-gray-600 text-[10px] uppercase tracking-[0.2em]">© 2026 bahAI Intelligence — Bütün hüquqlar qorunur.</p>
+        </AnimateIn>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t px-5 md:px-10 py-8 md:py-12" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div
+              className="w-7 h-7 rounded-md flex items-center justify-center"
+              style={{ background: 'var(--color-accent)' }}
+            >
+              <Bot size={14} className="text-white" />
+            </div>
+            <span className="text-sm font-bold tracking-tight uppercase">
+              bah<span style={{ color: 'var(--color-accent)' }}>AI</span>
+            </span>
+          </div>
+          <p className="text-zinc-600 text-[11px] uppercase tracking-widest">
+            © 2026 bahAI Intelligence — Bütün hüquqlar qorunur
+          </p>
         </div>
       </footer>
 
