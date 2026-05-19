@@ -1371,6 +1371,35 @@ app.post('/api/projects', async (req, res) => {
 
   try {
     await ensureDir(resolvedPath);
+    
+    // Auto-clone repo if URL provided
+    if (repoUrl) {
+      try {
+        let cloneUrl = repoUrl;
+        // Inject GitHub token for private repos
+        if (cloneUrl.includes('github.com') && req.user?.id) {
+          const githubToken = await getUserGithubToken(req.user.id);
+          if (githubToken) {
+            cloneUrl = injectGithubTokenIntoUrl(cloneUrl, githubToken);
+          }
+        }
+        await new Promise((resolve, reject) => {
+          const proc = spawn('git', ['clone', cloneUrl, '.'], { cwd: resolvedPath });
+          let stderr = '';
+          proc.stderr.on('data', d => stderr += d);
+          proc.on('close', (code) => {
+            if (code === 0) resolve(true);
+            else reject(new Error(stderr || `git clone exit code: ${code}`));
+          });
+          setTimeout(() => { proc.kill(); reject(new Error('Git clone timeout (60s)')); }, 60000);
+        });
+        console.log(`✅ Auto-cloned ${repoUrl} into ${resolvedPath}`);
+      } catch (cloneErr) {
+        console.error(`❌ Auto-clone failed: ${cloneErr.message}`);
+        // Don't fail project creation — agent can retry later
+      }
+    }
+
     const result = await db.query(
       `INSERT INTO projects (id, user_id, name, path, repo_url, last_port)
        VALUES ($1, $2, $3, $4, $5, $6)
