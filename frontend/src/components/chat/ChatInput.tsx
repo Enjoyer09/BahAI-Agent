@@ -51,6 +51,11 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
   const pushFiles = useCallback((files: FileList | null) => {
     if (!files) return;
     Array.from(files).forEach(file => {
+      // File size check: max 20MB per file
+      if (file.size > 20 * 1024 * 1024) {
+        alert(`"${file.name}" faylı çox böyükdür (${(file.size / 1024 / 1024).toFixed(1)}MB). Maksimum 20MB icazə verilir.`);
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (ev) => {
         setAttachments(prev => [...prev, {

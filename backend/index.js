@@ -30,7 +30,7 @@ db.initDb();
 
 // SEC-7: Restrict CORS
 app.use(cors());
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '15mb' }));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
 
 // Request Logger
 app.use((req, res, next) => {
@@ -1508,14 +1508,22 @@ app.delete('/api/conversations/:id', async (req, res) => {
 });
 
 app.post('/api/attachments/extract', async (req, res) => {
+  // Set a longer timeout for attachment processing (3 minutes)
+  req.setTimeout(180000);
+  res.setTimeout(180000);
+  
   try {
     const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
     const extracted = [];
 
+    // Process attachments with individual timeout (30s per attachment)
     for (const attachment of attachments) {
       let item;
       try {
-        item = await extractAttachment(attachment);
+        item = await Promise.race([
+          extractAttachment(attachment),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Attachment emalı vaxtı bitdi (30s)')), 30000))
+        ]);
       } catch (error) {
         item = {
           name: attachment?.name || 'attachment',
@@ -1803,9 +1811,9 @@ Azərbaycan dilində cavab ver.`;
         while (step < MAX_STEPS && !clientDisconnected) {
             step++;
 
-            // Streaming ilə API çağırışı (60 saniyə timeout)
+            // Streaming ilə API çağırışı (120 saniyə timeout - attachments üçün daha uzun)
             const abortController = new AbortController();
-            const timeoutId = setTimeout(() => abortController.abort(), 60000);
+            const timeoutId = setTimeout(() => abortController.abort(), 120000);
 
             let stream;
             let shouldRetryWithDeepSeekRecovery = false;

@@ -187,27 +187,51 @@ export async function deleteConversationOnServer(id: string): Promise<void> {
 
 export async function extractAttachments(attachments: Attachment[]): Promise<Attachment[]> {
   if (attachments.length === 0) return [];
-  const response = await fetch(`${API_BASE_URL}/api/attachments/extract`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader()
-    },
-    body: JSON.stringify({ attachments })
-  });
-  if (!response.ok) {
+  
+  // Use AbortController with 120s timeout for large file processing
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/attachments/extract`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader()
+      },
+      body: JSON.stringify({ attachments }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      return attachments.map(attachment => ({
+        ...attachment,
+        extractedText: attachment.extractedText || '',
+        extractionError: `Server xətası: ${response.status}`
+      }));
+    }
+    const data = await response.json();
+    const extracted = Array.isArray(data.attachments) ? data.attachments : [];
+    return attachments.map(attachment => {
+      const match = extracted.find((item: Attachment) => item.id === attachment.id);
+      return match ? { ...attachment, ...match } : attachment;
+    });
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      return attachments.map(attachment => ({
+        ...attachment,
+        extractedText: attachment.extractedText || '',
+        extractionError: 'Fayl emalı vaxtı bitdi. Daha kiçik fayl göndərin.'
+      }));
+    }
     return attachments.map(attachment => ({
       ...attachment,
       extractedText: attachment.extractedText || '',
-      extractionError: 'Attachment extraction failed'
+      extractionError: err?.message || 'Attachment extraction failed'
     }));
   }
-  const data = await response.json();
-  const extracted = Array.isArray(data.attachments) ? data.attachments : [];
-  return attachments.map(attachment => {
-    const match = extracted.find((item: Attachment) => item.id === attachment.id);
-    return match ? { ...attachment, ...match } : attachment;
-  });
 }
 
 export async function fetchFileTree(dirPath: string, workingDirectory: string): Promise<any[]> {
