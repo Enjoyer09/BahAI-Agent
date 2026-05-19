@@ -1,5 +1,5 @@
 import type { ModelOption } from './types';
-import { List, Search, FileText, Edit, Terminal, Globe } from 'lucide-react';
+import { List, Search, FileText, Edit, Terminal, Globe, GitBranch, GitCommit, Code2, FileSearch, Eye } from 'lucide-react';
 
 export const API_BASE_URL = import.meta.env.MODE === 'production' 
   ? window.location.origin 
@@ -29,7 +29,13 @@ export const TOOL_ICONS: Record<string, any> = {
   run_bash: Terminal,
   run_terminal_command: Terminal,
   grep_search: Globe,
-  git_clone: Globe
+  git_clone: Globe,
+  git_status: GitBranch,
+  git_diff: GitCommit,
+  git_commit: GitCommit,
+  analyze_codebase: Code2,
+  find_definition: FileSearch,
+  find_references: Eye
 };
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -41,5 +47,11 @@ export const TOOL_LABELS: Record<string, string> = {
   run_bash: 'Terminal əmri',
   run_terminal_command: 'Terminal əmri',
   grep_search: 'Mətn axtar (Grep)',
-  git_clone: 'GitHub Klonla'
+  git_clone: 'GitHub Klonla',
+  git_status: 'Git Status',
+  git_diff: 'Git Diff',
+  git_commit: 'Git Commit',
+  analyze_codebase: 'Kodu Analiz Et',
+  find_definition: 'Tərifini Tap',
+  find_references: 'İstinadları Tap'
 };

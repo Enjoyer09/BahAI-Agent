@@ -881,6 +881,91 @@ const TOOLS = [
                 required: ["query", "cwd"]
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "git_status",
+            description: "Shows the current git status (modified, staged, untracked files).",
+            parameters: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "git_diff",
+            description: "Shows git diff for modified files or a specific file.",
+            parameters: {
+                type: "object",
+                properties: {
+                    file: { type: "string", description: "Optional: specific file to diff" }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "git_commit",
+            description: "Creates a git commit with the given message.",
+            parameters: {
+                type: "object",
+                properties: {
+                    message: { type: "string", description: "Commit message" },
+                    files: { type: "array", items: { type: "string" }, description: "Files to stage (optional, stages all if empty)" }
+                },
+                required: ["message"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "analyze_codebase",
+            description: "Analyzes the codebase structure and provides a summary (file count, languages, dependencies).",
+            parameters: {
+                type: "object",
+                properties: {
+                    path: { type: "string", description: "Path to analyze (defaults to current directory)" }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "find_definition",
+            description: "Finds the definition of a function, class, or variable in the codebase.",
+            parameters: {
+                type: "object",
+                properties: {
+                    symbol: { type: "string", description: "Symbol name to find" },
+                    cwd: { type: "string" }
+                },
+                required: ["symbol", "cwd"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "find_references",
+            description: "Finds all references/usages of a function, class, or variable.",
+            parameters: {
+                type: "object",
+                properties: {
+                    symbol: { type: "string", description: "Symbol name to find references for" },
+                    cwd: { type: "string" }
+                },
+                required: ["symbol", "cwd"]
+            }
+        }
     }
 ];
 
@@ -1090,6 +1175,136 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                     return stdout.split('\n').slice(0, 50).join('\n') || "No matches found";
                 } catch (e) {
                     return "No matches found or grep error";
+                }
+            }
+
+            case "git_status": {
+                try {
+                    const { stdout } = await execFileAsync('git', ['status', '--short'], { cwd: workingDirectory, timeout: 5000 });
+                    return stdout || "No changes detected";
+                } catch (e) {
+                    return `Git status error: ${e.message}`;
+                }
+            }
+
+            case "git_diff": {
+                try {
+                    const gitArgs = args.file ? ['diff', args.file] : ['diff'];
+                    const { stdout } = await execFileAsync('git', gitArgs, { cwd: workingDirectory, timeout: 10000 });
+                    return stdout || "No differences found";
+                } catch (e) {
+                    return `Git diff error: ${e.message}`;
+                }
+            }
+
+            case "git_commit": {
+                try {
+                    // Stage files
+                    if (args.files && args.files.length > 0) {
+                        await execFileAsync('git', ['add', ...args.files], { cwd: workingDirectory, timeout: 5000 });
+                    } else {
+                        await execFileAsync('git', ['add', '-A'], { cwd: workingDirectory, timeout: 5000 });
+                    }
+                    
+                    // Commit
+                    const { stdout } = await execFileAsync('git', ['commit', '-m', args.message], { cwd: workingDirectory, timeout: 5000 });
+                    return stdout || `Committed: ${args.message}`;
+                } catch (e) {
+                    return `Git commit error: ${e.message}`;
+                }
+            }
+
+            case "analyze_codebase": {
+                const analyzePath = args.path ? path.resolve(workingDirectory, args.path) : workingDirectory;
+                if (!isPathSafe(analyzePath, workingDirectory, user)) return "Error: Path outside workspace";
+                
+                try {
+                    // Count files by extension
+                    const files = await glob('**/*', { 
+                        cwd: analyzePath, 
+                        ignore: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'],
+                        nodir: true 
+                    });
+                    
+                    const extensions = {};
+                    files.forEach(file => {
+                        const ext = path.extname(file) || 'no-extension';
+                        extensions[ext] = (extensions[ext] || 0) + 1;
+                    });
+                    
+                    // Check for package.json
+                    let dependencies = 'N/A';
+                    try {
+                        const pkgPath = path.join(analyzePath, 'package.json');
+                        const pkgContent = await fs.readFile(pkgPath, 'utf-8');
+                        const pkg = JSON.parse(pkgContent);
+                        const depCount = Object.keys(pkg.dependencies || {}).length;
+                        const devDepCount = Object.keys(pkg.devDependencies || {}).length;
+                        dependencies = `${depCount} dependencies, ${devDepCount} devDependencies`;
+                    } catch {}
+                    
+                    const summary = [
+                        `📊 Codebase Analysis:`,
+                        `Total files: ${files.length}`,
+                        `File types: ${JSON.stringify(extensions, null, 2)}`,
+                        `Dependencies: ${dependencies}`
+                    ].join('\n');
+                    
+                    return summary;
+                } catch (e) {
+                    return `Analysis error: ${e.message}`;
+                }
+            }
+
+            case "find_definition": {
+                const searchCwd = path.resolve(workingDirectory, args.cwd || '.');
+                if (!isPathSafe(searchCwd, workingDirectory, user)) return "Error: Path outside workspace";
+                
+                try {
+                    // Search for function/class definitions
+                    const patterns = [
+                        `function ${args.symbol}`,
+                        `const ${args.symbol}`,
+                        `let ${args.symbol}`,
+                        `class ${args.symbol}`,
+                        `export.*${args.symbol}`,
+                        `def ${args.symbol}`,  // Python
+                    ];
+                    
+                    const results = [];
+                    for (const pattern of patterns) {
+                        try {
+                            const { stdout } = await execFileAsync('grep', ['-rn', pattern, searchCwd], { 
+                                cwd: workingDirectory, 
+                                timeout: 5000 
+                            });
+                            if (stdout) results.push(stdout);
+                        } catch {}
+                    }
+                    
+                    return results.length > 0 
+                        ? results.join('\n').split('\n').slice(0, 20).join('\n')
+                        : `Definition of '${args.symbol}' not found`;
+                } catch (e) {
+                    return `Find definition error: ${e.message}`;
+                }
+            }
+
+            case "find_references": {
+                const searchCwd = path.resolve(workingDirectory, args.cwd || '.');
+                if (!isPathSafe(searchCwd, workingDirectory, user)) return "Error: Path outside workspace";
+                
+                try {
+                    const { stdout } = await execFileAsync('grep', ['-rn', args.symbol, searchCwd], { 
+                        cwd: workingDirectory, 
+                        timeout: 10000 
+                    });
+                    const lines = stdout.split('\n').slice(0, 50);
+                    return lines.length > 0 
+                        ? `Found ${lines.length} references:\n${lines.join('\n')}`
+                        : `No references found for '${args.symbol}'`;
+                } catch (e) {
+                    return `No references found for '${args.symbol}'`;
                 }
             }
 
@@ -1512,6 +1727,7 @@ app.post('/api/chat', async (req, res) => {
 
     const sysPrompt = `Sən bahAI İDE rəsmi AI Agentisən. Project Root: ${resolvedWD}.
 Sən professional proqramçı və UI/UX ekspertisən.
+
 MÜHÜM QAYDALAR:
 1. Kodu dəyişməzdən əvvəl glob_search və read_file ilə mütləq kodu analiz et.
 2. Dəyişiklik etdikdə YALNIZ file_edit istifadə et (bütöv faylı yenidən yazma).
@@ -1519,6 +1735,18 @@ MÜHÜM QAYDALAR:
 4. Əgər bir web səhifə yaratmısansa, onu görmək üçün mütləq bir server başlatmalısan (məs: 'npx serve' və ya 'npm run dev').
 5. SERVERİ TƏSDİQLƏ (KRİTİK): check_port_status alətini çağırmadan serverin işlədiyini iddia etmək QADAĞANDIR! Əgər bu aləti çağırmamısansa, "Server işləyir" demə! Əgər port aktiv deyilsə, serverin niyə qalxmadığını (logs) yoxla.
 6. İstifadəçi attachment/PDF göndəribsə, birbaşa həmin məzmunu analiz et. "Drag & drop et", "link göndər", "yenidən yüklə" kimi cavabları yalnız attachment ümumiyyətlə yoxdursa ver.
+
+YENİ TOOL-LAR (Claude Code-dan ilhamlanaraq):
+7. GIT WORKFLOW: git_status, git_diff, git_commit tool-larını istifadə edərək git əməliyyatlarını avtomatlaşdır.
+8. CODE ANALYSIS: analyze_codebase ilə layihə strukturunu analiz et, find_definition və find_references ilə kod naviqasiyası et.
+9. SMART SEARCH: grep_search ilə mətn axtar, find_definition ilə funksiya/class təriflərini tap.
+
+BEST PRACTICES:
+- Böyük dəyişikliklər etməzdən əvvəl git_status ilə mövcud vəziyyəti yoxla
+- Kod yazmadan əvvəl analyze_codebase ilə layihə strukturunu öyrən
+- Funksiya/class istifadə etməzdən əvvəl find_definition ilə tərifini tap
+- Dəyişiklikdən sonra git_commit ilə commit yarat
+
 Azərbaycan dilində cavab ver.`;
 
     let modelMessages = [];

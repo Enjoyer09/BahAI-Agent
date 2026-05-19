@@ -1,6 +1,46 @@
 # Dəyişikliklər (Changelog)
 
-## [Son Yeniləmələr] - 2024
+## [v2.0.0] - Claude Code Integration - 2024
+
+### 🎯 Claude Code Xüsusiyyətləri Əlavə Edildi
+
+[Claude Code](https://github.com/tanbiralam/claude-code) - Anthropic-in AI coding assistant-ından ilhamlanaraq 6 yeni tool əlavə edildi:
+
+#### 🔧 Git Workflow Tools:
+1. **git_status** - Mövcud git vəziyyətini göstərir (modified, staged, untracked)
+2. **git_diff** - Git diff göstərir (bütün fayllar və ya konkret fayl)
+3. **git_commit** - Avtomatik commit yaradır (message + optional files)
+
+#### 📊 Code Analysis Tools:
+4. **analyze_codebase** - Layihə strukturunu analiz edir (file count, languages, dependencies)
+
+#### 🔍 Code Navigation Tools:
+5. **find_definition** - Funksiya/class tərifini tapır
+6. **find_references** - Bütün istifadə yerlərini tapır
+
+### 📈 Performans Təkmilləşdirmələri:
+- Paralel tool execution dəstəyi
+- Smart caching (git status, codebase analysis)
+- Timeout protection (5-10s per tool)
+
+### 🎨 UI Təkmilləşdirmələri:
+- Yeni tool icon-ları (GitBranch, GitCommit, Code2, FileSearch, Eye)
+- Azərbaycan dilində tool labels
+- Tool execution progress göstəricisi
+
+### 🔒 Təhlükəsizlik:
+- Path safety yoxlaması
+- Command injection prevention (execFileAsync)
+- User workspace isolation
+
+### 📚 Sənədləşdirmə:
+- `CLAUDE_CODE_FEATURES.md` - Tam xüsusiyyət sənədləşdirməsi
+- Workflow nümunələri və best practices
+- API documentation
+
+---
+
+## [v1.0.0] - İlkin Buraxılış - 2024
 
 ### 🔐 Autentifikasiya və İstifadəçi İzolyasiyası
 
