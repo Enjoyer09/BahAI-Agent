@@ -17,6 +17,15 @@ if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
 // SEC-1: Login with Role
 async function login(req, res) {
   const { email, password } = req.body;
+  const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+
+  // In local mode, auto-authenticate with any credentials
+  if (isLocalMode) {
+    const localUser = { id: 9999, email: email || 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' };
+    const token = jwt.sign(localUser, JWT_SECRET, { expiresIn: '30d' });
+    return res.json({ token, user: localUser });
+  }
+
   try {
     const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     const user = result.rows[0];
@@ -26,8 +35,8 @@ async function login(req, res) {
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role }, 
-      JWT_SECRET, 
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -45,6 +54,14 @@ async function login(req, res) {
 async function register(req, res) {
   const { email, password, name, fullName } = req.body;
   const displayName = name || fullName || email?.split('@')[0];
+  const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+
+  // In local mode, auto-register without database
+  if (isLocalMode) {
+    const localUser = { id: 9999, email: email || 'admin@bahai.local', name: displayName || 'bahAI Developer', role: 'admin' };
+    const token = jwt.sign(localUser, JWT_SECRET, { expiresIn: '30d' });
+    return res.json({ token, user: localUser });
+  }
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email və şifrə tələb olunur' });
@@ -60,11 +77,11 @@ async function register(req, res) {
       'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
       [email.toLowerCase(), hashedPw, displayName, 'user']
     );
-    
+
     const user = result.rows[0];
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role }, 
-      JWT_SECRET, 
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 

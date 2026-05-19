@@ -60,12 +60,13 @@ function AppContent() {
     if (auth.user && !auth.loading) setAuthModalOpen(false);
   }, [auth.user, auth.loading]);
 
-  // Navigate to landing on sign out (only in online mode)
+  // Show auth modal when on /chat but not logged in (online mode only)
   useEffect(() => {
     if (!auth.loading && !auth.user && isChat) {
-      // In local mode with signed_out, show auth modal instead of redirecting
+      // In local mode, user is auto-logged in. Only show modal in online mode.
+      const hasToken = !!localStorage.getItem('auth_token');
       const isSignedOut = localStorage.getItem('signed_out') === '1';
-      if (isSignedOut) {
+      if (!hasToken || isSignedOut) {
         setAuthModalOpen(true);
       }
     }

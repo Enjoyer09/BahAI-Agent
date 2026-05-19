@@ -1576,6 +1576,7 @@ Azərbaycan dilində cavab ver.`;
                 const isRetryable = (() => {
                   const st = apiErr?.status || apiErr?.code;
                   const msg = String(apiErr?.message || '').toLowerCase();
+                  if (st === 401) return true;
                   if (st === 429 || st === 500 || st === 502 || st === 503 || st === 504) return true;
                   if (st === 400 && msg.includes('provider returned error')) return true;
                   if (!st && (msg.includes('network') || msg.includes('timeout') || msg.includes('fetch failed'))) return true;
