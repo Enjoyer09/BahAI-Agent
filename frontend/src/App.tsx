@@ -19,9 +19,7 @@ function AppContent() {
   const auth = useAuth();
   const settings = useSettings();
   const themeCtx = useTheme();
-  const [showLanding, setShowLanding] = useState(() => {
-    return !localStorage.getItem('skip_landing');
-  });
+  const [isChat, setIsChat] = useState(() => window.location.pathname === '/chat');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -62,6 +60,29 @@ function AppContent() {
     if (auth.user && !auth.loading) setAuthModalOpen(false);
   }, [auth.user, auth.loading]);
 
+  // Navigate to landing on sign out (only in online mode)
+  useEffect(() => {
+    if (!auth.loading && !auth.user && isChat) {
+      // In local mode with signed_out, show auth modal instead of redirecting
+      const isSignedOut = localStorage.getItem('signed_out') === '1';
+      if (isSignedOut) {
+        setAuthModalOpen(true);
+      }
+    }
+  }, [auth.user, auth.loading, isChat]);
+
+  // URL routing: /chat shows chat, everything else shows landing
+  useEffect(() => {
+    const onPopState = () => setIsChat(window.location.pathname === '/chat');
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const navigateToChat = () => {
+    window.history.pushState({}, '', '/chat');
+    setIsChat(true);
+  };
+
   if (auth.loading) {
     return (
       <div className="dvh-screen flex items-center justify-center" style={{ background: 'var(--bg-main)' }}>
@@ -76,15 +97,8 @@ function AppContent() {
   const autoPreview = chat.activeProject?.name?.match(/site|web|app|frontend|ui/i);
 
   // Landing page
-  if (showLanding) {
-    return (
-      <LandingPage
-        onGetStarted={() => {
-          localStorage.setItem('skip_landing', '1');
-          setShowLanding(false);
-        }}
-      />
-    );
+  if (!isChat) {
+    return <LandingPage onGetStarted={navigateToChat} />;
   }
 
   return (

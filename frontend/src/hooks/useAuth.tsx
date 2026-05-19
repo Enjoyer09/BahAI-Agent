@@ -1,7 +1,3 @@
-// ==========================================
-// useAuth Hook — Custom Railway Auth Integration
-// ==========================================
-
 import { createContext, useContext, useEffect, useState } from 'react';
 import { API_BASE_URL } from '../lib/constants';
 
@@ -28,14 +24,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check session on mount
     const verifySession = async () => {
       try {
-        // Fetch config to check if we are in Local Mode
         const configRes = await fetch(`${API_BASE_URL}/api/auth/config`);
         if (configRes.ok) {
           const configData = await configRes.json();
           if (configData.localMode) {
+            // Check if user explicitly signed out
+            if (localStorage.getItem('signed_out') === '1') {
+              setLoading(false);
+              return;
+            }
             setUser({ id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' });
             setLoading(false);
             return;
@@ -81,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Giriş uğursuzdur.');
 
+    localStorage.removeItem('signed_out');
     localStorage.setItem('auth_token', data.token);
     setUser(data.user);
   };
@@ -95,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Qeydiyyat uğursuzdur.');
 
+    localStorage.removeItem('signed_out');
     localStorage.setItem('auth_token', data.token);
     setUser(data.user);
   };
@@ -109,12 +110,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Google ilə giriş uğursuzdur.');
 
+    localStorage.removeItem('signed_out');
     localStorage.setItem('auth_token', data.token);
     setUser(data.user);
   };
 
   const signOut = () => {
     localStorage.removeItem('auth_token');
+    localStorage.setItem('signed_out', '1');
     setUser(null);
   };
 
