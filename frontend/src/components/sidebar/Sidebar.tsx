@@ -167,11 +167,23 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
   };
 
   const handleCreate = () => {
-    if (!newProjName || !newProjPath) {
-      toast.warning('Please enter a name and path.');
+    if (!newProjName) {
+      toast.warning('Layihə adı daxil edin.');
       return;
     }
-    chat.createProject(newProjName, newProjPath, addMode === 'remote' ? newProjRepo : undefined);
+    
+    // In production, path is auto-generated from workspace
+    const projPath = import.meta.env.MODE === 'production' 
+      ? `workspace://${newProjName.replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase()}`
+      : newProjPath;
+    
+    if (!projPath && import.meta.env.MODE !== 'production') {
+      toast.warning('Layihə yolu daxil edin.');
+      return;
+    }
+
+    const repoUrl = (addMode === 'remote' || import.meta.env.MODE === 'production') ? newProjRepo : undefined;
+    chat.createProject(newProjName, projPath, repoUrl || undefined);
     setShowAddModal(false);
     setNewProjName('');
     setNewProjPath('');
@@ -267,19 +279,22 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
                 boxShadow: 'var(--shadow-lg)',
               }}
             >
-              <button
-                onClick={() => { setAddMode('local'); setShowAddModal(true); setShowAddMenu(false); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors"
-                style={{ color: 'var(--fg-secondary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-              >
-                <FolderPlus size={14} /> Local Folder
-              </button>
+              {/* Local folder option — only in development */}
+              {import.meta.env.MODE !== 'production' && (
+                <button
+                  onClick={() => { setAddMode('local'); setShowAddModal(true); setShowAddMenu(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors"
+                  style={{ color: 'var(--fg-secondary)' }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <FolderPlus size={14} /> Lokal Qovluq
+                </button>
+              )}
               <button
                 onClick={() => { setAddMode('remote'); setShowAddModal(true); setShowAddMenu(false); }}
                 className="w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors"
-                style={{ color: 'var(--fg-secondary)', borderTop: '1px solid var(--border)' }}
+                style={{ color: 'var(--fg-secondary)', borderTop: import.meta.env.MODE !== 'production' ? '1px solid var(--border)' : 'none' }}
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
@@ -428,13 +443,13 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
                 style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
               />
 
-              {addMode === 'remote' && (
+              {(addMode === 'remote' || import.meta.env.MODE === 'production') && (
                 <div className="space-y-2">
                   <input
                     type="text"
                     value={newProjRepo}
                     onChange={e => setNewProjRepo(e.target.value)}
-                    placeholder="GitHub URL"
+                    placeholder="https://github.com/user/repo.git"
                     className="w-full px-3 py-2 text-sm rounded-lg outline-none"
                     style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
                   />
@@ -443,6 +458,9 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
                       {githubLoading ? 'Yüklənir...' : 'Repoları yüklə'}
                     </button>
                     {githubConnected && <span className="text-[11px]" style={{ color: 'var(--color-success)' }}>@{githubUsername}</span>}
+                    {!githubConnected && import.meta.env.MODE === 'production' && (
+                      <span className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>Private repo üçün Parametrlər → GitHub bağlayın</span>
+                    )}
                   </div>
                   {githubRepos.length > 0 && (
                     <select
@@ -456,30 +474,33 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
                     >
                       <option value="">Repo seçin...</option>
                       {githubRepos.map((repo) => (
-                        <option key={repo.id} value={repo.cloneUrl}>{repo.fullName} {repo.private ? '(şəxsi)' : ''}</option>
+                        <option key={repo.id} value={repo.cloneUrl}>{repo.fullName} {repo.private ? '🔒' : ''}</option>
                       ))}
                     </select>
                   )}
                 </div>
               )}
 
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newProjPath}
-                  onChange={e => setNewProjPath(e.target.value)}
-                  placeholder="/path/to/project"
-                  className="flex-1 px-3 py-2 text-sm rounded-lg outline-none"
-                  style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
-                />
-                <button
-                  onClick={handlePickDir}
-                  className="px-3 py-2 text-xs rounded-lg font-medium"
-                  style={{ background: 'var(--color-accent-muted)', color: 'var(--color-accent)' }}
-                >
-                  Gözdən keçir
-                </button>
-              </div>
+              {/* Local path — only in development mode */}
+              {addMode === 'local' && import.meta.env.MODE !== 'production' && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newProjPath}
+                    onChange={e => setNewProjPath(e.target.value)}
+                    placeholder="/path/to/project"
+                    className="flex-1 px-3 py-2 text-sm rounded-lg outline-none"
+                    style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
+                  />
+                  <button
+                    onClick={handlePickDir}
+                    className="px-3 py-2 text-xs rounded-lg font-medium"
+                    style={{ background: 'var(--color-accent-muted)', color: 'var(--color-accent)' }}
+                  >
+                    Gözdən keçir
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 mt-5">
