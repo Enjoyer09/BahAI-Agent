@@ -52,6 +52,12 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   const [pendingApprovals, setPendingApprovals] = useState<Array<{ approvalId: string; tool: string; args: string }>>([]);
   const [projectMemory, setProjectMemory] = useState<Record<string, unknown>>({});
 
+  // Ref to track current active conversation (avoids stale closure in sendMessage)
+  const activeConvIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeConvIdRef.current = activeConvId;
+  }, [activeConvId]);
+
   useEffect(() => {
     // Prevent cross-account bleed in the same browser session.
     setProjects([]);
@@ -190,6 +196,13 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   }, [activeProject?.id, serverBacked]);
 
   const createConversation = useCallback((projectId: string, title: string = 'Yeni söhbət') => {
+    // Abort any running request when creating a new conversation
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+    setLoading(false);
+
     const newConv: Conversation = {
       id: generateId(),
       projectId,
@@ -209,14 +222,14 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         .catch(console.error);
     }
     return newConv.id;
-  }, [serverBacked]);
+  }, [serverBacked, abortController]);
 
   const createProject = useCallback((name: string, path: string, repoUrl?: string) => {
     const newProj: Project = { id: generateId(), name, path, createdAt: Date.now(), repoUrl };
     const localConv: Conversation = {
       id: generateId(),
       projectId: newProj.id,
-      title: repoUrl ? `Import: ${name}` : 'Analiz və Planlaşdırma',
+      title: repoUrl ? `Import: ${name}` : 'Yeni söhbət',
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -247,12 +260,15 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     if (!input.trim() && attachments.length === 0) return;
     if (!activeConvId) return;
 
+    // Capture the conversation ID at the time of sending
+    const convId = activeConvId;
+
     const enrichedAttachments = await extractAttachments(attachments);
     const userMsg: Message = { id: generateId(), role: 'user', content: input, attachments: enrichedAttachments, timestamp: Date.now() };
     
     // Add user message to state
     let currentMsgs = [...messages, userMsg];
-    setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+    setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
     
     setLoading(true);
     setTaskPlan([]);
@@ -301,7 +317,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       await sendChatMessage(
         preparedMessages,
         settings.apiKey, settings.baseUrl, settings.model, activeProject?.path || settings.projectDir,
-        { safeMode, projectId: activeProject?.id, conversationId: activeConvId },
+        { safeMode, projectId: activeProject?.id, conversationId: convId },
         (event: any) => {
           if (event.type === 'task_plan') {
             setTaskPlan(Array.isArray(event.items) ? event.items : []);
@@ -310,7 +326,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
           if (event.type === 'error') {
             const errMsg: Message = { id: generateId(), role: 'assistant', content: `❌ Xəta: ${event.message}`, timestamp: Date.now() };
             currentMsgs = [...currentMsgs, errMsg];
-            setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
             return;
           }
           if (event.type === 'approval_request') {
@@ -334,7 +350,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
               };
               currentMsgs = [...currentMsgs, streamMsg];
             }
-            setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
             return;
           }
           if (event.type === 'assistant_message') {
@@ -367,8 +383,8 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
               }
             }
             
-            setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-            if (serverBacked) updateConversationOnServer(activeConvId, { messages: currentMsgs }).catch(console.error);
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+            if (serverBacked) updateConversationOnServer(convId, { messages: currentMsgs }).catch(console.error);
           } else if (event.type === 'tool_execution') {
             // IMMUTABLE UPDATE: Create a NEW messages array and NEW objects
             currentMsgs = currentMsgs.map((m, idx) => {
@@ -384,8 +400,8 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
               }
               return m;
             });
-            setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-            if (serverBacked) updateConversationOnServer(activeConvId, { messages: currentMsgs }).catch(console.error);
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+            if (serverBacked) updateConversationOnServer(convId, { messages: currentMsgs }).catch(console.error);
           } else if (event.type === 'tool_result') {
             // IMMUTABLE UPDATE: Enrich the tool_call and add a NEW tool message
             let updatedToolCallId = '';
@@ -424,8 +440,8 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
             }
 
             currentMsgs = [...currentMsgs, toolMsg];
-            setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-            if (serverBacked) updateConversationOnServer(activeConvId, { messages: currentMsgs }).catch(console.error);
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+            if (serverBacked) updateConversationOnServer(convId, { messages: currentMsgs }).catch(console.error);
             setPreviewKey(prev => prev + 1);
           } else if (event.type === 'workspace_updated') {
             // SEC-Audit: Safe null check for activeProject
@@ -452,7 +468,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         const errMsg: Message = { id: generateId(), role: 'assistant', content: `❌ Xəta: ${err.message}`, timestamp: Date.now() };
-        setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, messages: [...c.messages, errMsg], updatedAt: Date.now() } : c));
+        setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: [...c.messages, errMsg], updatedAt: Date.now() } : c));
       }
     } finally { setLoading(false); setAbortController(null); }
   }, [activeConvId, messages, settings, activeProject, updateProject, serverBacked, projectMemory, safeMode]);
@@ -511,7 +527,17 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     safeMode, setSafeMode, taskPlan, pendingApprovals, projectMemory,
     sendMessage, stop: () => { abortController?.abort(); setLoading(false); },
     decideApproval, runHealthCheck, runTerminalCommand, getDiffPreview, applyDiffPreview,
-    setActiveConvId, createProject, updateProject, archiveProject: (id: string, archived: boolean = true) => updateProject(id, { archived }),
+    setActiveConvId: (id: string | null) => {
+      // When switching conversations, abort current request and reset loading
+      if (id !== activeConvId) {
+        if (abortController) {
+          abortController.abort();
+          setAbortController(null);
+        }
+        setLoading(false);
+      }
+      setActiveConvId(id);
+    }, createProject, updateProject, archiveProject: (id: string, archived: boolean = true) => updateProject(id, { archived }),
     deleteProject: (id: string) => {
       setProjects(p => p.filter(x => x.id !== id));
       setConversations(c => c.filter(x => x.projectId !== id));

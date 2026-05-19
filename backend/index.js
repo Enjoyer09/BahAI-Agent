@@ -1365,7 +1365,7 @@ app.post('/api/projects', async (req, res) => {
     );
 
     const conversationId = crypto.randomUUID();
-    const title = repoUrl ? `Import: ${name}` : 'Analiz və Planlaşdırma';
+    const title = repoUrl ? `Import: ${name}` : 'Yeni söhbət';
     const conversation = await db.query(
       `INSERT INTO conversations (id, project_id, user_id, title, messages)
        VALUES ($1, $2, $3, $4, $5)
