@@ -205,9 +205,11 @@ export async function extractAttachments(attachments: Attachment[]): Promise<Att
     clearTimeout(timeoutId);
     
     if (!response.ok) {
+      // Extraction failed — keep original attachments with URL so backend can retry
+      console.warn('Attachment extraction failed:', response.status);
       return attachments.map(attachment => ({
         ...attachment,
-        extractedText: attachment.extractedText || '',
+        extractedText: '',
         extractionError: `Server xətası: ${response.status}`
       }));
     }
@@ -215,21 +217,23 @@ export async function extractAttachments(attachments: Attachment[]): Promise<Att
     const extracted = Array.isArray(data.attachments) ? data.attachments : [];
     return attachments.map(attachment => {
       const match = extracted.find((item: Attachment) => item.id === attachment.id);
-      return match ? { ...attachment, ...match } : attachment;
+      if (match && match.extractedText) {
+        // Extraction successful — keep extractedText, keep URL as backup
+        return { ...attachment, ...match, url: attachment.url };
+      }
+      // Extraction returned empty — keep original URL for backend retry
+      return { ...attachment, ...(match || {}), url: attachment.url };
     });
   } catch (err: any) {
     clearTimeout(timeoutId);
-    if (err.name === 'AbortError') {
-      return attachments.map(attachment => ({
-        ...attachment,
-        extractedText: attachment.extractedText || '',
-        extractionError: 'Fayl emalı vaxtı bitdi. Daha kiçik fayl göndərin.'
-      }));
-    }
+    console.warn('Attachment extraction error:', err?.message);
+    // On any error, keep original attachments with URL intact
     return attachments.map(attachment => ({
       ...attachment,
-      extractedText: attachment.extractedText || '',
-      extractionError: err?.message || 'Attachment extraction failed'
+      extractedText: '',
+      extractionError: err?.name === 'AbortError' 
+        ? 'Fayl emalı vaxtı bitdi.' 
+        : (err?.message || 'Extraction failed')
     }));
   }
 }

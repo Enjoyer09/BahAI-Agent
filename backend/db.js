@@ -50,6 +50,11 @@ async function initDb() {
     `);
 
     await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS last_active TIMESTAMP
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY,
         user_id INTEGER REFERENCES users(id),

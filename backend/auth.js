@@ -117,6 +117,12 @@ function verifyToken(req, res, next) {
   jwt.verify(token, JWT_SECRET, (err, decoded) => {
     if (err) return res.status(403).json({ error: 'Sessiya vaxtı bitib' });
     req.user = decoded; // Contains id, email, role
+    
+    // Update last_active timestamp (fire-and-forget)
+    if (decoded.id) {
+      db.query('UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = $1', [decoded.id]).catch(() => {});
+    }
+    
     next();
   });
 }

@@ -299,17 +299,21 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         return ({
         role: m.role,
         content: String(m.content || '').slice(0, 12000),
-        // Prevent multi-megabyte payloads on every turn:
-        // keep parsed attachment text, drop huge base64 data URLs.
-        attachments: m.attachments?.map((at: any) => ({
-          id: at.id,
-          name: at.name,
-          type: at.type,
-          mimeType: at.mimeType,
-          extractedText: at.extractedText || '',
-          extractionError: at.extractionError,
-          url: ''
-        })),
+        // Keep extracted text. If extraction failed on last user message, send URL for backend retry.
+        attachments: m.attachments?.map((at: any) => {
+          const hasText = at.extractedText && at.extractedText.trim();
+          return {
+            id: at.id,
+            name: at.name,
+            type: at.type,
+            mimeType: at.mimeType,
+            extractedText: at.extractedText || '',
+            extractionError: at.extractionError,
+            url: (!hasText && idx === historySlice.length - 1 && m.role === 'user')
+              ? (at.url || '')
+              : ''
+          };
+        }),
         tool_calls: trimmedToolCalls,
         tool_call_id: m.tool_call_id
       })});

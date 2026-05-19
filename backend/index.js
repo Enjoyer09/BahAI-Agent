@@ -493,6 +493,22 @@ async function normalizeMessagesForModel(messages = []) {
 
     // Attachment-ları paralel emal et
     const results = await Promise.all(message.attachments.map(async (attachment) => {
+      // If extractedText already exists (from frontend extraction), use it directly
+      if (attachment?.extractedText && typeof attachment.extractedText === 'string' && attachment.extractedText.trim()) {
+        return `\n\n[Attachment: ${attachment.name || 'attachment'} | ${attachment.mimeType || attachment.type || 'unknown'}]\n${attachment.extractedText.slice(0, 30000)}`;
+      }
+      
+      // If there was an extraction error from frontend, report it
+      if (attachment?.extractionError) {
+        return `\n\n[Attachment: ${attachment?.name || 'attachment'}]\nOxuma xətası: ${attachment.extractionError}`;
+      }
+
+      // Only try to extract if we have a data URL (not empty)
+      if (!attachment?.url || attachment.url === '') {
+        return `\n\n[Attachment: ${attachment?.name || 'attachment'} | ${attachment?.mimeType || 'unknown'}]\nFayl əlavə olunub, amma məzmunu çıxarıla bilmədi.`;
+      }
+
+      // Try extraction from data URL
       let extracted;
       try {
         extracted = await extractAttachment(attachment);
@@ -505,8 +521,6 @@ async function normalizeMessagesForModel(messages = []) {
       }
       if (extracted.extractedText) {
         return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 30000)}`;
-      } else if (attachment?.extractionError) {
-        return `\n\n[Attachment: ${attachment?.name || 'attachment'}]\nOxuma xətası: ${attachment.extractionError}`;
       } else {
         return `\n\n[Attachment: ${attachment?.name || extracted.name || 'attachment'} | ${attachment?.mimeType || extracted.mimeType || 'unknown'}]\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`;
       }
@@ -2239,18 +2253,33 @@ app.get('/api/admin/users', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
     if (isLocalMode) {
-      // Mock data for local testing
       return res.json({
         users: [
-          { id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin', created_at: new Date() },
-          { id: 1, email: 'kamran@gmail.com', name: 'Kamran Məmmədov', role: 'user', created_at: new Date() },
-          { id: 2, email: 'nazim@gmail.com', name: 'Nazim Əliyev', role: 'user', created_at: new Date() }
+          { id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin', created_at: new Date(), last_active: new Date(), conversation_count: 5, message_count: 42 },
+          { id: 1, email: 'kamran@gmail.com', name: 'Kamran Məmmədov', role: 'user', created_at: new Date(), last_active: new Date(Date.now() - 3600000), conversation_count: 3, message_count: 18 },
+          { id: 2, email: 'nazim@gmail.com', name: 'Nazim Əliyev', role: 'user', created_at: new Date(), last_active: null, conversation_count: 0, message_count: 0 }
         ]
       });
     }
 
-    const result = await db.query('SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC');
-    res.json({ users: result.rows });
+    const result = await db.query(`
+      SELECT 
+        u.id, u.email, u.name, u.role, u.created_at, u.last_active,
+        COUNT(DISTINCT c.id) AS conversation_count,
+        COALESCE(SUM(jsonb_array_length(c.messages)), 0) AS message_count
+      FROM users u
+      LEFT JOIN conversations c ON c.user_id = u.id
+      GROUP BY u.id
+      ORDER BY u.last_active DESC NULLS LAST, u.created_at DESC
+    `);
+    
+    res.json({ 
+      users: result.rows.map(row => ({
+        ...row,
+        conversation_count: parseInt(row.conversation_count) || 0,
+        message_count: parseInt(row.message_count) || 0
+      }))
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
