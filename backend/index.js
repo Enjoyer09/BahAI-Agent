@@ -72,6 +72,8 @@ const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
     ];
 const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../sandbox'));
 const isLocalMode = () => process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+const PROVIDER_COOLDOWN_MS = parseInt(process.env.PROVIDER_COOLDOWN_MS || '20000', 10);
+const providerRuntime = new Map();
 
 // Startup diagnostics
 const diagKey = process.env.OPENAI_API_KEY;
@@ -86,6 +88,80 @@ console.log('🔧 Startup Config:', {
   NODE_ENV: process.env.NODE_ENV || '(not set)',
   isLocalMode: isLocalMode()
 });
+
+function parseProviderPoolFromEnv() {
+  const raw = process.env.AI_PROVIDER_POOL || process.env.OPENAI_PROVIDER_POOL || '';
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((p, i) => ({
+        id: p.id || `pool_${i + 1}`,
+        apiKey: String(p.apiKey || '').trim(),
+        baseURL: String(p.baseURL || p.baseUrl || '').trim(),
+        model: String(p.model || '').trim()
+      }))
+      .filter((p) => p.apiKey && p.baseURL && p.model);
+  } catch {
+    return [];
+  }
+}
+
+function canUseProviderNow(providerId) {
+  const state = providerRuntime.get(providerId);
+  if (!state) return true;
+  return !state.cooldownUntil || state.cooldownUntil < Date.now();
+}
+
+function markProviderFailure(providerId) {
+  const prev = providerRuntime.get(providerId) || { fails: 0, cooldownUntil: 0 };
+  const fails = prev.fails + 1;
+  providerRuntime.set(providerId, {
+    fails,
+    cooldownUntil: Date.now() + Math.min(PROVIDER_COOLDOWN_MS * fails, 120000)
+  });
+}
+
+function markProviderSuccess(providerId) {
+  providerRuntime.set(providerId, { fails: 0, cooldownUntil: 0 });
+}
+
+function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendModel }) {
+  const list = [];
+
+  if (frontendApiKey && frontendBaseUrl && frontendModel) {
+    list.push({
+      id: 'frontend',
+      apiKey: frontendApiKey,
+      baseURL: frontendBaseUrl,
+      model: frontendModel
+    });
+  }
+
+  for (const p of parseProviderPoolFromEnv()) {
+    list.push(p);
+  }
+
+  const envApiKey = process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY || '';
+  const envBase = process.env.OPENAI_BASE_URL || 'https://integrate.api.nvidia.com/v1';
+  const envModel = process.env.OPENAI_MODEL || 'meta/llama-3.3-70b-instruct';
+  if (envApiKey) {
+    list.push({
+      id: process.env.OPENAI_API_KEY ? 'env_openai' : 'env_nvidia',
+      apiKey: envApiKey,
+      baseURL: envBase,
+      model: envModel
+    });
+  }
+
+  const dedup = new Map();
+  for (const p of list) {
+    const k = `${p.apiKey}|${p.baseURL}|${p.model}`;
+    if (!dedup.has(k)) dedup.set(k, p);
+  }
+  return Array.from(dedup.values());
+}
 
 // ==========================================
 // Security helpers
@@ -1399,21 +1475,23 @@ app.post('/api/chat', async (req, res) => {
     await ensureDir(resolvedWD);
 
     const frontendApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
-    const envApiKey = process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY || '';
-    let effectiveApiKey = frontendApiKey || envApiKey;
-    const effectiveBaseUrl = (typeof baseUrl === 'string' ? baseUrl.trim() : '') || process.env.OPENAI_BASE_URL || "https://integrate.api.nvidia.com/v1";
-    const effectiveModel = model || process.env.OPENAI_MODEL || 'meta/llama-3.3-70b-instruct';
+    const frontendBaseUrl = (typeof baseUrl === 'string' ? baseUrl.trim() : '') || process.env.OPENAI_BASE_URL || "https://integrate.api.nvidia.com/v1";
+    const frontendModel = model || process.env.OPENAI_MODEL || 'meta/llama-3.3-70b-instruct';
+    const providerCandidates = buildProviderCandidates({
+      frontendApiKey,
+      frontendBaseUrl,
+      frontendModel
+    });
 
-    let keySource = frontendApiKey ? 'frontend' : process.env.OPENAI_API_KEY ? 'env' : process.env.NVIDIA_API_KEY ? 'nvidia_env' : 'none';
-    console.log(`🤖 /api/chat | model=${effectiveModel} | base=${effectiveBaseUrl} | key_source=${keySource}`);
-
-    if (!effectiveApiKey) {
+    if (providerCandidates.length === 0) {
         return res.status(400).json({
             error: "Süni İntellekt API Açarı tapılmadı! Layihəni lokalda (Railway-dən asılı olmadan) işlətmək üçün layihə qovluğundakı `.env` faylına OPENAI_API_KEY və OPENAI_BASE_URL açarlarını əlavə edin."
         });
     }
-
-    let client = new OpenAI({ baseURL: effectiveBaseUrl, apiKey: effectiveApiKey });
+    let activeProvider = providerCandidates.find((p) => canUseProviderNow(p.id)) || providerCandidates[0];
+    let client = new OpenAI({ baseURL: activeProvider.baseURL, apiKey: activeProvider.apiKey });
+    let effectiveModel = activeProvider.model;
+    console.log(`🤖 /api/chat | provider_candidates=${providerCandidates.length} | active=${activeProvider.id} | model=${effectiveModel}`);
 
     const sysPrompt = `Sən bahAI İDE rəsmi AI Agentisən. Project Root: ${resolvedWD}.
 Sən professional proqramçı və UI/UX ekspertisən.
@@ -1495,28 +1573,41 @@ Azərbaycan dilində cavab ver.`;
                     stream: true
                 }, { signal: abortController.signal });
             } catch (apiErr) {
-                // If frontend key is invalid, automatically fallback to server env key once.
-                if (
-                  apiErr?.status === 401 &&
-                  keySource === 'frontend' &&
-                  envApiKey &&
-                  envApiKey !== effectiveApiKey
-                ) {
-                  console.warn('⚠️ Frontend API key failed, falling back to env key');
-                  effectiveApiKey = envApiKey;
-                  keySource = process.env.OPENAI_API_KEY ? 'env' : 'nvidia_env';
-                  client = new OpenAI({ baseURL: effectiveBaseUrl, apiKey: effectiveApiKey });
-                  try {
-                    stream = await client.chat.completions.create({
-                      model: effectiveModel,
-                      messages: currentMessages,
-                      tools: TOOLS,
-                      temperature: 0.2,
-                      stream: true
-                    }, { signal: abortController.signal });
-                  } catch (retryErr) {
-                    apiErr = retryErr;
+                const isRetryable = (() => {
+                  const st = apiErr?.status || apiErr?.code;
+                  const msg = String(apiErr?.message || '').toLowerCase();
+                  if (st === 429 || st === 500 || st === 502 || st === 503 || st === 504) return true;
+                  if (st === 400 && msg.includes('provider returned error')) return true;
+                  if (!st && (msg.includes('network') || msg.includes('timeout') || msg.includes('fetch failed'))) return true;
+                  return false;
+                })();
+
+                if (isRetryable && providerCandidates.length > 1) {
+                  markProviderFailure(activeProvider.id);
+                  const alternatives = providerCandidates.filter((p) => p.id !== activeProvider.id && canUseProviderNow(p.id));
+                  for (const alt of alternatives) {
+                    try {
+                      const altClient = new OpenAI({ baseURL: alt.baseURL, apiKey: alt.apiKey });
+                      stream = await altClient.chat.completions.create({
+                        model: alt.model,
+                        messages: currentMessages,
+                        tools: TOOLS,
+                        temperature: 0.2,
+                        stream: true
+                      }, { signal: abortController.signal });
+                      activeProvider = alt;
+                      client = altClient;
+                      effectiveModel = alt.model;
+                      markProviderSuccess(alt.id);
+                      console.log(`🔁 Provider failover: switched to ${alt.id}`);
+                      break;
+                    } catch (altErr) {
+                      apiErr = altErr;
+                      markProviderFailure(alt.id);
+                    }
                   }
+                } else {
+                  markProviderFailure(activeProvider.id);
                 }
                 clearTimeout(timeoutId);
                 if (stream) {
