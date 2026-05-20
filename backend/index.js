@@ -417,7 +417,7 @@ async function extractAttachment(attachment) {
   }
 
   const decoded = decodeDataUrl(attachment?.url);
-  const mimeType = attachment?.mimeType || decoded?.mimeType || attachment?.type || 'application/octet-stream';
+  const mimeType = attachment?.mimeType || decoded?.mimeType || attachment?.type || 'text/plain';
   const name = attachment?.name || 'attachment';
 
   try {
@@ -425,55 +425,23 @@ async function extractAttachment(attachment) {
       return { name, mimeType, extractedText: '' };
     }
 
-    if (mimeType === 'application/pdf' || name.toLowerCase().endsWith('.pdf')) {
-      const data = await pdfParse(decoded.buffer);
-      return { name, mimeType, extractedText: data.text || '' };
-    }
-
-    if (
-      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      name.toLowerCase().endsWith('.docx')
-    ) {
-      const text = await extractDocxText(decoded.buffer);
-      return { name, mimeType, extractedText: text || '' };
-    }
-
-    if (
-      mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      mimeType === 'application/vnd.ms-excel' ||
-      name.toLowerCase().endsWith('.xlsx') ||
-      name.toLowerCase().endsWith('.xls')
-    ) {
-      const text = extractSpreadsheetText(decoded.buffer);
-      return { name, mimeType, extractedText: text || '' };
-    }
-
+    // Only support text-based files
     if (
       mimeType.startsWith('text/') ||
       mimeType.includes('json') ||
       mimeType.includes('xml') ||
-      /\.(log|txt|json|csv|md|yaml|yml|env)$/i.test(name)
+      mimeType.includes('javascript') ||
+      mimeType.includes('typescript') ||
+      /\.(txt|json|csv|md|yaml|yml|xml|log|env|js|ts|jsx|tsx|py|html|css|sh|toml|ini|cfg|conf)$/i.test(name)
     ) {
-      return { name, mimeType, extractedText: decoded.buffer.toString('utf8') };
+      const text = decoded.buffer.toString('utf8');
+      return { name, mimeType, extractedText: text.slice(0, 50000) };
     }
 
-    if (mimeType.startsWith('image/')) {
-      let ocrText = '';
-      try {
-        ocrText = await extractImageText(decoded.buffer);
-      } catch (e) {
-        ocrText = '';
-      }
-      const extractedText = ocrText?.trim()
-        ? `[Şəkildən OCR mətni]\n${ocrText.trim()}`
-        : `[Şəkil əlavə olunub: ${name}]`;
-      return { name, mimeType, imageUrl: attachment.url, extractedText };
-    }
-
-    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}, ${mimeType}]` };
+    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}. Yalnız mətn faylları (txt, json, csv, md, js, ts, py, html, css) dəstəklənir.]` };
   } catch (error) {
     console.error('Attachment parse xətası:', name, error?.message || error);
-    return { name, mimeType, extractedText: `[Attachment oxunarkən xəta baş verdi: ${name}]` };
+    return { name, mimeType, extractedText: `[Attachment oxunarkən xəta: ${name}]` };
   }
 }
 
@@ -495,7 +463,7 @@ async function normalizeMessagesForModel(messages = []) {
     const results = await Promise.all(message.attachments.map(async (attachment) => {
       // If extractedText already exists (from frontend extraction), use it directly
       if (attachment?.extractedText && typeof attachment.extractedText === 'string' && attachment.extractedText.trim()) {
-        return `\n\n[Attachment: ${attachment.name || 'attachment'} | ${attachment.mimeType || attachment.type || 'unknown'}]\n${attachment.extractedText.slice(0, 30000)}`;
+        return `\n\n[Attachment: ${attachment.name || 'attachment'} | ${attachment.mimeType || attachment.type || 'unknown'}]\n${attachment.extractedText.slice(0, 6000)}`;
       }
       
       // If there was an extraction error from frontend, report it
@@ -520,7 +488,7 @@ async function normalizeMessagesForModel(messages = []) {
         };
       }
       if (extracted.extractedText) {
-        return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 30000)}`;
+        return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 6000)}`;
       } else {
         return `\n\n[Attachment: ${attachment?.name || extracted.name || 'attachment'} | ${attachment?.mimeType || extracted.mimeType || 'unknown'}]\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`;
       }
@@ -1956,7 +1924,9 @@ Azərbaycan dilində cavab ver.`;
                   if (apiErr.status === 401) {
                       userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
                   } else if (apiErr.status === 429) {
-                      userMsg = 'API limiti aşıldı. Bir az gözləyib yenidən cəhd edin.';
+                      userMsg = 'API limiti aşıldı (rate limit). 1-2 dəqiqə gözləyib yenidən cəhd edin.';
+                  } else if (apiErr.status === 503) {
+                      userMsg = 'AI servisi müvəqqəti əlçatmazdır. Mesajınız çox böyük ola bilər — daha qısa mesaj göndərin və ya bir neçə dəqiqə gözləyin.';
                   } else if (apiErr.status === 404) {
                       userMsg = `Model tapılmadı: "${effectiveModel}". Ayarlardan model adını yoxlayın.`;
                   }

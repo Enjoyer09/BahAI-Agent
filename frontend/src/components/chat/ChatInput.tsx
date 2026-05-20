@@ -50,10 +50,20 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
 
   const pushFiles = useCallback((files: FileList | null) => {
     if (!files) return;
+    const ALLOWED_EXTENSIONS = ['.txt', '.json', '.csv', '.md', '.yaml', '.yml', '.xml', '.log', '.env', '.js', '.ts', '.jsx', '.tsx', '.py', '.html', '.css'];
+    
     Array.from(files).forEach(file => {
-      // File size check: max 20MB per file
-      if (file.size > 20 * 1024 * 1024) {
-        alert(`"${file.name}" faylı çox böyükdür (${(file.size / 1024 / 1024).toFixed(1)}MB). Maksimum 20MB icazə verilir.`);
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      const isText = file.type.startsWith('text/') || file.type.includes('json') || file.type.includes('xml');
+      
+      if (!ALLOWED_EXTENSIONS.includes(ext) && !isText) {
+        alert(`"${file.name}" dəstəklənmir. Yalnız mətn faylları qəbul edilir: ${ALLOWED_EXTENSIONS.join(', ')}`);
+        return;
+      }
+      
+      // File size check: max 1MB per file (text files shouldn't be larger)
+      if (file.size > 1 * 1024 * 1024) {
+        alert(`"${file.name}" çox böyükdür (${(file.size / 1024 / 1024).toFixed(1)}MB). Maksimum 1MB.`);
         return;
       }
       const reader = new FileReader();
@@ -61,8 +71,8 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
         setAttachments(prev => [...prev, {
           id: crypto.randomUUID(),
           name: file.name,
-          type: file.type.startsWith('image/') ? 'image' : 'file',
-          mimeType: file.type || 'application/octet-stream',
+          type: 'file',
+          mimeType: file.type || 'text/plain',
           url: ev.target?.result as string
         }]);
       };
@@ -186,6 +196,7 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
             ref={fileInputRef}
             onChange={(e) => { pushFiles(e.target.files); e.target.value = ''; }}
             multiple
+            accept=".txt,.json,.csv,.md,.yaml,.yml,.xml,.log,.env,.js,.ts,.jsx,.tsx,.py,.html,.css"
             className="hidden"
             aria-hidden="true"
           />

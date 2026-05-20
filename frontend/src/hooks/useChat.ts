@@ -281,7 +281,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         .then(plan => setTaskPlan(plan.items))
         .catch(() => setTaskPlan([]));
 
-      const MAX_HISTORY_MESSAGES = 24;
+      const MAX_HISTORY_MESSAGES = 16;
       const historySlice = currentMsgs.slice(-MAX_HISTORY_MESSAGES);
       const preparedMessages = historySlice.map((m, idx) => {
         const isRecent = idx >= historySlice.length - 6;
@@ -298,7 +298,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
 
         return ({
         role: m.role,
-        content: String(m.content || '').slice(0, 12000),
+        content: String(m.content || '').slice(0, 8000),
         // Keep extracted text. If extraction failed on last user message, send URL for backend retry.
         attachments: m.attachments?.map((at: any) => {
           const hasText = at.extractedText && at.extractedText.trim();
