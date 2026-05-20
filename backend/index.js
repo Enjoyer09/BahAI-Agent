@@ -548,21 +548,41 @@ function serializeConversation(row) {
 
 const pendingApprovals = new Map();
 const activeChatByUser = new Map();
-const activeChatByConversation = new Map(); // Track by conversation ID instead of just user
+const activeChatByConversation = new Map();
 let activeChatTotal = 0;
 const MAX_ACTIVE_CHAT_TOTAL = parseInt(process.env.MAX_ACTIVE_CHAT_TOTAL || '50', 10);
 const MAX_ACTIVE_CHAT_PER_USER = parseInt(process.env.MAX_ACTIVE_CHAT_PER_USER || '5', 10);
-const CHAT_QUEUE_TIMEOUT_MS = parseInt(process.env.CHAT_QUEUE_TIMEOUT_MS || '30000', 10);
+const CHAT_QUEUE_TIMEOUT_MS = parseInt(process.env.CHAT_QUEUE_TIMEOUT_MS || '5000', 10);
+const CHAT_SLOT_MAX_AGE_MS = 120000; // Force-release stuck slots after 2 minutes
 const chatQueue = [];
+
+function cleanupStaleSlots() {
+  const now = Date.now();
+  for (const [cid, info] of activeChatByConversation.entries()) {
+    if (now - info.startedAt > CHAT_SLOT_MAX_AGE_MS) {
+      console.warn(`⚠️ Force-releasing stale chat slot: conversation=${cid}, age=${Math.round((now - info.startedAt) / 1000)}s`);
+      releaseChatSlot(info.userId, cid);
+    }
+  }
+}
 
 function acquireChatSlot(userId, conversationId) {
   const uid = String(userId || 'anon');
   const cid = String(conversationId || 'default');
   
-  // Allow multiple conversations per user to run in parallel
-  // Only block if the SAME conversation is already running
+  // Cleanup stale slots first
+  cleanupStaleSlots();
+  
+  // If same conversation has a stuck slot, force-release it
   if (activeChatByConversation.has(cid)) {
-    return false; // Same conversation already running
+    const existing = activeChatByConversation.get(cid);
+    const age = Date.now() - existing.startedAt;
+    if (age > CHAT_SLOT_MAX_AGE_MS) {
+      // Force release stale slot
+      releaseChatSlot(existing.userId, cid);
+    } else {
+      return false; // Same conversation already running (legitimately)
+    }
   }
   
   const byUser = activeChatByUser.get(uid) || 0;
@@ -613,8 +633,12 @@ function drainChatQueue() {
 }
 
 async function acquireChatSlotQueued(userId, conversationId, req) {
+  // First cleanup any stale slots
+  cleanupStaleSlots();
+  
   if (acquireChatSlot(userId, conversationId)) return true;
 
+  // Short wait — if slot doesn't free up quickly, fail fast
   const ticketId = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const onClose = () => {
@@ -1710,8 +1734,8 @@ app.post('/api/chat', async (req, res) => {
     } catch (queueErr) {
       res.setHeader('Retry-After', '5');
       const msg = queueErr?.message === 'Queue timeout'
-        ? 'Server hazırda yüklənib. Sorğu növbə vaxtını keçdi, zəhmət olmasa yenidən cəhd edin.'
-        : 'Sorğu növbəyə alınmadı. Yenidən cəhd edin.';
+        ? 'Bu söhbətdə əvvəlki sorğu hələ davam edir. Bir neçə saniyə gözləyin.'
+        : 'Sorğu göndərilə bilmədi. Yenidən cəhd edin.';
       return res.status(503).json({ error: msg });
     }
     
