@@ -111,6 +111,17 @@ async function initDb() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS telemetry (
+        id SERIAL PRIMARY KEY,
+        device_id TEXT NOT NULL,
+        event TEXT NOT NULL,
+        data JSONB DEFAULT '{}',
+        app_version TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;
 

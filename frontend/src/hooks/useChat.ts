@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Message, Conversation, Project, Settings } from '../lib/types';
+import { trackChatMessage, trackChatError, trackToolUse } from '../lib/telemetry';
 import {
   applyDiff,
   createConversationOnServer,
@@ -229,7 +230,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     const localConv: Conversation = {
       id: generateId(),
       projectId: newProj.id,
-      title: repoUrl ? `Import: ${name}` : 'Yeni söhbət',
+      title: name,
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -330,6 +331,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
           if (event.type === 'error') {
             const errMsg: Message = { id: generateId(), role: 'assistant', content: `❌ Xəta: ${event.message}`, timestamp: Date.now() };
             currentMsgs = [...currentMsgs, errMsg];
+            trackChatError(settings.model, event.message);
             setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
             return;
           }
@@ -390,6 +392,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
             setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
             if (serverBacked) updateConversationOnServer(convId, { messages: currentMsgs }).catch(console.error);
           } else if (event.type === 'tool_execution') {
+            trackToolUse(event.tool);
             // IMMUTABLE UPDATE: Create a NEW messages array and NEW objects
             currentMsgs = currentMsgs.map((m, idx) => {
               if (idx === currentMsgs.length - 1 && m.role === 'assistant' && m.tool_calls) {
@@ -474,7 +477,13 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         const errMsg: Message = { id: generateId(), role: 'assistant', content: `❌ Xəta: ${err.message}`, timestamp: Date.now() };
         setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: [...c.messages, errMsg], updatedAt: Date.now() } : c));
       }
-    } finally { setLoading(false); setAbortController(null); }
+    } finally { 
+      setLoading(false); 
+      setAbortController(null);
+      // Track response time
+      const responseTime = Date.now() - userMsg.timestamp;
+      trackChatMessage(settings.model, responseTime);
+    }
   }, [activeConvId, messages, settings, activeProject, updateProject, serverBacked, projectMemory, safeMode]);
 
   const decideApproval = useCallback(async (approvalId: string, decision: 'approve' | 'reject') => {

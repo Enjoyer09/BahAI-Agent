@@ -16,6 +16,44 @@ if (!gotTheLock) {
   app.quit();
 }
 
+// Set app name for Dock and menu bar
+if (app.dock) {
+  app.dock.setBadge('');
+}
+app.setName('bahAI');
+
+// Register custom protocol for OAuth callback
+if (process.defaultApp) {
+  app.setAsDefaultProtocolClient('bahai', process.execPath, [path.resolve(process.argv[1])]);
+} else {
+  app.setAsDefaultProtocolClient('bahai');
+}
+
+// Handle OAuth callback URL (bahai://auth/callback?token=xxx)
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  console.log('🔑 OAuth callback received:', url);
+  
+  try {
+    const parsed = new URL(url);
+    const token = parsed.searchParams.get('token');
+    const userJson = parsed.searchParams.get('user');
+    
+    if (token && mainWindow) {
+      // Send token to renderer
+      mainWindow.webContents.executeJavaScript(`
+        localStorage.setItem('auth_token', '${token}');
+        localStorage.removeItem('signed_out');
+        ${userJson ? `localStorage.setItem('auth_user', '${userJson}');` : ''}
+        window.location.href = '/chat';
+      `);
+      mainWindow.focus();
+    }
+  } catch (err) {
+    console.error('OAuth callback error:', err);
+  }
+});
+
 app.on('second-instance', () => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -183,16 +221,26 @@ function createWindow() {
   });
 
   // Load the app
-  if (isDev) {
+  if (process.argv.includes('--dev')) {
+    // Dev mode: use Vite dev server
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
+    // Production/normal mode: start from landing page (user needs to login)
     mainWindow.loadURL(`http://localhost:${BACKEND_PORT}`);
   }
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  // Retry loading if page fails (backend might not be fully ready)
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.log('Page load failed, retrying in 1s...', errorDescription);
+    setTimeout(() => {
+      mainWindow.loadURL(`http://localhost:${BACKEND_PORT}/chat`);
+    }, 1000);
   });
 
   // Open external links in browser
@@ -211,11 +259,22 @@ function createMenu() {
     {
       label: 'bahAI',
       submenu: [
-        { label: 'bahAI haqqında', role: 'about' },
+        { 
+          label: 'bahAI haqqında',
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'bahAI haqqında',
+              message: 'bahAI',
+              detail: `Versiya: 1.0.0\nAI Coding Agent\n\nNode.js: ${process.versions.node}\nElectron: ${process.versions.electron}\nChromium: ${process.versions.chrome}\n\n© 2024 bahAI Team`,
+              buttons: ['OK']
+            });
+          }
+        },
         { type: 'separator' },
         { label: 'Parametrlər...', accelerator: 'Cmd+,', click: () => mainWindow?.webContents.send('open-settings') },
         { type: 'separator' },
-        { label: 'Gizlə', role: 'hide' },
+        { label: 'bahAI-ı gizlə', role: 'hide' },
         { label: 'Digərlərini gizlə', role: 'hideOthers' },
         { label: 'Hamısını göstər', role: 'unhide' },
         { type: 'separator' },
@@ -263,6 +322,9 @@ function createMenu() {
 
 // App lifecycle
 app.whenReady().then(async () => {
+  // Set app name
+  app.setName('bahAI');
+  
   createMenu();
 
   try {

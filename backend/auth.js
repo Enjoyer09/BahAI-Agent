@@ -104,37 +104,58 @@ async function register(req, res) {
 // SEC-3: Middleware to verify Token & Role
 function verifyToken(req, res, next) {
   const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  // If token exists, always verify it (even in local mode)
+  if (token) {
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+      if (err) {
+        // Token invalid — in local mode fallback to admin, in online mode reject
+        if (isLocalMode) {
+          req.user = { id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' };
+          return next();
+        }
+        return res.status(403).json({ error: 'Sessiya vaxtı bitib' });
+      }
+      req.user = decoded;
+      
+      // Update last_active timestamp (fire-and-forget)
+      if (decoded.id && db.hasDatabase()) {
+        db.query('UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = $1', [decoded.id]).catch(() => {});
+      }
+      
+      next();
+    });
+    return;
+  }
+
+  // No token — in local mode auto-login as admin, in online mode reject
   if (isLocalMode) {
     req.user = { id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' };
     return next();
   }
 
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) return res.status(401).json({ error: 'Giriş qadağandır' });
-
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(403).json({ error: 'Sessiya vaxtı bitib' });
-    req.user = decoded; // Contains id, email, role
-    
-    // Update last_active timestamp (fire-and-forget)
-    if (decoded.id) {
-      db.query('UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = $1', [decoded.id]).catch(() => {});
-    }
-    
-    next();
-  });
+  return res.status(401).json({ error: 'Giriş qadağandır' });
 }
 
 // SEC-4: Get current user (/me)
 async function getMe(req, res) {
+  // If user info is already in the token (local mode), return it directly
+  if (!db.hasDatabase() || (process.env.LOCAL_MODE === 'true')) {
+    return res.json({ user: { id: req.user.id, email: req.user.email, name: req.user.name || req.user.email?.split('@')[0], role: req.user.role || 'user' } });
+  }
+  
   try {
     const result = await db.query('SELECT id, email, name, role FROM users WHERE id = $1', [req.user.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'İstifadəçi tapılmadı' });
+    if (result.rows.length === 0) {
+      // User not in DB but has valid token — return token info
+      return res.json({ user: { id: req.user.id, email: req.user.email, name: req.user.name || req.user.email?.split('@')[0], role: req.user.role || 'user' } });
+    }
     res.json({ user: result.rows[0] });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    // DB error — fallback to token info
+    res.json({ user: { id: req.user.id, email: req.user.email, name: req.user.name || req.user.email?.split('@')[0], role: req.user.role || 'user' } });
   }
 }
 
@@ -203,6 +224,165 @@ function getAuthConfig(req, res) {
     localMode: process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL
   });
 }
+
+// Desktop OAuth callback page - redirects token back to Electron via custom protocol
+router.get('/desktop-callback', (req, res) => {
+  const { token, user } = req.query;
+  res.send(`<!DOCTYPE html>
+<html>
+<head><title>bahAI - Giriş uğurlu</title>
+<style>
+  body { font-family: -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0f0f0f; color: #fff; }
+  .container { text-align: center; }
+  h1 { color: #6366f1; }
+  p { color: #999; margin-top: 12px; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>✅ Giriş uğurlu!</h1>
+    <p>bahAI tətbiqinə qayıdırsınız...</p>
+  </div>
+  <script>
+    window.location.href = 'bahai://auth/callback?token=${encodeURIComponent(token || '')}&user=${encodeURIComponent(user || '')}';
+    setTimeout(function() { window.close(); }, 3000);
+  </script>
+</body>
+</html>`);
+});
+
+// Google OAuth for Desktop - no database needed, creates JWT from Google info
+router.post('/google-login-desktop', async (req, res) => {
+  const { credential } = req.body;
+  if (!credential) {
+    return res.status(400).json({ error: 'Google məlumatı tapılmadı' });
+  }
+  try {
+    const tokenInfoUrl = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential);
+    const tokenInfoResponse = await fetch(tokenInfoUrl);
+    if (!tokenInfoResponse.ok) {
+      return res.status(401).json({ error: 'Google token doğrulanmadı' });
+    }
+    const googleUser = await tokenInfoResponse.json();
+    const { email, name, email_verified } = googleUser;
+
+    if (!email || (email_verified !== 'true' && email_verified !== true)) {
+      return res.status(400).json({ error: 'Google-dan etibarlı e-poçt alınmadı' });
+    }
+
+    const user = { 
+      id: Math.abs(email.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 99999), 
+      email: email.toLowerCase(), 
+      name: name || email.split('@')[0], 
+      role: 'admin' 
+    };
+    const token = jwt.sign(user, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user });
+  } catch (e) {
+    console.error('Google Desktop Login Error:', e);
+    res.status(500).json({ error: 'Google ilə daxil olarkən xəta' });
+  }
+});
+
+// Google OAuth Authorization Code callback (for desktop/popup flow)
+router.get('/google-callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) {
+    return res.status(400).send('Authorization code tapılmadı');
+  }
+
+  try {
+    // Exchange code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: String(code),
+        client_id: process.env.GOOGLE_CLIENT_ID || '',
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+        redirect_uri: `${req.protocol}://${req.get('host')}/api/auth/google-callback`,
+        grant_type: 'authorization_code'
+      })
+    });
+
+    if (!tokenResponse.ok) {
+      const err = await tokenResponse.text();
+      console.error('Google token exchange failed:', err);
+      return res.status(401).send('Google token alına bilmədi');
+    }
+
+    const tokens = await tokenResponse.json();
+    const idToken = tokens.id_token;
+
+    // Verify ID token
+    const tokenInfoUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`;
+    const verifyResponse = await fetch(tokenInfoUrl);
+    if (!verifyResponse.ok) {
+      return res.status(401).send('Google token doğrulanmadı');
+    }
+
+    const googleUser = await verifyResponse.json();
+    const { email, name, email_verified } = googleUser;
+
+    if (!email || (email_verified !== 'true' && email_verified !== true)) {
+      return res.status(400).send('Etibarlı e-poçt alınmadı');
+    }
+
+    // Create JWT (works with or without database)
+    const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+    let user;
+
+    if (isLocalMode) {
+      user = {
+        id: Math.abs(email.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 99999),
+        email: email.toLowerCase(),
+        name: name || email.split('@')[0],
+        role: 'admin'
+      };
+    } else {
+      // Check/create user in database
+      let result = await db.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+      if (result.rows.length === 0) {
+        const hashedPw = await bcrypt.hash(Math.random().toString(36), 10);
+        result = await db.query(
+          'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
+          [email.toLowerCase(), hashedPw, name || email.split('@')[0], 'user']
+        );
+      }
+      user = result.rows[0];
+    }
+
+    const jwtToken = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    // Return HTML that sends token back to opener window
+    res.send(`<!DOCTYPE html>
+<html><head><title>bahAI Login</title></head>
+<body>
+<script>
+  if (window.opener) {
+    window.opener.postMessage({
+      type: 'google-oauth-credential',
+      credential: '${idToken}',
+      token: '${jwtToken}',
+      user: ${JSON.stringify(user)}
+    }, '*');
+    setTimeout(function() { window.close(); }, 1000);
+  } else {
+    // Fallback: redirect with token
+    window.location.href = 'bahai://auth/callback?token=${encodeURIComponent(jwtToken)}';
+  }
+</script>
+<p style="font-family:sans-serif;text-align:center;margin-top:40vh;color:#666;">Giriş uğurlu! Pəncərə bağlanır...</p>
+</body></html>`);
+  } catch (e) {
+    console.error('Google OAuth callback error:', e);
+    res.status(500).send('Google ilə giriş zamanı xəta: ' + e.message);
+  }
+});
 
 // Define Router Paths
 router.post('/login', login);

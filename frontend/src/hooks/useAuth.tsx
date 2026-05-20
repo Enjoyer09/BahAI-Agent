@@ -30,11 +30,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (configRes.ok) {
           const configData = await configRes.json();
           if (configData.localMode) {
-            // Check if user explicitly signed out
+            // In local mode, check if user has a real token first
+            const existingToken = localStorage.getItem('auth_token');
+            if (existingToken) {
+              // Verify the real token
+              try {
+                const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
+                  headers: { 'Authorization': `Bearer ${existingToken}` }
+                });
+                if (meRes.ok) {
+                  const meData = await meRes.json();
+                  setUser(meData.user);
+                  setLoading(false);
+                  return;
+                }
+              } catch {}
+            }
+            
+            // No token or invalid — check if signed out
             if (localStorage.getItem('signed_out') === '1') {
               setLoading(false);
               return;
             }
+            // Fallback to local admin (no login required)
             setUser({ id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' });
             setLoading(false);
             return;

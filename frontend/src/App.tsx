@@ -14,6 +14,7 @@ import { useChat } from './hooks/useChat';
 import { useTheme } from './hooks/useTheme';
 import { useSettings } from './hooks/useSettings';
 import { ToastProvider, useConfirm } from './components/common/Toast';
+import { trackAppOpen } from './lib/telemetry';
 
 function AppContent() {
   const auth = useAuth();
@@ -32,6 +33,8 @@ function AppContent() {
   const { ConfirmDialog } = useConfirm();
 
   const chat = useChat(settings.settings, auth.user?.id);
+
+  useEffect(() => { trackAppOpen(); }, []);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
@@ -147,7 +150,7 @@ function AppContent() {
       )}
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative" style={{ paddingTop: '28px' }}>
         {/* Floating toolbar — desktop only */}
         {!isMobile && (
           <div className="absolute top-2 right-2 z-10 flex items-center gap-1 safe-top">

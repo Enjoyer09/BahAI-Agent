@@ -41,6 +41,27 @@ app.use((req, res, next) => {
 // Public Auth Routes
 app.use('/api/auth', authRoutes);
 
+// Public Telemetry Endpoint (desktop apps send anonymous stats here)
+app.post('/api/telemetry', async (req, res) => {
+  if (!db.hasDatabase()) return res.json({ ok: true }); // silently ignore if no DB
+  
+  const { event, data, deviceId, appVersion } = req.body;
+  if (!event) return res.status(400).json({ error: 'event required' });
+  
+  try {
+    await db.query(
+      `INSERT INTO telemetry (device_id, event, data, app_version, created_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+      [deviceId || 'unknown', event, JSON.stringify(data || {}), appVersion || '1.0.0']
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    // Don't fail silently — just log
+    console.error('Telemetry write error:', e.message);
+    res.json({ ok: true });
+  }
+});
+
 // Protected Agent/File Routes
 app.use('/api/chat', verifyToken);
 app.use('/api/files', verifyToken);
@@ -144,8 +165,8 @@ function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendMode
   }
 
   const envApiKey = process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY || '';
-  const envBase = process.env.OPENAI_BASE_URL || 'https://integrate.api.nvidia.com/v1';
-  const envModel = process.env.OPENAI_MODEL || 'meta/llama-3.3-70b-instruct';
+  const envBase = process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+  const envModel = process.env.OPENAI_MODEL || 'qwen/qwen3-coder:free';
   if (envApiKey) {
     list.push({
       id: process.env.OPENAI_API_KEY ? 'env_openai' : 'env_nvidia',
@@ -709,7 +730,7 @@ function makeUnifiedDiff(oldContent, newContent, filePath) {
 }
 
 function isSensitiveTool(toolName) {
-  return toolName === 'write_file' || toolName === 'file_edit' || toolName === 'run_terminal_command' || toolName === 'git_clone';
+  return toolName === 'write_file' || toolName === 'file_edit' || toolName === 'multi_file_edit' || toolName === 'run_terminal_command' || toolName === 'git_clone' || toolName === 'git_push' || toolName === 'start_server';
 }
 
 async function runStreamingCommand(command, cwd, onChunk) {
@@ -740,7 +761,7 @@ async function runStreamingCommand(command, cwd, onChunk) {
 
  * SEC-5: Command Allowlist instead of Blocklist
  */
-const ALLOWED_COMMANDS = ['npm', 'yarn', 'git', 'node', 'ls', 'pwd', 'mkdir', 'touch', 'grep', 'find'];
+const ALLOWED_COMMANDS = ['npm', 'npx', 'yarn', 'git', 'node', 'python', 'python3', 'pip', 'ls', 'pwd', 'mkdir', 'touch', 'grep', 'find', 'cat', 'echo', 'cp', 'mv', 'rm', 'curl', 'which', 'env'];
 
 function isBashCommandSafe(command) {
   // SEC-Audit: Block shell metacharacters to prevent chaining/injection
@@ -748,8 +769,7 @@ function isBashCommandSafe(command) {
   if (unsafeChars.test(command)) return false;
 
   const baseCmd = command.trim().split(/\s+/)[0];
-  // Basic allowlist check
-  return ALLOWED_COMMANDS.includes(baseCmd) || command.startsWith('npm run');
+  return ALLOWED_COMMANDS.includes(baseCmd) || command.startsWith('npm run') || command.startsWith('npx ');
 }
 
 // ==========================================
@@ -970,6 +990,131 @@ const TOOLS = [
                     cwd: { type: "string" }
                 },
                 required: ["symbol", "cwd"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "web_search",
+            description: "Searches the web for information. Use for documentation, error solutions, latest API references.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "Search query" }
+                },
+                required: ["query"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "web_fetch",
+            description: "Fetches content from a URL. Use to read documentation pages, API references, or web content.",
+            parameters: {
+                type: "object",
+                properties: {
+                    url: { type: "string", description: "URL to fetch" }
+                },
+                required: ["url"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "run_tests",
+            description: "Runs project tests and returns results. Auto-detects test framework (jest, vitest, pytest, mocha).",
+            parameters: {
+                type: "object",
+                properties: {
+                    filter: { type: "string", description: "Optional: filter tests by name or file pattern" }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "git_push",
+            description: "Pushes committed changes to remote repository.",
+            parameters: {
+                type: "object",
+                properties: {
+                    branch: { type: "string", description: "Branch name (defaults to current branch)" }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "git_log",
+            description: "Shows recent git commit history.",
+            parameters: {
+                type: "object",
+                properties: {
+                    count: { type: "number", description: "Number of commits to show (default: 10)" }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "git_branch",
+            description: "Lists branches or creates a new branch.",
+            parameters: {
+                type: "object",
+                properties: {
+                    name: { type: "string", description: "New branch name to create (omit to list branches)" }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "start_server",
+            description: "Starts a development server in background (npm run dev, python -m http.server, etc). Returns after server starts.",
+            parameters: {
+                type: "object",
+                properties: {
+                    command: { type: "string", description: "Server start command (e.g. 'npm run dev', 'npx serve')" },
+                    port: { type: "number", description: "Expected port number" }
+                },
+                required: ["command", "port"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "multi_file_edit",
+            description: "Edits multiple files at once. More efficient than calling file_edit multiple times.",
+            parameters: {
+                type: "object",
+                properties: {
+                    edits: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                path: { type: "string" },
+                                target_content: { type: "string" },
+                                replacement_content: { type: "string" }
+                            },
+                            required: ["path", "target_content", "replacement_content"]
+                        },
+                        description: "Array of file edits to apply"
+                    }
+                },
+                required: ["edits"]
             }
         }
     }
@@ -1228,7 +1373,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                     // Count files by extension
                     const files = await glob('**/*', { 
                         cwd: analyzePath, 
-                        ignore: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'],
+                        ignore: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**', '**/.next/**', '**/venv/**', '**/__pycache__/**'],
                         nodir: true 
                     });
                     
@@ -1238,23 +1383,57 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         extensions[ext] = (extensions[ext] || 0) + 1;
                     });
                     
+                    // Get top-level structure
+                    const topLevel = await fs.readdir(analyzePath, { withFileTypes: true });
+                    const structure = topLevel
+                        .filter(f => !f.name.startsWith('.') && f.name !== 'node_modules' && f.name !== 'dist' && f.name !== 'build')
+                        .map(f => `${f.isDirectory() ? '📁' : '📄'} ${f.name}`)
+                        .join('\n');
+                    
                     // Check for package.json
-                    let dependencies = 'N/A';
+                    let projectInfo = '';
                     try {
                         const pkgPath = path.join(analyzePath, 'package.json');
                         const pkgContent = await fs.readFile(pkgPath, 'utf-8');
                         const pkg = JSON.parse(pkgContent);
-                        const depCount = Object.keys(pkg.dependencies || {}).length;
-                        const devDepCount = Object.keys(pkg.devDependencies || {}).length;
-                        dependencies = `${depCount} dependencies, ${devDepCount} devDependencies`;
+                        const deps = Object.keys(pkg.dependencies || {}).slice(0, 15).join(', ');
+                        const devDeps = Object.keys(pkg.devDependencies || {}).slice(0, 10).join(', ');
+                        const scripts = Object.keys(pkg.scripts || {}).join(', ');
+                        projectInfo = `\n\n📦 package.json:\n  Ad: ${pkg.name || 'N/A'}\n  Versiya: ${pkg.version || 'N/A'}\n  Scripts: ${scripts}\n  Dependencies: ${deps}\n  DevDeps: ${devDeps}`;
                     } catch {}
                     
+                    // Check for other config files
+                    let configs = '';
+                    const configFiles = ['tsconfig.json', 'vite.config.ts', 'next.config.js', 'webpack.config.js', '.env.example', 'Dockerfile', 'requirements.txt', 'Cargo.toml', 'go.mod'];
+                    const foundConfigs = [];
+                    for (const cf of configFiles) {
+                        try {
+                            await fs.access(path.join(analyzePath, cf));
+                            foundConfigs.push(cf);
+                        } catch {}
+                    }
+                    if (foundConfigs.length > 0) configs = `\n\n⚙️ Konfiqurasiya faylları: ${foundConfigs.join(', ')}`;
+
+                    // Read main entry point
+                    let entryContent = '';
+                    const entryFiles = ['src/App.tsx', 'src/App.jsx', 'src/index.ts', 'src/main.ts', 'index.js', 'app.js', 'main.py', 'src/main.tsx'];
+                    for (const ef of entryFiles) {
+                        try {
+                            const content = await fs.readFile(path.join(analyzePath, ef), 'utf-8');
+                            entryContent = `\n\n📝 Entry point (${ef}) - ilk 50 sətir:\n${content.split('\n').slice(0, 50).join('\n')}`;
+                            break;
+                        } catch {}
+                    }
+                    
                     const summary = [
-                        `📊 Codebase Analysis:`,
-                        `Total files: ${files.length}`,
-                        `File types: ${JSON.stringify(extensions, null, 2)}`,
-                        `Dependencies: ${dependencies}`
-                    ].join('\n');
+                        `📊 Layihə Analizi: ${analyzePath.split('/').pop()}`,
+                        `\n📁 Struktur:\n${structure}`,
+                        `\nÜmumi fayl sayı: ${files.length}`,
+                        `Fayl tipləri: ${Object.entries(extensions).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}(${v})`).join(', ')}`,
+                        projectInfo,
+                        configs,
+                        entryContent
+                    ].filter(Boolean).join('\n');
                     
                     return summary;
                 } catch (e) {
@@ -1312,6 +1491,214 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                 } catch (e) {
                     return `No references found for '${args.symbol}'`;
                 }
+            }
+
+            case "web_search": {
+                try {
+                    const searchUrl = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(args.query)}&key=${process.env.GOOGLE_SEARCH_KEY}&cx=${process.env.GOOGLE_SEARCH_CX}`;
+                    
+                    // Fallback: use DuckDuckGo instant answer API (no key needed)
+                    const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(args.query)}&format=json&no_html=1`;
+                    const response = await fetch(ddgUrl, { timeout: 10000 });
+                    const data = await response.json();
+                    
+                    const results = [];
+                    if (data.Abstract) results.push(`📋 ${data.Abstract}`);
+                    if (data.Answer) results.push(`✅ ${data.Answer}`);
+                    if (data.RelatedTopics) {
+                        data.RelatedTopics.slice(0, 5).forEach(topic => {
+                            if (topic.Text) results.push(`• ${topic.Text}`);
+                        });
+                    }
+                    
+                    return results.length > 0 
+                        ? `🔍 "${args.query}" üçün nəticələr:\n${results.join('\n')}`
+                        : `"${args.query}" üçün birbaşa nəticə tapılmadı. Daha spesifik axtarış edin.`;
+                } catch (e) {
+                    return `Web search error: ${e.message}`;
+                }
+            }
+
+            case "web_fetch": {
+                try {
+                    if (!args.url.startsWith('http://') && !args.url.startsWith('https://')) {
+                        return "Error: URL must start with http:// or https://";
+                    }
+                    const response = await fetch(args.url, { 
+                        timeout: 15000,
+                        headers: { 'User-Agent': 'bahAI-Agent/1.0' }
+                    });
+                    if (!response.ok) return `Error: HTTP ${response.status}`;
+                    const text = await response.text();
+                    // Strip HTML tags for readability
+                    const clean = text
+                        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                        .replace(/<[^>]+>/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim()
+                        .slice(0, 8000);
+                    return clean || "Page content is empty";
+                } catch (e) {
+                    return `Fetch error: ${e.message}`;
+                }
+            }
+
+            case "run_tests": {
+                try {
+                    // Auto-detect test framework
+                    let testCmd = null;
+                    try {
+                        const pkgContent = await fs.readFile(path.join(workingDirectory, 'package.json'), 'utf-8');
+                        const pkg = JSON.parse(pkgContent);
+                        if (pkg.scripts?.test && pkg.scripts.test !== 'echo "Error: no test specified" && exit 1') {
+                            testCmd = 'npm test -- --run';
+                        }
+                        if (pkg.devDependencies?.vitest || pkg.dependencies?.vitest) testCmd = 'npx vitest --run';
+                        if (pkg.devDependencies?.jest || pkg.dependencies?.jest) testCmd = 'npx jest --forceExit';
+                    } catch {}
+                    
+                    if (!testCmd) {
+                        // Check for Python tests
+                        try {
+                            await fs.access(path.join(workingDirectory, 'pytest.ini'));
+                            testCmd = 'python -m pytest --tb=short';
+                        } catch {}
+                        try {
+                            await fs.access(path.join(workingDirectory, 'tests'));
+                            testCmd = testCmd || 'python -m pytest --tb=short';
+                        } catch {}
+                    }
+                    
+                    if (!testCmd) return "Test framework tapılmadı. package.json-da 'test' script əlavə edin.";
+                    
+                    if (args.filter) testCmd += ` ${args.filter}`;
+                    
+                    const { stdout, stderr } = await execFileAsync('sh', ['-c', testCmd], { 
+                        cwd: workingDirectory, 
+                        timeout: 60000,
+                        env: { ...process.env, CI: 'true', FORCE_COLOR: '0' }
+                    });
+                    return `🧪 Test nəticələri:\n${(stdout + stderr).slice(0, 5000)}`;
+                } catch (e) {
+                    const output = (e.stdout || '') + (e.stderr || '');
+                    return `🧪 Test nəticələri (bəziləri uğursuz):\n${output.slice(0, 5000)}`;
+                }
+            }
+
+            case "git_push": {
+                try {
+                    const branch = args.branch || '';
+                    const pushArgs = branch ? ['push', 'origin', branch] : ['push'];
+                    const { stdout, stderr } = await execFileAsync('git', pushArgs, { cwd: workingDirectory, timeout: 30000 });
+                    return stdout || stderr || "Push successful";
+                } catch (e) {
+                    return `Git push error: ${e.stderr || e.message}`;
+                }
+            }
+
+            case "git_log": {
+                try {
+                    const count = args.count || 10;
+                    const { stdout } = await execFileAsync('git', ['log', `--oneline`, `-${count}`], { cwd: workingDirectory, timeout: 5000 });
+                    return stdout || "No commits found";
+                } catch (e) {
+                    return `Git log error: ${e.message}`;
+                }
+            }
+
+            case "git_branch": {
+                try {
+                    if (args.name) {
+                        await execFileAsync('git', ['checkout', '-b', args.name], { cwd: workingDirectory, timeout: 5000 });
+                        return `Branch '${args.name}' yaradıldı və keçid edildi.`;
+                    } else {
+                        const { stdout } = await execFileAsync('git', ['branch', '-a'], { cwd: workingDirectory, timeout: 5000 });
+                        return stdout || "No branches found";
+                    }
+                } catch (e) {
+                    return `Git branch error: ${e.message}`;
+                }
+            }
+
+            case "start_server": {
+                try {
+                    // Kill any existing process on the port first
+                    const port = args.port || 3000;
+                    try {
+                        await execFileAsync('sh', ['-c', `lsof -ti:${port} | xargs kill -9 2>/dev/null`], { cwd: workingDirectory, timeout: 3000 });
+                    } catch {}
+                    
+                    await new Promise(r => setTimeout(r, 500));
+                    
+                    const serverProc = spawn('sh', ['-c', args.command], { 
+                        cwd: workingDirectory, 
+                        detached: true,
+                        stdio: ['ignore', 'pipe', 'pipe'],
+                        env: { ...process.env, PORT: String(port) }
+                    });
+                    serverProc.unref();
+                    
+                    // Capture initial output for debugging
+                    let serverOutput = '';
+                    serverProc.stdout.on('data', d => serverOutput += d.toString());
+                    serverProc.stderr.on('data', d => serverOutput += d.toString());
+                    
+                    // Wait for port to be ready (max 20s)
+                    let ready = false;
+                    for (let i = 0; i < 40; i++) {
+                        await new Promise(r => setTimeout(r, 500));
+                        try {
+                            const net = require('net');
+                            await new Promise((resolve, reject) => {
+                                const socket = new net.Socket();
+                                socket.setTimeout(500);
+                                socket.on('connect', () => { socket.destroy(); resolve(true); });
+                                socket.on('error', () => { socket.destroy(); reject(); });
+                                socket.on('timeout', () => { socket.destroy(); reject(); });
+                                socket.connect(port, '127.0.0.1');
+                            });
+                            ready = true;
+                            break;
+                        } catch {}
+                    }
+                    
+                    if (ready) {
+                        // Auto-open in default browser
+                        const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+                        spawn(openCmd, [`http://localhost:${port}`], { detached: true, stdio: 'ignore' }).unref();
+                        return `✅ Server işə düşdü: http://localhost:${port}\nBrauzerdə açıldı.`;
+                    } else {
+                        return `⚠️ Server başladıldı amma port ${port} hələ aktiv deyil.\nOutput: ${serverOutput.slice(0, 1000)}`;
+                    }
+                } catch (e) {
+                    return `Server start error: ${e.message}`;
+                }
+            }
+
+            case "multi_file_edit": {
+                if (!Array.isArray(args.edits)) return "Error: edits must be an array";
+                const results = [];
+                for (const edit of args.edits) {
+                    const filePath = path.resolve(workingDirectory, edit.path);
+                    if (!isPathSafe(filePath, workingDirectory, user)) {
+                        results.push(`❌ ${edit.path}: Access denied`);
+                        continue;
+                    }
+                    try {
+                        const content = await fs.readFile(filePath, 'utf8');
+                        if (!content.includes(edit.target_content)) {
+                            results.push(`⚠️ ${edit.path}: Target content not found`);
+                            continue;
+                        }
+                        const newContent = content.replace(edit.target_content, edit.replacement_content);
+                        await fs.writeFile(filePath, newContent, 'utf8');
+                        results.push(`✅ ${edit.path}: Updated`);
+                    } catch (e) {
+                        results.push(`❌ ${edit.path}: ${e.message}`);
+                    }
+                }
+                return results.join('\n');
             }
 
             default:
@@ -1400,7 +1787,7 @@ app.post('/api/projects', async (req, res) => {
     );
 
     const conversationId = crypto.randomUUID();
-    const title = repoUrl ? `Import: ${name}` : 'Yeni söhbət';
+    const title = name;
     const conversation = await db.query(
       `INSERT INTO conversations (id, project_id, user_id, title, messages)
        VALUES ($1, $2, $3, $4, $5)
@@ -1750,8 +2137,8 @@ app.post('/api/chat', async (req, res) => {
     await ensureDir(resolvedWD);
 
     const frontendApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
-    const frontendBaseUrl = (typeof baseUrl === 'string' ? baseUrl.trim() : '') || process.env.OPENAI_BASE_URL || "https://integrate.api.nvidia.com/v1";
-    const frontendModel = model || process.env.OPENAI_MODEL || 'meta/llama-3.3-70b-instruct';
+    const frontendBaseUrl = (typeof baseUrl === 'string' ? baseUrl.trim() : '') || process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
+    const frontendModel = model || process.env.OPENAI_MODEL || 'qwen/qwen3-coder:free';
     const providerCandidates = buildProviderCandidates({
       frontendApiKey,
       frontendBaseUrl,
@@ -1764,31 +2151,50 @@ app.post('/api/chat', async (req, res) => {
         });
     }
     let activeProvider = providerCandidates.find((p) => canUseProviderNow(p.id)) || providerCandidates[0];
-    let client = new OpenAI({ baseURL: activeProvider.baseURL, apiKey: activeProvider.apiKey });
+    let client = new OpenAI({ 
+      baseURL: activeProvider.baseURL, 
+      apiKey: activeProvider.apiKey,
+      defaultHeaders: {
+        'HTTP-Referer': 'https://bahai-agent.app',
+        'X-Title': 'bahAI Agent'
+      }
+    });
     let effectiveModel = activeProvider.model;
     console.log(`🤖 /api/chat | provider_candidates=${providerCandidates.length} | active=${activeProvider.id} | model=${effectiveModel}`);
 
     const sysPrompt = `Sən bahAI İDE rəsmi AI Agentisən. Project Root: ${resolvedWD}.
 Sən professional proqramçı və UI/UX ekspertisən.
 
-MÜHÜM QAYDALAR:
-1. Kodu dəyişməzdən əvvəl glob_search və read_file ilə mütləq kodu analiz et.
-2. Dəyişiklik etdikdə YALNIZ file_edit istifadə et (bütöv faylı yenidən yazma).
-3. LIVE PREVIEW HAQQINDA: Bizim LivePreview paneli YALNIZ 'http://localhost:PORT' formatında işləyir. Lokal fayl yollarını (file:///...) aça bilmir.
-4. Əgər bir web səhifə yaratmısansa, onu görmək üçün mütləq bir server başlatmalısan (məs: 'npx serve' və ya 'npm run dev').
-5. SERVERİ TƏSDİQLƏ (KRİTİK): check_port_status alətini çağırmadan serverin işlədiyini iddia etmək QADAĞANDIR! Əgər bu aləti çağırmamısansa, "Server işləyir" demə! Əgər port aktiv deyilsə, serverin niyə qalxmadığını (logs) yoxla.
-6. İstifadəçi attachment/PDF göndəribsə, birbaşa həmin məzmunu analiz et. "Drag & drop et", "link göndər", "yenidən yüklə" kimi cavabları yalnız attachment ümumiyyətlə yoxdursa ver.
+KRİTİK PERFORMANS QAYDALARI:
+1. LAYİHƏ ANALİZİ: İstifadəçi "kodu incələ", "analiz et", "nə var burda" desə — YALNIZ 1-2 tool call et:
+   - analyze_codebase ilə ümumi strukturu öyrən
+   - Sonra package.json və ya əsas entry point-i (index.js, main.py, App.tsx) oxu
+   - HƏR FAYILI AYRI-AYRI OXUMA! Xülasəni birbaşa ver.
+   - Nəticəni TƏK BİR CAVABDA yaz: texnologiyalar, struktur, əsas fayllar.
+2. TOOL CALL OPTİMİZASİYASI:
+   - Eyni məqsəd üçün maksimum 3 tool call et.
+   - list_directory + analyze_codebase kifayətdir layihəni başa düşmək üçün.
+   - Hər faylı ayrıca read_file etmə — yalnız lazım olanı oxu.
+   - glob_search ilə fayl tap, sonra yalnız 1-2 əsas faylı oxu.
+3. Kodu dəyişməzdən əvvəl glob_search və read_file ilə mütləq kodu analiz et.
+4. Dəyişiklik etdikdə YALNIZ file_edit istifadə et (bütöv faylı yenidən yazma).
+5. LIVE PREVIEW: LivePreview paneli YALNIZ 'http://localhost:PORT' formatında işləyir.
+6. SERVERİ TƏSDİQLƏ: check_port_status çağırmadan "Server işləyir" demə.
+7. Attachment göndərilibsə birbaşa məzmunu analiz et.
 
-YENİ TOOL-LAR (Claude Code-dan ilhamlanaraq):
-7. GIT WORKFLOW: git_status, git_diff, git_commit tool-larını istifadə edərək git əməliyyatlarını avtomatlaşdır.
-8. CODE ANALYSIS: analyze_codebase ilə layihə strukturunu analiz et, find_definition və find_references ilə kod naviqasiyası et.
-9. SMART SEARCH: grep_search ilə mətn axtar, find_definition ilə funksiya/class təriflərini tap.
+GIT & CODE TOOLS:
+- git_status, git_diff, git_commit, git_push, git_log, git_branch — git əməliyyatları
+- analyze_codebase — layihə strukturu (fayl sayı, dillər, dependencies)
+- find_definition, find_references — kod naviqasiyası
+- grep_search — mətn axtarışı
+- web_search, web_fetch — internet axtarışı və səhifə oxuma
+- run_tests — testləri icra et
+- start_server — server başlat (brauzerdə avtomatik açılır)
+- multi_file_edit — bir neçə faylı eyni anda redaktə et
 
-BEST PRACTICES:
-- Böyük dəyişikliklər etməzdən əvvəl git_status ilə mövcud vəziyyəti yoxla
-- Kod yazmadan əvvəl analyze_codebase ilə layihə strukturunu öyrən
-- Funksiya/class istifadə etməzdən əvvəl find_definition ilə tərifini tap
-- Dəyişiklikdən sonra git_commit ilə commit yarat
+SERVER QAYDASI (KRİTİK):
+- start_server tool-unu çağırdıqdan sonra İŞİ BİTİR. Əlavə tool call etmə.
+- "Server işə düşdü" cavabını ver və DAYAN. check_port_status çağırma.
 
 Azərbaycan dilində cavab ver.`;
 
@@ -1846,9 +2252,9 @@ Azərbaycan dilində cavab ver.`;
         while (step < MAX_STEPS && !clientDisconnected) {
             step++;
 
-            // Streaming ilə API çağırışı (120 saniyə timeout - attachments üçün daha uzun)
+            // Streaming ilə API çağırışı (180 saniyə timeout - reasoning modellər üçün)
             const abortController = new AbortController();
-            const timeoutId = setTimeout(() => abortController.abort(), 120000);
+            const timeoutId = setTimeout(() => abortController.abort(), 180000);
 
             let stream;
             let shouldRetryWithDeepSeekRecovery = false;
@@ -1876,7 +2282,14 @@ Azərbaycan dilində cavab ver.`;
                   const alternatives = providerCandidates.filter((p) => p.id !== activeProvider.id && canUseProviderNow(p.id));
                   for (const alt of alternatives) {
                     try {
-                      const altClient = new OpenAI({ baseURL: alt.baseURL, apiKey: alt.apiKey });
+                      const altClient = new OpenAI({ 
+                        baseURL: alt.baseURL, 
+                        apiKey: alt.apiKey,
+                        defaultHeaders: {
+                          'HTTP-Referer': 'https://bahai-agent.app',
+                          'X-Title': 'bahAI Agent'
+                        }
+                      });
                       stream = await altClient.chat.completions.create({
                         model: alt.model,
                         messages: currentMessages,
@@ -1944,6 +2357,7 @@ Azərbaycan dilində cavab ver.`;
 
                   // Detailed API error logging
                   console.error(`❌ API Error [${status}]:`, apiErr.message);
+                  console.error(`❌ Full error:`, JSON.stringify({ status: apiErr.status, headers: apiErr.headers, body: apiErr.error || apiErr.body }, null, 2));
                   let userMsg = `API xətası: ${apiErr.message}`;
                   if (apiErr.status === 401) {
                       userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
@@ -1976,10 +2390,14 @@ Azərbaycan dilində cavab ver.`;
                 res.write(`data: ${JSON.stringify({ type: 'assistant_delta', content: delta.content })}\n\n`);
               }
 
-              // DeepSeek thinking mode compatibility:
+              // DeepSeek/Nemotron thinking mode compatibility:
               // reasoning_content must be echoed back in subsequent turns.
               if (delta.reasoning_content) {
                 accumulatedReasoning += delta.reasoning_content;
+                // Send a "thinking" indicator so user sees activity
+                if (accumulatedReasoning.length <= 5) {
+                  res.write(`data: ${JSON.stringify({ type: 'assistant_delta', content: '🤔 *Düşünürəm...*\n\n' })}\n\n`);
+                }
               }
 
               // Tool call-ları yığ
@@ -2040,7 +2458,8 @@ Azərbaycan dilində cavab ver.`;
                 for (const toolCall of msg.tool_calls) {
                     if (clientDisconnected) break;
                     res.write(`data: ${JSON.stringify({ type: 'tool_execution', tool: toolCall.function.name, args: toolCall.function.arguments, tool_call_id: toolCall.id })}\n\n`);
-                    if (safeMode && isSensitiveTool(toolCall.function.name)) {
+                    // In local mode, skip approval for all tools (user's own machine)
+                    if (safeMode && !isLocalMode() && isSensitiveTool(toolCall.function.name)) {
                         const approvalId = crypto.randomUUID();
                         pendingApprovals.set(approvalId, {
                           userId: req.user.id,
@@ -2270,6 +2689,44 @@ function verifyAdmin(req, res, next) {
     res.status(403).json({ error: 'Giriş qadağandır: Admin səlahiyyəti lazımdır' });
   }
 }
+
+// Admin Dashboard Stats
+app.get('/api/admin/stats', verifyToken, verifyAdmin, async (req, res) => {
+  if (!db.hasDatabase()) {
+    return res.json({ 
+      totalUsers: 0, onlineUsers: 0, totalMessages: 0, totalConversations: 0,
+      todayMessages: 0, todayErrors: 0, activeDevices: 0, topModels: [], recentEvents: []
+    });
+  }
+
+  try {
+    const [users, conversations, todayTelemetry, devices, models, recentEvents] = await Promise.all([
+      db.query('SELECT COUNT(*) as total, COUNT(CASE WHEN last_active > NOW() - INTERVAL \'5 minutes\' THEN 1 END) as online FROM users'),
+      db.query('SELECT COUNT(*) as total, COALESCE(SUM(jsonb_array_length(messages)), 0) as messages FROM conversations'),
+      db.query(`SELECT 
+        COUNT(CASE WHEN event = 'chat_message' THEN 1 END) as messages,
+        COUNT(CASE WHEN event = 'chat_error' THEN 1 END) as errors
+        FROM telemetry WHERE created_at > NOW() - INTERVAL '24 hours'`),
+      db.query(`SELECT COUNT(DISTINCT device_id) as total FROM telemetry WHERE created_at > NOW() - INTERVAL '7 days'`),
+      db.query(`SELECT data->>'model' as model, COUNT(*) as count FROM telemetry WHERE event = 'chat_message' AND created_at > NOW() - INTERVAL '7 days' GROUP BY data->>'model' ORDER BY count DESC LIMIT 5`),
+      db.query(`SELECT event, data, device_id, created_at FROM telemetry ORDER BY created_at DESC LIMIT 20`)
+    ]);
+
+    res.json({
+      totalUsers: parseInt(users.rows[0]?.total) || 0,
+      onlineUsers: parseInt(users.rows[0]?.online) || 0,
+      totalConversations: parseInt(conversations.rows[0]?.total) || 0,
+      totalMessages: parseInt(conversations.rows[0]?.messages) || 0,
+      todayMessages: parseInt(todayTelemetry.rows[0]?.messages) || 0,
+      todayErrors: parseInt(todayTelemetry.rows[0]?.errors) || 0,
+      activeDevices: parseInt(devices.rows[0]?.total) || 0,
+      topModels: models.rows || [],
+      recentEvents: recentEvents.rows || []
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // Protected Admin Route to list all registered users
 app.get('/api/admin/users', verifyToken, verifyAdmin, async (req, res) => {

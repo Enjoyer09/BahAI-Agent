@@ -50,7 +50,7 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
 
   const pushFiles = useCallback((files: FileList | null) => {
     if (!files) return;
-    const ALLOWED_EXTENSIONS = ['.txt', '.json', '.csv', '.md', '.yaml', '.yml', '.xml', '.log', '.env', '.js', '.ts', '.jsx', '.tsx', '.py', '.html', '.css'];
+    const ALLOWED_EXTENSIONS = ['.txt', '.json', '.csv', '.md', '.yaml', '.yml', '.xml', '.log', '.env', '.js', '.ts', '.jsx', '.tsx', '.py', '.html', '.css', '.har', '.svg', '.sh', '.toml', '.ini', '.cfg', '.conf', '.sql', '.graphql', '.prisma', '.dockerfile', '.gitignore'];
     
     Array.from(files).forEach(file => {
       const ext = '.' + file.name.split('.').pop()?.toLowerCase();
@@ -61,9 +61,9 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
         return;
       }
       
-      // File size check: max 1MB per file (text files shouldn't be larger)
-      if (file.size > 1 * 1024 * 1024) {
-        alert(`"${file.name}" çox böyükdür (${(file.size / 1024 / 1024).toFixed(1)}MB). Maksimum 1MB.`);
+      // File size check: max 500KB for text files
+      if (file.size > 500 * 1024) {
+        alert(`"${file.name}" çox böyükdür (${(file.size / 1024).toFixed(0)}KB). Maksimum 500KB.`);
         return;
       }
       const reader = new FileReader();
@@ -196,7 +196,7 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
             ref={fileInputRef}
             onChange={(e) => { pushFiles(e.target.files); e.target.value = ''; }}
             multiple
-            accept=".txt,.json,.csv,.md,.yaml,.yml,.xml,.log,.env,.js,.ts,.jsx,.tsx,.py,.html,.css"
+            accept=".txt,.json,.csv,.md,.yaml,.yml,.xml,.log,.env,.js,.ts,.jsx,.tsx,.py,.html,.css,.har,.svg,.sh,.toml,.ini,.cfg,.sql,.graphql"
             className="hidden"
             aria-hidden="true"
           />
