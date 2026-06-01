@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Square, Paperclip, X, Plus, ChevronDown } from 'lucide-react';
+import { Send, Square, Paperclip, X, Plus, ChevronDown, Mic, MicOff } from 'lucide-react';
 import type { Attachment } from '../../lib/types';
 import { MODELS } from '../../lib/constants';
 
@@ -18,9 +18,77 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Bu cihazda və ya brauzerdə səsli daxiletmə (Speech Recognition) dəstəklənmir.");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'az-AZ'; // Support native Azerbaijani voice recognition!
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+        setIsListening(false);
+        let errorMsg = `Səs tanıma xətası: "${event.error}".`;
+        if (event.error === 'not-allowed') {
+          errorMsg += "\nTip: Proqramın mikrofona giriş icazəsi yoxdur. Zəhmət olmasa tətbiq ayarlarından və ya macOS Sistem Ayarlarından (Security & Privacy -> Microphone) proqrama icazə verildiyini yoxlayın.";
+        } else if (event.error === 'network') {
+          errorMsg += "\nTip: Şəbəkə xətası. Səs tanıma sisteminin işləməsi üçün internet bağlantısı tələb olunur.";
+        } else if (event.error === 'no-speech') {
+          errorMsg += "\nTip: Səs aşkarlanmadı. Mikrofonunuzun düzgün işlədiyini və bir az ucadan danışdığınızı yoxlayın.";
+        } else if (event.error === 'service-not-allowed') {
+          errorMsg += "\nTip: Google Səs Tanıma servisinə bu Chromium/Electron mühitində icazə verilmir.";
+        }
+        alert(errorMsg);
+      };
+
+      recognition.onresult = (event: any) => {
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
+        }
+        if (finalTranscript) {
+          setText(prev => prev + (prev ? ' ' : '') + finalTranscript);
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (e) {
+      console.error("Speech recognition initialization error:", e);
+      setIsListening(false);
+    }
+  }, [isListening]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -220,38 +288,77 @@ export default function ChatInput({ onSend, onStop, loading, model, onModelChang
             aria-label="Message input"
           />
 
-          {/* Send / Stop button — right */}
-          {loading ? (
+          {/* Action buttons (Mic + Send/Stop) — right */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Pulsing style */}
+            <style>{`
+              @keyframes pulse-purple {
+                0% {
+                  box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4);
+                }
+                70% {
+                  box-shadow: 0 0 0 10px rgba(168, 85, 247, 0);
+                }
+                100% {
+                  box-shadow: 0 0 0 0 rgba(168, 85, 247, 0);
+                }
+              }
+            `}</style>
+            
+            {/* Microphone button */}
             <button
-              onClick={onStop}
-              className="rounded-full transition-colors shrink-0 flex items-center justify-center"
+              onClick={toggleListening}
+              type="button"
+              className="rounded-full transition-all flex items-center justify-center shrink-0"
               style={{
-                background: 'rgba(239, 68, 68, 0.1)',
-                color: '#ef4444',
-                width: '44px',
-                height: '44px',
+                color: isListening ? '#a855f7' : 'var(--fg-muted)',
+                background: isListening ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
+                width: '40px',
+                height: '40px',
+                border: isListening ? '1px solid rgba(168, 85, 247, 0.3)' : 'none',
+                boxShadow: isListening ? '0 0 15px rgba(168, 85, 247, 0.4)' : 'none',
+                animation: isListening ? 'pulse-purple 1.5s infinite' : 'none',
               }}
-              aria-label="Stop generation"
+              title={isListening ? "Səsli daxiletməni dayandır" : "Səslə danış"}
+              aria-label="Toggle voice input"
             >
-              <Square size={18} fill="currentColor" />
+              {isListening ? <MicOff size={18} /> : <Mic size={18} />}
             </button>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!canSend}
-              className="rounded-full transition-all shrink-0 flex items-center justify-center"
-              style={{
-                background: canSend ? 'var(--color-accent)' : 'transparent',
-                color: canSend ? 'white' : 'var(--fg-muted)',
-                cursor: canSend ? 'pointer' : 'default',
-                width: '44px',
-                height: '44px',
-              }}
-              aria-label="Send message"
-            >
-              <Send size={18} />
-            </button>
-          )}
+
+            {loading ? (
+              <button
+                onClick={onStop}
+                type="button"
+                className="rounded-full transition-colors shrink-0 flex items-center justify-center"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  color: '#ef4444',
+                  width: '40px',
+                  height: '40px',
+                }}
+                aria-label="Stop generation"
+              >
+                <Square size={16} fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!canSend}
+                type="button"
+                className="rounded-full transition-all shrink-0 flex items-center justify-center"
+                style={{
+                  background: canSend ? 'var(--color-accent)' : 'transparent',
+                  color: canSend ? 'white' : 'var(--fg-muted)',
+                  cursor: canSend ? 'pointer' : 'default',
+                  width: '40px',
+                  height: '40px',
+                }}
+                aria-label="Send message"
+              >
+                <Send size={16} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Attachments preview */}

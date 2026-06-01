@@ -121,6 +121,13 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         setServerBacked(true);
       } catch {
         setServerBacked(false);
+        const localProjects = loadFromStorage<Project[]>('projects', []);
+        const localConvs = loadFromStorage<Conversation[]>('conversations', []);
+        setProjects(localProjects);
+        setConversations(localConvs);
+        if (localConvs.length > 0) {
+          setActiveConvId(localConvs[0].id);
+        }
       } finally {
         if (!cancelled) setHydrated(true);
       }

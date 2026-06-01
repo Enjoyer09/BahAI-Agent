@@ -11,6 +11,10 @@ export const MODELS: ModelOption[] = [
   { id: 'qwen/qwen3-coder:free', name: 'Qwen3 Coder', provider: 'bahAI' },
   { id: 'deepseek/deepseek-v4-flash:free', name: 'DeepSeek V4 Flash', provider: 'bahAI' },
   { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B', provider: 'bahAI' },
+  { id: 'qwen2.5-coder:latest', name: 'Qwen 2.5 Coder 7B', provider: 'Ollama (Lokal)' },
+  { id: 'dagbs/qwen2.5-coder-14b-instruct-abliterated:latest', name: 'Qwen 2.5 Coder 14B', provider: 'Ollama (Lokal)' },
+  { id: 'gemma4:latest', name: 'Gemma 4 9B', provider: 'Ollama (Lokal)' },
+  { id: 'gemma4:e2b', name: 'Gemma 4 7B', provider: 'Ollama (Lokal)' },
 ];
 
 export const DEFAULT_SETTINGS = {

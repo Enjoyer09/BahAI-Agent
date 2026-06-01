@@ -151,6 +151,22 @@ function markProviderSuccess(providerId) {
 function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendModel }) {
   const list = [];
 
+  const localOllamaModels = [
+    'gemma4:latest',
+    'gemma4:e2b',
+    'qwen2.5-coder:latest',
+    'dagbs/qwen2.5-coder-14b-instruct-abliterated:latest'
+  ];
+
+  if (frontendModel && localOllamaModels.includes(frontendModel)) {
+    list.push({
+      id: 'local_ollama_override',
+      apiKey: 'ollama',
+      baseURL: 'http://localhost:11434/v1',
+      model: frontendModel
+    });
+  }
+
   if (frontendApiKey && frontendBaseUrl && frontendModel) {
     list.push({
       id: 'frontend',
@@ -223,20 +239,28 @@ function encryptSecret(text) {
 }
 
 function decryptSecret(payload) {
-  if (!payload) return null;
-  const [ivB64, tagB64, dataB64] = String(payload).split(':');
-  if (!ivB64 || !tagB64 || !dataB64) return null;
-  const iv = Buffer.from(ivB64, 'base64');
-  const tag = Buffer.from(tagB64, 'base64');
-  const encrypted = Buffer.from(dataB64, 'base64');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', GITHUB_TOKEN_SECRET, iv);
-  decipher.setAuthTag(tag);
-  const plain = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-  return plain.toString('utf8');
+  try {
+    if (!payload) return null;
+    const [ivB64, tagB64, dataB64] = String(payload).split(':');
+    if (!ivB64 || !tagB64 || !dataB64) return null;
+    const iv = Buffer.from(ivB64, 'base64');
+    const tag = Buffer.from(tagB64, 'base64');
+    const encrypted = Buffer.from(dataB64, 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', GITHUB_TOKEN_SECRET, iv);
+    decipher.setAuthTag(tag);
+    const plain = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    return plain.toString('utf8');
+  } catch (error) {
+    console.error("⚠️ decryptSecret error (encryption key might have changed):", error.message);
+    return null;
+  }
 }
 
 async function getUserGithubToken(userId) {
-  if (!db.hasDatabase()) return null;
+  if (!db.hasDatabase()) {
+    const t = process.env.GITHUB_TOKEN;
+    return typeof t === 'string' ? t.trim() : null;
+  }
   const result = await db.query('SELECT github_token_enc FROM users WHERE id = $1', [userId]);
   const encrypted = result.rows[0]?.github_token_enc;
   return decryptSecret(encrypted);
@@ -466,65 +490,112 @@ async function extractAttachment(attachment) {
   }
 }
 
-async function normalizeMessagesForModel(messages = []) {
+async function normalizeMessagesForModel(messages = [], modelName = '') {
   const normalized = [];
+  const isLocalOrFlakyModel = isLocalMode() || 
+    !modelName || 
+    /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(modelName);
 
   for (const message of messages) {
-    if (!message.attachments?.length) {
-      normalized.push(message);
-      continue;
+    if (!message) continue;
+    
+    let content = message.content || '';
+    let role = message.role;
+    let tool_calls = message.tool_calls;
+    let tool_call_id = message.tool_call_id;
+    let name = message.name;
+
+    // 1. Process attachments if any
+    if (message.attachments?.length) {
+      const textParts = [
+        content,
+        '[Sistem qeydi: İstifadəçi artıq attachment göndərib. Yenidən upload/drag-drop/link istəmədən mövcud attachment məzmununu analiz et.]'
+      ];
+
+      const results = await Promise.all(message.attachments.map(async (attachment) => {
+        if (attachment?.extractedText && typeof attachment.extractedText === 'string' && attachment.extractedText.trim()) {
+          return `\n\n[Attachment: ${attachment.name || 'attachment'} | ${attachment.mimeType || attachment.type || 'unknown'}]\n${attachment.extractedText.slice(0, 6000)}`;
+        }
+        if (attachment?.extractionError) {
+          return `\n\n[Attachment: ${attachment?.name || 'attachment'}]\nOxuma xətası: ${attachment.extractionError}`;
+        }
+        if (!attachment?.url || attachment.url === '') {
+          return `\n\n[Attachment: ${attachment?.name || 'attachment'} | ${attachment?.mimeType || 'unknown'}]\nFayl əlavə olunub, amma məzmunu çıxarıla bilmədi.`;
+        }
+        let extracted;
+        try {
+          extracted = await extractAttachment(attachment);
+        } catch (error) {
+          extracted = {
+            name: attachment?.name || 'attachment',
+            mimeType: attachment?.mimeType || attachment?.type || 'application/octet-stream',
+            extractedText: `[Attachment emalında xəta: ${attachment?.name || 'attachment'}]`
+          };
+        }
+        if (extracted.extractedText) {
+          return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 6000)}`;
+        } else {
+          return `\n\n[Attachment: ${attachment?.name || extracted.name || 'attachment'} | ${attachment?.mimeType || extracted.mimeType || 'unknown'}]\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`;
+        }
+      }));
+
+      textParts.push(...results);
+      content = textParts.join('\n').trim();
     }
 
-    const textParts = [
-      message.content || '',
-      '[Sistem qeydi: İstifadəçi artıq attachment göndərib. Yenidən upload/drag-drop/link istəmədən mövcud attachment məzmununu analiz et.]'
-    ];
-
-    // Attachment-ları paralel emal et
-    const results = await Promise.all(message.attachments.map(async (attachment) => {
-      // If extractedText already exists (from frontend extraction), use it directly
-      if (attachment?.extractedText && typeof attachment.extractedText === 'string' && attachment.extractedText.trim()) {
-        return `\n\n[Attachment: ${attachment.name || 'attachment'} | ${attachment.mimeType || attachment.type || 'unknown'}]\n${attachment.extractedText.slice(0, 6000)}`;
+    // 2. Local model tool formatting
+    if (isLocalOrFlakyModel) {
+      if (role === 'assistant' && tool_calls && tool_calls.length > 0) {
+        let toolCallText = '';
+        for (const tc of tool_calls) {
+          toolCallText += `\n\`\`\`json\n{\n  "name": "${tc.function.name}",\n  "arguments": ${tc.function.arguments || '{}'}\n}\n\`\`\``;
+        }
+        const hasAnyToolMention = tool_calls.some(tc => content.includes(tc.function.name));
+        if (!hasAnyToolMention) {
+          content = (content + '\n' + toolCallText).trim();
+        }
+      } else if (role === 'tool') {
+        const toolName = name || 'Alət';
+        content = `📥 [Alət Nəticəsi (${toolName})]:\n${content}`;
+        role = 'user';
+        tool_call_id = undefined;
+        name = undefined;
       }
-      
-      // If there was an extraction error from frontend, report it
-      if (attachment?.extractionError) {
-        return `\n\n[Attachment: ${attachment?.name || 'attachment'}]\nOxuma xətası: ${attachment.extractionError}`;
-      }
-
-      // Only try to extract if we have a data URL (not empty)
-      if (!attachment?.url || attachment.url === '') {
-        return `\n\n[Attachment: ${attachment?.name || 'attachment'} | ${attachment?.mimeType || 'unknown'}]\nFayl əlavə olunub, amma məzmunu çıxarıla bilmədi.`;
-      }
-
-      // Try extraction from data URL
-      let extracted;
-      try {
-        extracted = await extractAttachment(attachment);
-      } catch (error) {
-        extracted = {
-          name: attachment?.name || 'attachment',
-          mimeType: attachment?.mimeType || attachment?.type || 'application/octet-stream',
-          extractedText: `[Attachment emalında xəta: ${attachment?.name || 'attachment'}]`
-        };
-      }
-      if (extracted.extractedText) {
-        return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 6000)}`;
-      } else {
-        return `\n\n[Attachment: ${attachment?.name || extracted.name || 'attachment'} | ${attachment?.mimeType || extracted.mimeType || 'unknown'}]\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`;
-      }
-    }));
-
-    textParts.push(...results);
+    }
 
     normalized.push({
-      ...message,
-      content: textParts.join('\n').trim(),
-      attachments: undefined
+      role,
+      content,
+      tool_calls: tool_calls?.length ? tool_calls : undefined,
+      tool_call_id,
+      name
     });
   }
 
   return normalized;
+}
+
+function generateToolsSystemPrompt() {
+  let prompt = `\n\n🛠️ SƏNİN İSTİFADƏ EDƏ BİLƏCƏYİN ALƏTLƏR (TOOLS):\n`;
+  prompt += `Sən lokal sistemdə birbaşa aşağıdakı alətləri (tools) çağıra bilərsən. Aləti çağırmaq üçün cavabında YALNIZ aşağıdakı formatda təmiz JSON bloku yazmalısan:\n`;
+  prompt += `\`\`\`json\n{\n  "name": "alət_adı",\n  "arguments": {\n    "arqument_adı": "dəyər"\n  }\n}\n\`\`\`\n`;
+  prompt += `Sən eyni cavab daxilində birdən çox JSON alət çağırış bloku da yaza bilərsən.\n\nMövcud alətlərin siyahısı və onların parametrləri:\n\n`;
+
+  for (const t of TOOLS) {
+    const fn = t.function;
+    prompt += `📌 **Alət: \`${fn.name}\`**\n`;
+    prompt += `📝 Təsvir: ${fn.description}\n`;
+    if (fn.parameters && fn.parameters.properties) {
+      prompt += `⚙️ Parametrlər:\n`;
+      for (const [propName, propVal] of Object.entries(fn.parameters.properties)) {
+        const isRequired = fn.parameters.required?.includes(propName) ? ' (MƏCBURİ)' : ' (KÖMƏKÇİ)';
+        const desc = propVal.description || '';
+        prompt += `  - \`${propName}\` (${propVal.type}): ${desc}${isRequired}\n`;
+      }
+    }
+    prompt += `\n`;
+  }
+  return prompt;
 }
 
 function buildDeepSeekRecoveryMessages(messages = []) {
@@ -542,6 +613,116 @@ function buildDeepSeekRecoveryMessages(messages = []) {
     return [{ role: 'system', content: typeof sys.content === 'string' ? sys.content : '' }, ...recent];
   }
   return recent;
+}
+
+function extractTextToolCalls(text) {
+  if (!text) return { cleanedText: text, toolCalls: [] };
+  
+  const matchesToProcess = [];
+  let index = 0;
+  
+  while (index < text.length) {
+    const startIdx = text.indexOf('{', index);
+    if (startIdx === -1) break;
+    
+    // Find balanced closing brace
+    let braceCount = 0;
+    let inString = false;
+    let escape = false;
+    let endIndex = startIdx;
+    let found = false;
+    
+    for (; endIndex < text.length; endIndex++) {
+      const char = text[endIndex];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char === '\\') {
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === '{') {
+          braceCount++;
+        } else if (char === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            endIndex++;
+            found = true;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (found) {
+      const possibleJson = text.substring(startIdx, endIndex);
+      try {
+        const parsed = JSON.parse(possibleJson);
+        if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string' && parsed.arguments !== undefined) {
+          // Verify that parsed.name matches one of our known tool names to avoid false positives!
+          const isValidTool = TOOLS.some(t => t.function.name === parsed.name);
+          if (isValidTool) {
+            matchesToProcess.push({
+              startIndex: startIdx,
+              endIndex: endIndex,
+              name: parsed.name,
+              arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
+            });
+            index = endIndex;
+            continue;
+          }
+        }
+      } catch (e) {
+        // Not valid JSON
+      }
+    }
+    index = startIdx + 1;
+  }
+  
+  // Clean from text and build final tool calls
+  let cleanedText = text;
+  const toolCalls = [];
+  
+  for (let i = matchesToProcess.length - 1; i >= 0; i--) {
+    const match = matchesToProcess[i];
+    
+    toolCalls.push({
+      name: match.name,
+      arguments: match.arguments
+    });
+    
+    let chunkStart = match.startIndex;
+    let chunkEnd = match.endIndex;
+    
+    // Check if it's wrapped in a markdown code block, e.g. ```json ... ``` or ``` ... ```
+    const beforeText = cleanedText.substring(Math.max(0, chunkStart - 15), chunkStart);
+    const codeBlockMatch = beforeText.match(/```(?:json)?\s*$/i);
+    if (codeBlockMatch) {
+      const matchLen = codeBlockMatch[0].length;
+      chunkStart -= matchLen;
+      
+      const afterText = cleanedText.substring(chunkEnd, Math.min(cleanedText.length, chunkEnd + 15));
+      const closeBlockMatch = afterText.match(/^\s*```/);
+      if (closeBlockMatch) {
+        chunkEnd += closeBlockMatch[0].length;
+      }
+    }
+    
+    cleanedText = cleanedText.substring(0, chunkStart) + cleanedText.substring(chunkEnd);
+  }
+  
+  toolCalls.reverse();
+  
+  return {
+    cleanedText: cleanedText.trim(),
+    toolCalls
+  };
 }
 
 function serializeProject(row) {
@@ -1713,9 +1894,45 @@ async function handleToolCall(toolCall, workingDirectory, user) {
 // API Endpoints
 // ==========================================
 
+const localDbPath = path.resolve(__dirname, '../sandbox/local_db.json');
+
+async function readLocalDb() {
+  try {
+    const data = await fs.readFile(localDbPath, 'utf8');
+    const parsed = JSON.parse(data);
+    return {
+      projects: Array.isArray(parsed.projects) ? parsed.projects : [],
+      conversations: Array.isArray(parsed.conversations) ? parsed.conversations : [],
+      projectMemories: parsed.projectMemories && typeof parsed.projectMemories === 'object' ? parsed.projectMemories : {}
+    };
+  } catch (err) {
+    return { projects: [], conversations: [], projectMemories: {} };
+  }
+}
+
+async function writeLocalDb(dbData) {
+  try {
+    await fs.mkdir(path.dirname(localDbPath), { recursive: true });
+    await fs.writeFile(localDbPath, JSON.stringify(dbData, null, 2), 'utf8');
+  } catch (err) {
+    console.error("❌ Local DB write failed:", err);
+  }
+}
+
 app.get('/api/projects', async (req, res) => {
   if (!db.hasDatabase()) {
-    return res.status(503).json({ error: 'Database aktiv deyil' });
+    try {
+      const localDb = await readLocalDb();
+      const userId = req.user?.id || 9999;
+      const userProjects = localDb.projects.filter(p => p.user_id === userId);
+      const userConversations = localDb.conversations.filter(c => c.user_id === userId);
+      return res.json({
+        projects: userProjects,
+        conversations: userConversations
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
   try {
@@ -1738,10 +1955,7 @@ app.get('/api/projects', async (req, res) => {
 });
 
 app.post('/api/projects', async (req, res) => {
-  if (!db.hasDatabase()) {
-    return res.status(503).json({ error: 'Database aktiv deyil' });
-  }
-
+  const isLocalMode = !db.hasDatabase();
   const id = req.body.id || crypto.randomUUID();
   const name = req.body.name || 'Yeni layihə';
   const repoUrl = req.body.repoUrl || null;
@@ -1779,6 +1993,44 @@ app.post('/api/projects', async (req, res) => {
       }
     }
 
+    const conversationId = crypto.randomUUID();
+    const title = name;
+
+    if (isLocalMode) {
+      const localDb = await readLocalDb();
+      const userId = req.user?.id || 9999;
+      
+      const newProject = {
+        id,
+        user_id: userId,
+        name,
+        path: requestedPath,
+        repo_url: repoUrl,
+        last_port: req.body.lastPort || 5173,
+        archived: false,
+        created_at: new Date().toISOString()
+      };
+      
+      const newConversation = {
+        id: conversationId,
+        project_id: id,
+        user_id: userId,
+        title,
+        messages: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      localDb.projects.push(newProject);
+      localDb.conversations.push(newConversation);
+      await writeLocalDb(localDb);
+
+      return res.status(201).json({
+        project: newProject,
+        conversation: newConversation
+      });
+    }
+
     const result = await db.query(
       `INSERT INTO projects (id, user_id, name, path, repo_url, last_port)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -1786,8 +2038,6 @@ app.post('/api/projects', async (req, res) => {
       [id, req.user.id, name, requestedPath, repoUrl, req.body.lastPort || 5173]
     );
 
-    const conversationId = crypto.randomUUID();
-    const title = name;
     const conversation = await db.query(
       `INSERT INTO conversations (id, project_id, user_id, title, messages)
        VALUES ($1, $2, $3, $4, $5)
@@ -1806,7 +2056,24 @@ app.post('/api/projects', async (req, res) => {
 
 app.patch('/api/projects/:id', async (req, res) => {
   if (!db.hasDatabase()) {
-    return res.status(503).json({ error: 'Database aktiv deyil' });
+    try {
+      const localDb = await readLocalDb();
+      const userId = req.user?.id || 9999;
+      const index = localDb.projects.findIndex(p => p.id === req.params.id && p.user_id === userId);
+      if (index === -1) return res.status(404).json({ error: 'Layihə tapılmadı' });
+      
+      const project = localDb.projects[index];
+      if (req.body.name !== undefined) project.name = req.body.name;
+      if (req.body.path !== undefined) project.path = req.body.path;
+      if (req.body.repoUrl !== undefined) project.repo_url = req.body.repoUrl;
+      if (req.body.lastPort !== undefined) project.last_port = req.body.lastPort;
+      if (req.body.archived !== undefined) project.archived = req.body.archived;
+      
+      await writeLocalDb(localDb);
+      return res.json({ project });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
   const updates = [];
@@ -1848,7 +2115,23 @@ app.patch('/api/projects/:id', async (req, res) => {
 
 app.delete('/api/projects/:id', async (req, res) => {
   if (!db.hasDatabase()) {
-    return res.status(503).json({ error: 'Database aktiv deyil' });
+    try {
+      const localDb = await readLocalDb();
+      const userId = req.user?.id || 9999;
+      const initialLength = localDb.projects.length;
+      
+      localDb.projects = localDb.projects.filter(p => !(p.id === req.params.id && p.user_id === userId));
+      localDb.conversations = localDb.conversations.filter(c => !(c.project_id === req.params.id && c.user_id === userId));
+      
+      if (localDb.projects.length === initialLength) {
+        return res.status(404).json({ error: 'Layihə tapılmadı' });
+      }
+      
+      await writeLocalDb(localDb);
+      return res.json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
   try {
@@ -1863,7 +2146,30 @@ app.delete('/api/projects/:id', async (req, res) => {
 
 app.post('/api/conversations', async (req, res) => {
   if (!db.hasDatabase()) {
-    return res.status(503).json({ error: 'Database aktiv deyil' });
+    try {
+      const localDb = await readLocalDb();
+      const userId = req.user?.id || 9999;
+      
+      const project = localDb.projects.find(p => p.id === req.body.projectId && p.user_id === userId);
+      if (!project) return res.status(404).json({ error: 'Layihə tapılmadı' });
+      
+      const id = req.body.id || crypto.randomUUID();
+      const newConversation = {
+        id,
+        project_id: req.body.projectId,
+        user_id: userId,
+        title: req.body.title || 'Yeni söhbət',
+        messages: req.body.messages || [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      localDb.conversations.push(newConversation);
+      await writeLocalDb(localDb);
+      return res.status(201).json({ conversation: newConversation });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
   const projectCheck = await db.query(
@@ -1890,7 +2196,22 @@ app.post('/api/conversations', async (req, res) => {
 
 app.patch('/api/conversations/:id', async (req, res) => {
   if (!db.hasDatabase()) {
-    return res.status(503).json({ error: 'Database aktiv deyil' });
+    try {
+      const localDb = await readLocalDb();
+      const userId = req.user?.id || 9999;
+      const index = localDb.conversations.findIndex(c => c.id === req.params.id && c.user_id === userId);
+      if (index === -1) return res.status(404).json({ error: 'Söhbət tapılmadı' });
+      
+      const conversation = localDb.conversations[index];
+      if (req.body.title !== undefined) conversation.title = req.body.title;
+      if (req.body.messages !== undefined) conversation.messages = req.body.messages;
+      conversation.updated_at = new Date().toISOString();
+      
+      await writeLocalDb(localDb);
+      return res.json({ conversation });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
   try {
@@ -1917,7 +2238,22 @@ app.patch('/api/conversations/:id', async (req, res) => {
 
 app.delete('/api/conversations/:id', async (req, res) => {
   if (!db.hasDatabase()) {
-    return res.status(503).json({ error: 'Database aktiv deyil' });
+    try {
+      const localDb = await readLocalDb();
+      const userId = req.user?.id || 9999;
+      const initialLength = localDb.conversations.length;
+      
+      localDb.conversations = localDb.conversations.filter(c => !(c.id === req.params.id && c.user_id === userId));
+      
+      if (localDb.conversations.length === initialLength) {
+        return res.status(404).json({ error: 'Söhbət tapılmadı' });
+      }
+      
+      await writeLocalDb(localDb);
+      return res.json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
   try {
@@ -2065,7 +2401,15 @@ app.post('/api/project-health', async (req, res) => {
 });
 
 app.get('/api/project-memory/:projectId', async (req, res) => {
-  if (!db.hasDatabase()) return res.json({ memory: {} });
+  if (!db.hasDatabase()) {
+    try {
+      const localDb = await readLocalDb();
+      const memory = localDb.projectMemories[req.params.projectId] || {};
+      return res.json({ memory });
+    } catch {
+      return res.json({ memory: {} });
+    }
+  }
   try {
     const result = await db.query(
       'SELECT memory FROM project_memories WHERE project_id = $1 AND user_id = $2',
@@ -2078,7 +2422,17 @@ app.get('/api/project-memory/:projectId', async (req, res) => {
 });
 
 app.post('/api/project-memory/:projectId', async (req, res) => {
-  if (!db.hasDatabase()) return res.status(503).json({ error: 'Database aktiv deyil' });
+  if (!db.hasDatabase()) {
+    try {
+      const localDb = await readLocalDb();
+      const memory = req.body?.memory || {};
+      localDb.projectMemories[req.params.projectId] = memory;
+      await writeLocalDb(localDb);
+      return res.json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
   try {
     const memory = req.body?.memory || {};
     await db.query(
@@ -2111,6 +2465,110 @@ app.post('/api/approvals/:id', async (req, res) => {
   res.json({ success: true, status: decision });
 });
 
+app.post('/api/tts', async (req, res) => {
+  const { text, voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM' } = req.body;
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+
+  if (!apiKey) {
+    return res.status(400).json({ error: "ElevenLabs API Key not configured. Using browser fallback." });
+  }
+
+  try {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+        'accept': 'audio/mpeg'
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`ElevenLabs error: ${response.status} - ${errText}`);
+    }
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    res.send(buffer);
+  } catch (error) {
+    console.error("ElevenLabs TTS error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/conversation-token', async (req, res) => {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const agentId = process.env.ELEVENLABS_AGENT_ID;
+
+  if (!apiKey || !agentId) {
+    return res.status(400).json({ error: "ElevenLabs API Key or Agent ID not configured." });
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${agentId}`,
+      {
+        method: 'GET',
+        headers: {
+          'xi-api-key': apiKey
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`ElevenLabs token error: ${response.status} - ${errText}`);
+    }
+
+    const body = await response.json();
+    res.json({ token: body.token });
+  } catch (error) {
+    console.error("ElevenLabs conversation token error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/signed-url', async (req, res) => {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const agentId = process.env.ELEVENLABS_AGENT_ID;
+
+  if (!apiKey || !agentId) {
+    return res.status(400).json({ error: "ElevenLabs API Key or Agent ID not configured." });
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${agentId}`,
+      {
+        method: 'GET',
+        headers: {
+          'xi-api-key': apiKey
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`ElevenLabs signed-url error: ${response.status} - ${errText}`);
+    }
+
+    const body = await response.json();
+    res.json({ signedUrl: body.signed_url });
+  } catch (error) {
+    console.error("ElevenLabs signed-url error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 app.post('/api/chat', async (req, res) => {
     const { messages, apiKey, model, workingDirectory, baseUrl, projectId, conversationId, safeMode = true } = req.body;
@@ -2162,45 +2620,39 @@ app.post('/api/chat', async (req, res) => {
     let effectiveModel = activeProvider.model;
     console.log(`🤖 /api/chat | provider_candidates=${providerCandidates.length} | active=${activeProvider.id} | model=${effectiveModel}`);
 
-    const sysPrompt = `Sən bahAI İDE rəsmi AI Agentisən. Project Root: ${resolvedWD}.
-Sən professional proqramçı və UI/UX ekspertisən.
+    const sysPrompt = `Sən bahAI İDE rəsmi və peşəkar AI Kodlaşdırma Agentisən. Project Root: ${resolvedWD}.
+Sən dünya səviyyəli proqramçı, sistem memarı və UI/UX ekspertisən. Qwen 2.5 Coder modelləri üçün xüsusi olaraq optimallaşdırılmısan.
 
-KRİTİK PERFORMANS QAYDALARI:
-1. LAYİHƏ ANALİZİ: İstifadəçi "kodu incələ", "analiz et", "nə var burda" desə — YALNIZ 1-2 tool call et:
-   - analyze_codebase ilə ümumi strukturu öyrən
-   - Sonra package.json və ya əsas entry point-i (index.js, main.py, App.tsx) oxu
-   - HƏR FAYILI AYRI-AYRI OXUMA! Xülasəni birbaşa ver.
-   - Nəticəni TƏK BİR CAVABDA yaz: texnologiyalar, struktur, əsas fayllar.
-2. TOOL CALL OPTİMİZASİYASI:
-   - Eyni məqsəd üçün maksimum 3 tool call et.
-   - list_directory + analyze_codebase kifayətdir layihəni başa düşmək üçün.
-   - Hər faylı ayrıca read_file etmə — yalnız lazım olanı oxu.
-   - glob_search ilə fayl tap, sonra yalnız 1-2 əsas faylı oxu.
-3. Kodu dəyişməzdən əvvəl glob_search və read_file ilə mütləq kodu analiz et.
-4. Dəyişiklik etdikdə YALNIZ file_edit istifadə et (bütöv faylı yenidən yazma).
-5. LIVE PREVIEW: LivePreview paneli YALNIZ 'http://localhost:PORT' formatında işləyir.
-6. SERVERİ TƏSDİQLƏ: check_port_status çağırmadan "Server işləyir" demə.
-7. Attachment göndərilibsə birbaşa məzmunu analiz et.
+🎯 MƏQSƏD VƏ MƏNTİQ (SUPER ZƏKA REJİMİ):
+Sənin əsas məqsədin kod bazasını mükəmməl analiz etmək, 100% işlək, istehsalata hazır (production-ready) kodlar yazmaq və layihədəki problemləri dərhal həll etməkdir.
 
-GIT & CODE TOOLS:
-- git_status, git_diff, git_commit, git_push, git_log, git_branch — git əməliyyatları
-- analyze_codebase — layihə strukturu (fayl sayı, dillər, dependencies)
-- find_definition, find_references — kod naviqasiyası
-- grep_search — mətn axtarışı
-- web_search, web_fetch — internet axtarışı və səhifə oxuma
-- run_tests — testləri icra et
-- start_server — server başlat (brauzerdə avtomatik açılır)
-- multi_file_edit — bir neçə faylı eyni anda redaktə et
+🧠 DÜŞÜNCƏ ZƏNCİRİ (CHAIN OF THOUGHT):
+- Hər hansı bir tool çağırmazdan əvvəl, qısa və məntiqli şəkildə Azərbaycan dilində nə etmək istədiyini və hansı faylı hədəflədiyini izah et.
+- Fəaliyyətlərini "Analiz edirəm -> Plan qururam -> Kodu tətbiq edirəm -> Yoxlayıram" zənciri ilə qur.
 
-SERVER QAYDASI (KRİTİK):
-- start_server tool-unu çağırdıqdan sonra İŞİ BİTİR. Əlavə tool call etmə.
-- "Server işə düşdü" cavabını ver və DAYAN. check_port_status çağırma.
+🛠️ KOD KEYFİYYƏTİ VƏ DAXİLİ QAYDALAR:
+1. LAYİHƏNİ TƏHLİL ET:
+   - Kodu dəyişməzdən əvvəl mütləq \`glob_search\`, \`grep_search\` və ya \`read_file\` ilə hədəf kod hissəsini və onun asılılıqlarını (dependencies) oxu. Kor-koranə kod yazma!
+   - Layihənin ümumi strukturu üçün \`analyze_codebase\` və \`list_directory\` alətlərindən istifadə et.
+2. DƏQİQ REDAKTƏ (BUG AVOIDANCE):
+   - Dəyişiklik etdikdə mütləq bütöv faylı yenidən yazmaq yerinə, \`file_edit\` və ya \`multi_file_edit\` istifadə et.
+   - \`file_edit\` çağırışında hədəf mətni (TargetContent) boşluqlar, girintilər (indentation) və mötərizələr daxil olmaqla EXACTLY (eyniylə) uyğunlaşdır. Sintaksis xətalarına yol vermə!
+3. YALNIZ TAM VƏ İŞLƏK KOD:
+   - Heç vaxt kod daxilində placeholder (məsələn: \`// implement later\`, \`// ... rest of code\`) istifadə etmə. Bütün kodu tam, işlək və istehsalata hazır yaz.
+4. YOXLAMA VƏ VERİFİKASİYA:
+   - Kod dəyişikliyindən sonra, əgər testlər varsa \`run_tests\` işə sal. Və ya \`run_terminal_command\` ilə kodun sintaksisini/kompilyasiyasını yoxla.
+5. OPTİMALLIQ:
+   - Eyni məqsəd üçün lazımsız sayda tool call etmə. Hər addımda ən optimal aləti seç.
 
-Azərbaycan dilində cavab ver.`;
+💡 LİVE PREVIEW & SERVER QAYDALARI (KRİTİK):
+- LivePreview yalnız 'http://localhost:PORT' formatında işləyir.
+- \`start_server\` alətini çağırdıqdan sonra dərhal dayanın və "Server başladıldı!" deyib dayanın. Əlavə yoxlama əmrləri verməyin.
+
+Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cavab ver.`;
 
     let modelMessages = [];
     try {
-      modelMessages = await normalizeMessagesForModel(messages);
+      modelMessages = await normalizeMessagesForModel(messages, effectiveModel);
     } catch (error) {
       console.error('/api/chat normalize xətası:', error?.message || error);
       modelMessages = Array.isArray(messages) ? messages : [];
@@ -2218,8 +2670,17 @@ Azərbaycan dilində cavab ver.`;
       }
     }
 
+    let fullSysPrompt = sysPrompt;
+    const isLocalOrFlakyModel = isLocalMode() || 
+      !effectiveModel || 
+      /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(effectiveModel);
+      
+    if (isLocalOrFlakyModel) {
+      fullSysPrompt += generateToolsSystemPrompt();
+    }
+
     const memoryPrompt = `Layihə yaddaşı: ${JSON.stringify(projectMemory)}`;
-    const apiMessages = [{ role: 'system', content: `${sysPrompt}\n${memoryPrompt}` }, ...modelMessages];
+    const apiMessages = [{ role: 'system', content: `${fullSysPrompt}\n${memoryPrompt}` }, ...modelMessages];
     const hasAttachmentInRequest = Array.isArray(messages) && messages.some((m) => Array.isArray(m?.attachments) && m.attachments.length > 0);
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -2259,9 +2720,10 @@ Azərbaycan dilində cavab ver.`;
             let stream;
             let shouldRetryWithDeepSeekRecovery = false;
             try {
+                const apiInputMessages = await normalizeMessagesForModel(currentMessages, effectiveModel);
                 stream = await client.chat.completions.create({
                     model: effectiveModel,
-                    messages: currentMessages,
+                    messages: apiInputMessages,
                     tools: TOOLS,
                     temperature: 0.2,
                     stream: true
@@ -2290,9 +2752,10 @@ Azərbaycan dilində cavab ver.`;
                           'X-Title': 'bahAI Agent'
                         }
                       });
+                      const altApiInputMessages = await normalizeMessagesForModel(currentMessages, alt.model);
                       stream = await altClient.chat.completions.create({
                         model: alt.model,
-                        messages: currentMessages,
+                        messages: altApiInputMessages,
                         tools: TOOLS,
                         temperature: 0.2,
                         stream: true
@@ -2419,7 +2882,7 @@ Azərbaycan dilində cavab ver.`;
             }
 
             // Tamamlanmış mesajı yarat
-            const normalizedToolCalls = accumulatedToolCalls
+            let normalizedToolCalls = accumulatedToolCalls
               .filter((tc) => tc && tc.function && tc.function.name)
               .map((tc, idx) => ({
                 id: tc.id || `toolcall_${step}_${idx}_${Date.now()}`,
@@ -2429,6 +2892,30 @@ Azərbaycan dilində cavab ver.`;
                   arguments: tc.function.arguments || '{}'
                 }
               }));
+
+            // Universal Tool Call Fallback Parser for text-printed JSON blocks (e.g. from local Ollama/Qwen)
+            let textToolCalls = [];
+            if (accumulatedContent) {
+              try {
+                const parseResult = extractTextToolCalls(accumulatedContent);
+                accumulatedContent = parseResult.cleanedText;
+                textToolCalls = parseResult.toolCalls.map((tc, idx) => ({
+                  id: `toolcall_text_${step}_${idx}_${Date.now()}`,
+                  type: 'function',
+                  function: {
+                    name: tc.name,
+                    arguments: tc.arguments
+                  }
+                }));
+              } catch (parseErr) {
+                console.error("⚠️ Fallback tool call parser xətası:", parseErr);
+              }
+            }
+
+            if (textToolCalls.length > 0) {
+              console.log(`🔌 Intercepted ${textToolCalls.length} raw text tool call(s):`, JSON.stringify(textToolCalls));
+              normalizedToolCalls = [...normalizedToolCalls, ...textToolCalls];
+            }
 
             const msg = {
               role: 'assistant',
@@ -2594,8 +3081,35 @@ app.get('/api/pick-directory', async (req, res) => {
     });
 });
 
+let cachedLocalGithubUsername = null;
+
 app.get('/api/github/status', async (req, res) => {
   if (!db.hasDatabase()) {
+    const token = typeof process.env.GITHUB_TOKEN === 'string' ? process.env.GITHUB_TOKEN.trim() : '';
+    if (!token) {
+      return res.json({ connected: false, username: null });
+    }
+    if (cachedLocalGithubUsername) {
+      return res.json({ connected: true, username: cachedLocalGithubUsername });
+    }
+    try {
+      const meResponse = await fetch('https://api.github.com/user', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'bahAI-Agent'
+        }
+      });
+      if (meResponse.ok) {
+        const me = await meResponse.json();
+        cachedLocalGithubUsername = me.login || 'developer';
+        return res.json({ connected: true, username: cachedLocalGithubUsername });
+      } else {
+        console.error(`⚠️ Local GITHUB_TOKEN validation failed: status=${meResponse.status}`);
+      }
+    } catch (err) {
+      console.error("⚠️ Local GITHUB_TOKEN status verification error:", err.message);
+    }
     return res.json({ connected: false, username: null });
   }
   try {
@@ -2608,9 +3122,6 @@ app.get('/api/github/status', async (req, res) => {
 });
 
 app.post('/api/github/connect', async (req, res) => {
-  if (!db.hasDatabase()) {
-    return res.status(503).json({ error: 'Database aktiv deyil' });
-  }
   const token = String(req.body?.token || '').trim();
   if (!token) return res.status(400).json({ error: 'GitHub token tələb olunur' });
 
@@ -2626,6 +3137,28 @@ app.post('/api/github/connect', async (req, res) => {
       return res.status(401).json({ error: 'GitHub token etibarsızdır və ya icazə yoxdur' });
     }
     const me = await meResponse.json();
+
+    if (!db.hasDatabase()) {
+      const fs = require('fs');
+      const path = require('path');
+      const envPath = path.resolve(__dirname, '../.env');
+      let envContent = '';
+      try {
+        envContent = fs.readFileSync(envPath, 'utf8');
+      } catch {}
+
+      if (envContent.includes('GITHUB_TOKEN=')) {
+        envContent = envContent.replace(/GITHUB_TOKEN=.*/g, `GITHUB_TOKEN=${token}`);
+      } else {
+        envContent += `\n# GitHub Yerli Token\nGITHUB_TOKEN=${token}\n`;
+      }
+      fs.writeFileSync(envPath, envContent, 'utf8');
+      process.env.GITHUB_TOKEN = token;
+      cachedLocalGithubUsername = me.login || 'developer';
+
+      return res.json({ connected: true, username: me.login || null });
+    }
+
     const encrypted = encryptSecret(token);
     await db.query(
       'UPDATE users SET github_token_enc = $1, github_username = $2 WHERE id = $3',
@@ -2639,7 +3172,24 @@ app.post('/api/github/connect', async (req, res) => {
 
 app.delete('/api/github/connect', async (req, res) => {
   if (!db.hasDatabase()) {
-    return res.status(503).json({ error: 'Database aktiv deyil' });
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const envPath = path.resolve(__dirname, '../.env');
+      let envContent = '';
+      try {
+        envContent = fs.readFileSync(envPath, 'utf8');
+      } catch {}
+
+      envContent = envContent.replace(/GITHUB_TOKEN=.*/g, '');
+      fs.writeFileSync(envPath, envContent, 'utf8');
+      delete process.env.GITHUB_TOKEN;
+      cachedLocalGithubUsername = null;
+
+      return res.json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
   try {
     await db.query('UPDATE users SET github_token_enc = NULL, github_username = NULL WHERE id = $1', [req.user.id]);

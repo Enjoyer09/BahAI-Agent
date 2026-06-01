@@ -1,5 +1,5 @@
-import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Bot } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Bot, Volume2, VolumeX } from 'lucide-react';
+import { useState, useCallback, useRef } from 'react';
 import MarkdownRenderer from '../common/MarkdownRenderer';
 import ToolCallCard from './ToolCallCard';
 import type { Message } from '../../lib/types';
@@ -13,13 +13,102 @@ interface Props {
 export default function ChatMessage({ message, pendingApprovals, onApprove }: Props) {
   const [copied, setCopied] = useState(false);
   const [showTools, setShowTools] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  
   const isBot = message.role === 'assistant';
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const copyToClipboard = useCallback(() => {
     navigator.clipboard.writeText(message.content || '');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [message.content]);
+
+  const speakWithBrowser = useCallback((text: string) => {
+    if (!window.speechSynthesis) {
+      alert("Bu cihazda səs oxuma dəstəklənmir.");
+      setIsPlaying(false);
+      return;
+    }
+
+    window.speechSynthesis.cancel(); // Stop any currently playing voices
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Find Azerbaijani/Turkish or close voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const azVoice = voices.find(v => v.lang.startsWith('az')) || voices.find(v => v.lang.startsWith('tr')) || voices.find(v => v.lang.startsWith('en'));
+    if (azVoice) {
+      utterance.voice = azVoice;
+    }
+    
+    utterance.onend = () => {
+      setIsPlaying(false);
+    };
+    
+    utterance.onerror = () => {
+      setIsPlaying(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  const speakMessage = useCallback(async () => {
+    if (isPlaying) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      setIsPlaying(false);
+      return;
+    }
+
+    const cleanText = (message.content || '')
+      .replace(/```[\s\S]*?```/g, '[Kod bloku]') // Replace code blocks with [Kod bloku] so it doesn't read out full source code line by line!
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/[*_#]/g, '')
+      .trim();
+
+    if (!cleanText) return;
+
+    setIsPlaying(true);
+
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text: cleanText })
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        
+        audio.onended = () => {
+          setIsPlaying(false);
+          audioRef.current = null;
+        };
+        
+        audio.onerror = () => {
+          speakWithBrowser(cleanText);
+        };
+        
+        await audio.play();
+        return;
+      }
+    } catch (e) {
+      console.error("ElevenLabs request failed, falling back to browser TTS:", e);
+    }
+
+    // Fallback: Use browser Web Speech Synthesis
+    speakWithBrowser(cleanText);
+  }, [isPlaying, message.content, speakWithBrowser]);
 
   if (message.role === 'tool') return null;
 
@@ -208,6 +297,20 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
                 aria-label="Bad response"
               >
                 <ThumbsDown size={14} />
+              </button>
+              <button
+                onClick={speakMessage}
+                className="p-2 rounded-md transition-colors flex items-center justify-center"
+                style={{
+                  color: isPlaying ? 'var(--color-accent)' : 'var(--fg-muted)',
+                  minHeight: '44px',
+                  minWidth: '44px',
+                  background: isPlaying ? 'var(--color-accent-muted)' : 'transparent'
+                }}
+                title={isPlaying ? "Səsi dayandır" : "Səsləndir (ElevenLabs / Səsli Dialoq)"}
+                aria-label="Speak message"
+              >
+                {isPlaying ? <VolumeX size={14} className="animate-pulse" /> : <Volume2 size={14} />}
               </button>
               <button
                 className="p-2 rounded-md transition-colors"

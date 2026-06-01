@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen } from 'lucide-react';
+import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen, Mic } from 'lucide-react';
 import ChatArea from './components/chat/ChatArea';
 import ChatInput from './components/chat/ChatInput';
 import CodeEditor from './components/chat/CodeEditor';
@@ -7,6 +7,7 @@ import LivePreview from './components/chat/LivePreview';
 import OpsPanel from './components/chat/OpsPanel';
 import Terminal from './components/chat/Terminal';
 import AuthModal from './components/auth/AuthModal';
+import ElevenLabsHelpModal from './components/common/ElevenLabsHelpModal';
 import Sidebar from './components/sidebar/Sidebar';
 import LandingPage from './components/landing/LandingPage';
 import { useAuth } from './hooks/useAuth';
@@ -15,10 +16,13 @@ import { useTheme } from './hooks/useTheme';
 import { useSettings } from './hooks/useSettings';
 import { ToastProvider, useConfirm } from './components/common/Toast';
 import { trackAppOpen } from './lib/telemetry';
+const ElevenLabsWidget = 'elevenlabs-convai' as any;
 
 function AppContent() {
   const auth = useAuth();
   const settings = useSettings();
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const [showElevenLabsHelp, setShowElevenLabsHelp] = useState(false);
   const themeCtx = useTheme();
   const [isChat, setIsChat] = useState(() => window.location.pathname === '/chat');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -34,7 +38,24 @@ function AppContent() {
 
   const chat = useChat(settings.settings, auth.user?.id);
 
-  useEffect(() => { trackAppOpen(); }, []);
+  useEffect(() => { 
+    trackAppOpen(); 
+    
+    // Fetch ElevenLabs signed URL
+    fetch('/api/signed-url')
+      .then(res => {
+        if (!res.ok) throw new Error("Key not configured");
+        return res.json();
+      })
+      .then(data => {
+        if (data.signedUrl) {
+          setSignedUrl(data.signedUrl);
+        }
+      })
+      .catch(err => {
+        console.log("ElevenLabs voice widget not loaded:", err.message);
+      });
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
@@ -107,6 +128,14 @@ function AppContent() {
 
   return (
     <div className="dvh-screen flex overflow-hidden" style={{ background: 'var(--bg-main)' }}>
+      {/* Electron Window Drag Handle */}
+      {window.navigator.userAgent.includes('Electron') && (
+        <div 
+          className="fixed top-0 left-0 right-0 h-7 z-[9999]" 
+          style={{ WebkitAppRegion: 'drag', WebkitUserSelect: 'none' } as any}
+        />
+      )}
+
       {/* DESKTOP SIDEBAR */}
       {sidebarOpen && !isMobile && (
         <aside
@@ -153,7 +182,10 @@ function AppContent() {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative" style={{ paddingTop: '28px' }}>
         {/* Floating toolbar — desktop only */}
         {!isMobile && (
-          <div className="absolute top-2 right-2 z-10 flex items-center gap-1 safe-top">
+          <div 
+            className="absolute top-2 right-2 z-10 flex items-center gap-1 safe-top"
+            style={{ WebkitAppRegion: 'no-drag' } as any}
+          >
             {!sidebarOpen && (
               <button
                 onClick={() => setSidebarOpen(true)}
@@ -362,6 +394,31 @@ function AppContent() {
       {/* MODALS */}
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
       {ConfirmDialog}
+      <ElevenLabsHelpModal isOpen={showElevenLabsHelp} onClose={() => setShowElevenLabsHelp(false)} />
+
+      {/* ElevenLabs Real-Time Voice Widget / Setup Helper */}
+      {signedUrl ? (
+        <ElevenLabsWidget signed-url={signedUrl}></ElevenLabsWidget>
+      ) : (
+        <button
+          onClick={() => setShowElevenLabsHelp(true)}
+          className="fixed bottom-6 right-6 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 z-40 group shadow-lg cursor-pointer hover:scale-110 active:scale-95"
+          style={{
+            background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            boxShadow: '0 4px 20px rgba(168, 85, 247, 0.4)',
+          }}
+          title="Səsli Dialoq (ChatGPT-like Speech-to-Speech) Rejimi"
+        >
+          {/* Wave ripple pulse effect */}
+          <div className="absolute inset-0 rounded-full animate-ping opacity-25" style={{ background: '#a855f7', animationDuration: '3s' }} />
+          <Mic size={20} className="text-white relative z-10 animate-pulse" />
+          
+          <div className="absolute right-full mr-3 bg-neutral-900 text-white text-xs px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none shadow-md border border-neutral-800">
+            Səsli Dialoq Rejimi (ElevenLabs)
+          </div>
+        </button>
+      )}
     </div>
   );
 }

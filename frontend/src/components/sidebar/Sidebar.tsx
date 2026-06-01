@@ -144,33 +144,42 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
 
   const handlePickDir = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch(`${API_BASE_URL}/api/pick-directory`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      });
-      if (!response.ok) {
-        const err = await response.json();
-        toast.error(err.error || 'Qovluq seçilə bilmədi');
-        return;
+      let chosenPath = '';
+      const electron = (window as any).electron;
+      
+      if (electron && typeof electron.pickDirectory === 'function') {
+        chosenPath = await electron.pickDirectory();
+      } else {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(`${API_BASE_URL}/api/pick-directory`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (!response.ok) {
+          const err = await response.json();
+          toast.error(err.error || 'Qovluq seçilə bilmədi');
+          return;
+        }
+        const data = await response.json();
+        chosenPath = data.path || '';
       }
-      const data = await response.json();
-      if (data.path) {
-        setNewProjPath(data.path);
+
+      if (chosenPath) {
+        setNewProjPath(chosenPath);
         // Auto-set project name from folder name
-        const folderName = data.path.replace(/\/$/, '').split('/').pop();
+        const folderName = chosenPath.replace(/\/$/, '').split('/').pop();
         setNewProjName(folderName || '');
         
         // In local mode, auto-create project immediately after picking folder
         if (addMode === 'local') {
           const name = folderName || 'Yeni layihə';
-          chat.createProject(name, data.path);
+          chat.createProject(name, chosenPath);
           setShowAddModal(false);
           setNewProjName('');
           setNewProjPath('');
         }
       }
     } catch (e) {
-      toast.error('Backend bağlantısı uğursuz oldu.');
+      toast.error('Qovluq seçimi zamanı xəta baş verdi.');
     }
   };
 

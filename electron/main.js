@@ -1,7 +1,17 @@
-const { app, BrowserWindow, shell, dialog, Menu, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, shell, dialog, Menu, Tray, nativeImage, ipcMain, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const net = require('net');
+
+ipcMain.handle('dialog:openDirectory', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Layihə qovluğunu seçin'
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
 
 let mainWindow = null;
 let backendProcess = null;
@@ -214,7 +224,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: true
+      webSecurity: true,
+      preload: path.join(__dirname, 'preload.js')
     },
     show: false,
     icon: path.join(__dirname, 'icons', 'icon.png')
@@ -322,6 +333,21 @@ function createMenu() {
 
 // App lifecycle
 app.whenReady().then(async () => {
+  // Set up microphone/media permission handlers
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      return callback(true); // Auto-approve media (mic) permission
+    }
+    callback(false);
+  });
+
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, origin) => {
+    if (permission === 'media') {
+      return true; // Auto-allow media check
+    }
+    return false;
+  });
+
   // Set app name
   app.setName('bahAI');
   

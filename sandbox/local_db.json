@@ -1,0 +1,116 @@
+{
+  "projects": [
+    {
+      "id": "b07c83d7-1587-446e-abc3-8bc5e9b7ecdb",
+      "user_id": 9999,
+      "name": "bahAI Sandbox",
+      "path": "workspace://default",
+      "repo_url": null,
+      "last_port": 5173,
+      "archived": false,
+      "created_at": "2026-06-01T12:16:42.685Z"
+    },
+    {
+      "id": "9efe4d6d-cc8a-4103-a2c5-79f5a87c67e5",
+      "user_id": 3469256744,
+      "name": "bahAI Sandbox",
+      "path": "workspace://default",
+      "repo_url": null,
+      "last_port": 5173,
+      "archived": false,
+      "created_at": "2026-06-01T12:17:13.360Z"
+    },
+    {
+      "id": "e983636d-148e-4d55-a19e-dd3ba49a3911",
+      "user_id": 3469256744,
+      "name": "ironwaves-pos-platform",
+      "path": "/Users/macbookair/Documents/ironwaves-pos-platform",
+      "repo_url": null,
+      "last_port": 5173,
+      "archived": false,
+      "created_at": "2026-06-01T12:17:51.755Z"
+    },
+    {
+      "id": "2fd2b049-eb25-46e0-baf1-7c918b2b202b",
+      "user_id": 3469256744,
+      "name": "ironwaves-pos-platform",
+      "path": "/Users/macbookair/Documents/ironwaves-pos-platform",
+      "repo_url": null,
+      "last_port": 5173,
+      "archived": false,
+      "created_at": "2026-06-01T12:23:19.303Z"
+    },
+    {
+      "id": "61d40778-b89a-4713-9a43-e733ebf7691f",
+      "user_id": 9999,
+      "name": "emalatxana-loyalty",
+      "path": "workspace://emalatxana-loyalty",
+      "repo_url": "https://github.com/Enjoyer09/emalatxana-loyalty.git",
+      "last_port": 5173,
+      "archived": false,
+      "created_at": "2026-06-01T13:08:27.125Z"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "22527af9-35b0-4795-ad1a-4d15e7514ce4",
+      "project_id": "e983636d-148e-4d55-a19e-dd3ba49a3911",
+      "user_id": 3469256744,
+      "title": "ironwaves-pos-platform",
+      "messages": [
+        {
+          "id": "mpv74t1fp2kw8p",
+          "role": "user",
+          "content": "salam",
+          "attachments": [],
+          "timestamp": 1780317601539
+        },
+        {
+          "id": "mpv759zkarng4o",
+          "role": "assistant",
+          "content": "Salam! Size nasıl yardımcı olabilirim?",
+          "timestamp": 1780317623504
+        },
+        {
+          "id": "mpv77nbpkmnbfm",
+          "role": "user",
+          "content": "sen danisha bilirsen?",
+          "attachments": [],
+          "timestamp": 1780317734101
+        },
+        {
+          "id": "mpv780rnys2z8j",
+          "role": "assistant",
+          "content": "Bilirim, Danishça konuşabilirim. Size nasıl yardımcı olabilirim?",
+          "timestamp": 1780317751523
+        }
+      ],
+      "created_at": "2026-06-01T12:17:51.755Z",
+      "updated_at": "2026-06-01T12:42:31.539Z"
+    },
+    {
+      "id": "def49928-e440-48c2-8192-2eeff9759e57",
+      "project_id": "2fd2b049-eb25-46e0-baf1-7c918b2b202b",
+      "user_id": 3469256744,
+      "title": "ironwaves-pos-platform",
+      "messages": [
+        {
+          "id": "mpv6jhqixxa0hy",
+          "role": "user",
+          "content": "proqrami audit ele",
+          "attachments": [],
+          "timestamp": 1780316607114
+        },
+        {
+          "id": "mpv6lqy0bjxpoc",
+          "role": "assistant",
+          "content": "Layihəni audit etmək üçün aşağıdakı adımları izləyin:\n\n1. **Kodunuzu Yoxlayın**: Kodunuzu yoxlayaraq hər hansı bir xəta və ya potansiyal həssaslikləri tespit edin.\n\n2. **Testlərinizi Yoxlayın**: Testlərinizi yoxlayaraq kodunuzun funksionallığını yoxlayın və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n3. **Kodunuzu İnceleyin**: Kodunuzu ətraf etib bir neçə kez inceleyin və yaxşılaşdırın.\n\n4. **Sicherlik Auditini Yoxlayın**: Kodunuzda potansiyal həssaslikləri yoxlayaraq (məsələn, SQL injection, XSS) tespit edin.\n\n5. **Kodunuzu Optimallasın**: Kodunuzu daha yaxşı və performanslı hale getirmək üçün optimallasın.\n\n6. **Kodunuzu Dokumentalasın**: Kodunuzu daha iyi anlamağa imkan verən dokumentasiya edin.\n\n7. **Kodunuzu Code Review Etin**: Başqa bir şəxs və ya komanda ilə kodunuzu code review etin və tespit edilən xətaları düzəlləyin.\n\n8. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n9. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n10. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n11. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n12. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n13. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n14. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n15. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n16. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n17. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n18. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n19. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n20. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n21. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n22. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n23. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n24. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n25. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n26. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n27. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n28. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n29. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\n30. **Kodunuzu Süreklilik Testlərinizle Yoxlayın**: Süreklilik testlərinizi yoxlayaraq kodunuzun sürümünə nəticə verin və yeni dəyişikliklərdən sonra istifadə olunan testlərə nəticə verin.\n\nBu adımları izləyirseniz, kodunuzu daha yaxşı və daha iyi bir hale getirmək mümkündür.",
+          "timestamp": 1780316712360
+        }
+      ],
+      "created_at": "2026-06-01T12:23:19.303Z",
+      "updated_at": "2026-06-01T12:25:12.373Z"
+    }
+  ],
+  "projectMemories": {}
+}
