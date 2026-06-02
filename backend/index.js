@@ -258,6 +258,10 @@ function decryptSecret(payload) {
 
 async function getUserGithubToken(userId) {
   if (!db.hasDatabase()) {
+    const localDb = await readLocalDb();
+    if (localDb.settings && localDb.settings.github_token) {
+      return localDb.settings.github_token.trim();
+    }
     const t = process.env.GITHUB_TOKEN;
     return typeof t === 'string' ? t.trim() : null;
   }
@@ -595,6 +599,58 @@ function generateToolsSystemPrompt() {
     }
     prompt += `\n`;
   }
+  prompt += `\n🚨 QƏTİ QAYDA: Əgər istifadəçi "kodu yoxla", "audit et", "layihəyə bax" və ya oxşar bir şey deyirsə, ONA SUAL VERMƏ ("hansı fayla baxım?", "kod hardadır?" və s.). DƏRHAL yuxarıdakı json formatında \`list_directory\` (və ya github-dırsa \`github_list_contents\`) alətini çağır! İlk addımın mütləq alət çağırmaq olmalıdır!
+  
+NÜMUNƏ CAVAB 1 (Lokal analiz):
+Əgər istifadəçi sadəcə "kodu audit et" deyərsə, YALNIZ bunu yazmalısan:
+\`\`\`json
+{
+  "name": "list_directory",
+  "arguments": {
+    "path": "./"
+  }
+}
+\`\`\`
+
+NÜMUNƏ CAVAB 2 (GitHub analiz):
+Əgər istifadəçi "githubdakı repo-nu analiz et" deyərsə, YALNIZ bunu yazmalısan (owner və repo adını istifadəçinin dediklərindən taparaq):
+\`\`\`json
+{
+  "name": "github_list_contents",
+  "arguments": {
+    "owner": "sahibin-adi",
+    "repo": "reponun-adi",
+    "path": ""
+  }
+}
+\`\`\`
+
+NÜMUNƏ CAVAB 3 (Faylı oxumaq):
+Sən "github_list_contents" siyahısını gördükdən sonra (və ya istifadəçi faylı yoxla dedikdə) DƏRHAL faylı oxumalısan:
+\`\`\`json
+{
+  "name": "github_read_file",
+  "arguments": {
+    "owner": "sahibin-adi",
+    "repo": "reponun-adi",
+    "path": "faylin/adi.py"
+  }
+}
+\`\`\`
+
+NÜMUNƏ CAVAB 4 (Kodda axtarış):
+Əgər istifadəçi "maliyyə modulunu audit elə" deyərsə və sən o faylın adını bilmirsənsə, DƏRHAL axtarış et (heç bir əlavə söz yazma):
+\`\`\`json
+{
+  "name": "github_search_code",
+  "arguments": {
+    "owner": "sahibin-adi",
+    "repo": "reponun-adi",
+    "query": "maliyye"
+  }
+}
+\`\`\`
+\n`;
   return prompt;
 }
 
@@ -618,38 +674,50 @@ function buildDeepSeekRecoveryMessages(messages = []) {
 function extractTextToolCalls(text) {
   if (!text) return { cleanedText: text, toolCalls: [] };
   
-  const matchesToProcess = [];
+  let cleanedText = text;
+  const toolCalls = [];
+
+  // 1. Try to find markdown blocks
+  const blockRegex = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/ig;
+  let match;
+  while ((match = blockRegex.exec(cleanedText)) !== null) {
+      try {
+          const parsed = JSON.parse(match[1]);
+          if (parsed && parsed.name && parsed.arguments !== undefined) {
+              const isValidTool = TOOLS.some(t => t.function.name === parsed.name);
+              if (isValidTool) {
+                  toolCalls.push({
+                      name: parsed.name,
+                      arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
+                  });
+                  cleanedText = cleanedText.slice(0, match.index) + cleanedText.slice(match.index + match[0].length);
+                  blockRegex.lastIndex = 0;
+                  continue;
+              }
+          }
+      } catch(e) {}
+  }
+
+  // 2. Try to find raw JSON blocks using balanced braces
   let index = 0;
-  
-  while (index < text.length) {
-    const startIdx = text.indexOf('{', index);
+  while (index < cleanedText.length) {
+    const startIdx = cleanedText.indexOf('{', index);
     if (startIdx === -1) break;
     
-    // Find balanced closing brace
     let braceCount = 0;
     let inString = false;
     let escape = false;
     let endIndex = startIdx;
     let found = false;
     
-    for (; endIndex < text.length; endIndex++) {
-      const char = text[endIndex];
-      if (escape) {
-        escape = false;
-        continue;
-      }
-      if (char === '\\') {
-        escape = true;
-        continue;
-      }
-      if (char === '"') {
-        inString = !inString;
-        continue;
-      }
+    for (; endIndex < cleanedText.length; endIndex++) {
+      const char = cleanedText[endIndex];
+      if (escape) { escape = false; continue; }
+      if (char === '\\') { escape = true; continue; }
+      if (char === '"') { inString = !inString; continue; }
       if (!inString) {
-        if (char === '{') {
-          braceCount++;
-        } else if (char === '}') {
+        if (char === '{') braceCount++;
+        else if (char === '}') {
           braceCount--;
           if (braceCount === 0) {
             endIndex++;
@@ -661,63 +729,31 @@ function extractTextToolCalls(text) {
     }
     
     if (found) {
-      const possibleJson = text.substring(startIdx, endIndex);
+      const possibleJson = cleanedText.substring(startIdx, endIndex);
       try {
         const parsed = JSON.parse(possibleJson);
         if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string' && parsed.arguments !== undefined) {
-          // Verify that parsed.name matches one of our known tool names to avoid false positives!
           const isValidTool = TOOLS.some(t => t.function.name === parsed.name);
           if (isValidTool) {
-            matchesToProcess.push({
-              startIndex: startIdx,
-              endIndex: endIndex,
+            toolCalls.push({
               name: parsed.name,
               arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
             });
-            index = endIndex;
+            // remove from text, also remove trailing/leading word 'json' if present
+            let prefixIndex = startIdx;
+            const beforeText = cleanedText.substring(0, startIdx);
+            if (beforeText.trim().endsWith('json')) {
+               prefixIndex = beforeText.lastIndexOf('json');
+            }
+            cleanedText = cleanedText.substring(0, prefixIndex) + cleanedText.substring(endIndex);
+            index = 0; // reset
             continue;
           }
         }
-      } catch (e) {
-        // Not valid JSON
-      }
+      } catch (e) {}
     }
     index = startIdx + 1;
   }
-  
-  // Clean from text and build final tool calls
-  let cleanedText = text;
-  const toolCalls = [];
-  
-  for (let i = matchesToProcess.length - 1; i >= 0; i--) {
-    const match = matchesToProcess[i];
-    
-    toolCalls.push({
-      name: match.name,
-      arguments: match.arguments
-    });
-    
-    let chunkStart = match.startIndex;
-    let chunkEnd = match.endIndex;
-    
-    // Check if it's wrapped in a markdown code block, e.g. ```json ... ``` or ``` ... ```
-    const beforeText = cleanedText.substring(Math.max(0, chunkStart - 15), chunkStart);
-    const codeBlockMatch = beforeText.match(/```(?:json)?\s*$/i);
-    if (codeBlockMatch) {
-      const matchLen = codeBlockMatch[0].length;
-      chunkStart -= matchLen;
-      
-      const afterText = cleanedText.substring(chunkEnd, Math.min(cleanedText.length, chunkEnd + 15));
-      const closeBlockMatch = afterText.match(/^\s*```/);
-      if (closeBlockMatch) {
-        chunkEnd += closeBlockMatch[0].length;
-      }
-    }
-    
-    cleanedText = cleanedText.substring(0, chunkStart) + cleanedText.substring(chunkEnd);
-  }
-  
-  toolCalls.reverse();
   
   return {
     cleanedText: cleanedText.trim(),
@@ -1071,6 +1107,54 @@ const TOOLS = [
                     folderName: { type: "string", description: "The name of the folder to clone into" }
                 },
                 required: ["url", "folderName"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "github_list_contents",
+            description: "List files and directories in a remote GitHub repository via API without cloning. Useful for remote analysis.",
+            parameters: {
+                type: "object",
+                properties: {
+                    owner: { type: "string", description: "The owner of the repository (e.g. 'octocat')" },
+                    repo: { type: "string", description: "The repository name (e.g. 'Hello-World')" },
+                    path: { type: "string", description: "The path inside the repository to list (default is empty string for root)" }
+                },
+                required: ["owner", "repo"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "github_read_file",
+            description: "Reads a file directly from a remote GitHub repository via API without cloning.",
+            parameters: {
+                type: "object",
+                properties: {
+                    owner: { type: "string", description: "The owner of the repository" },
+                    repo: { type: "string", description: "The repository name" },
+                    path: { type: "string", description: "The full path to the file inside the repo" }
+                },
+                required: ["owner", "repo", "path"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "github_search_code",
+            description: "Search for code, keywords, or symbols in a remote GitHub repository using GitHub's Search API.",
+            parameters: {
+                type: "object",
+                properties: {
+                    owner: { type: "string", description: "The owner of the repository" },
+                    repo: { type: "string", description: "The repository name" },
+                    query: { type: "string", description: "The search query (e.g. 'functionName' or 'finance')" }
+                },
+                required: ["owner", "repo", "query"]
             }
         }
     },
@@ -1498,6 +1582,88 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                 });
             }
 
+            case "github_list_contents": {
+                return new Promise(async (resolve) => {
+                    try {
+                        const { owner, repo, path: repoPath = '' } = args;
+                        const token = await getUserGithubToken(user?.id).catch(() => null);
+                        const headers = { 'User-Agent': 'bahAI-Agent', 'Accept': 'application/vnd.github.v3+json' };
+                        if (token) headers['Authorization'] = `token ${token}`;
+
+                        const url = `https://api.github.com/repos/${owner}/${repo}/contents/${repoPath}`;
+                        const response = await fetch(url, { headers });
+                        if (!response.ok) {
+                            return resolve(`GitHub API Error: ${response.status} ${response.statusText}`);
+                        }
+                        const data = await response.json();
+                        if (Array.isArray(data)) {
+                            const output = data.map(item => `[${item.type}] ${item.path}`).join('\n');
+                            resolve(output || "Directory is empty");
+                        } else {
+                            resolve(`Found single file: ${data.path} (Use github_read_file to read it)`);
+                        }
+                    } catch (err) {
+                        resolve(`Error fetching contents: ${err.message}`);
+                    }
+                });
+            }
+
+            case "github_read_file": {
+                return new Promise(async (resolve) => {
+                    try {
+                        const { owner, repo, path: filePath } = args;
+                        const token = await getUserGithubToken(user?.id).catch(() => null);
+                        const headers = { 'User-Agent': 'bahAI-Agent', 'Accept': 'application/vnd.github.v3+json' };
+                        if (token) headers['Authorization'] = `token ${token}`;
+
+                        const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+                        const response = await fetch(url, { headers });
+                        if (!response.ok) {
+                            return resolve(`GitHub API Error: ${response.status} ${response.statusText}`);
+                        }
+                        const data = await response.json();
+                        if (data.type === 'file' && data.content && data.encoding === 'base64') {
+                            const content = Buffer.from(data.content, 'base64').toString('utf8');
+                            resolve(content);
+                        } else {
+                            resolve(`Error: Target is not a base64 encoded file (type: ${data.type})`);
+                        }
+                    } catch (err) {
+                        resolve(`Error reading file: ${err.message}`);
+                    }
+                });
+            }
+
+            case "github_search_code": {
+                return new Promise(async (resolve) => {
+                    try {
+                        const { owner, repo, query } = args;
+                        const token = await getUserGithubToken(user?.id).catch(() => null);
+                        const headers = { 'User-Agent': 'bahAI-Agent', 'Accept': 'application/vnd.github.v3+json' };
+                        if (token) headers['Authorization'] = `token ${token}`;
+
+                        const encodedQuery = encodeURIComponent(`${query} repo:${owner}/${repo}`);
+                        const url = `https://api.github.com/search/code?q=${encodedQuery}`;
+                        const response = await fetch(url, { headers });
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                return resolve("Xəta: GitHub-da axtarış etmək üçün sistemə GitHub hesabı əlavə edilməlidir. Lütfən istifadəçiyə bunu deyin və ya ondan fayl adını birbaşa yazmasını xahiş edin.");
+                            }
+                            return resolve(`GitHub API Error: ${response.status} ${response.statusText}`);
+                        }
+                        const data = await response.json();
+                        if (data.items && data.items.length > 0) {
+                            const results = data.items.slice(0, 10).map(item => `[Match in ${item.path}] - URL: ${item.html_url}`).join('\n');
+                            resolve(`Found matches in the following files:\n${results}\n\n(Use github_read_file on the 'path' to read the full code)`);
+                        } else {
+                            resolve("No matches found for your query in this repository.");
+                        }
+                    } catch (err) {
+                        resolve(`Error searching code: ${err.message}`);
+                    }
+                });
+            }
+
             case "grep_search": {
                 const searchCwd = path.resolve(workingDirectory, args.cwd || '.');
                 if (!isPathSafe(searchCwd, workingDirectory, user)) return "Error: Path outside workspace";
@@ -1903,10 +2069,11 @@ async function readLocalDb() {
     return {
       projects: Array.isArray(parsed.projects) ? parsed.projects : [],
       conversations: Array.isArray(parsed.conversations) ? parsed.conversations : [],
-      projectMemories: parsed.projectMemories && typeof parsed.projectMemories === 'object' ? parsed.projectMemories : {}
+      projectMemories: parsed.projectMemories && typeof parsed.projectMemories === 'object' ? parsed.projectMemories : {},
+      settings: parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : {}
     };
   } catch (err) {
-    return { projects: [], conversations: [], projectMemories: {} };
+    return { projects: [], conversations: [], projectMemories: {}, settings: {} };
   }
 }
 
@@ -2620,35 +2787,45 @@ app.post('/api/chat', async (req, res) => {
     let effectiveModel = activeProvider.model;
     console.log(`🤖 /api/chat | provider_candidates=${providerCandidates.length} | active=${activeProvider.id} | model=${effectiveModel}`);
 
-    const sysPrompt = `Sən bahAI İDE rəsmi və peşəkar AI Kodlaşdırma Agentisən. Project Root: ${resolvedWD}.
+    const isLocalOrFlakyModel = isLocalMode() || 
+      !effectiveModel || 
+      /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(effectiveModel);
+
+    let sysPrompt = `Sən bahAI İDE rəsmi və peşəkar AI Kodlaşdırma Agentisən. Project Root: ${resolvedWD}.
 Sən dünya səviyyəli proqramçı, sistem memarı və UI/UX ekspertisən. Qwen 2.5 Coder modelləri üçün xüsusi olaraq optimallaşdırılmısan.
 
-🎯 MƏQSƏD VƏ MƏNTİQ (SUPER ZƏKA REJİMİ):
+🎯 MƏQSƏD VƏ MƏNTİQ:
 Sənin əsas məqsədin kod bazasını mükəmməl analiz etmək, 100% işlək, istehsalata hazır (production-ready) kodlar yazmaq və layihədəki problemləri dərhal həll etməkdir.
 
 🧠 DÜŞÜNCƏ ZƏNCİRİ (CHAIN OF THOUGHT):
-- Hər hansı bir tool çağırmazdan əvvəl, qısa və məntiqli şəkildə Azərbaycan dilində nə etmək istədiyini və hansı faylı hədəflədiyini izah et.
 - Fəaliyyətlərini "Analiz edirəm -> Plan qururam -> Kodu tətbiq edirəm -> Yoxlayıram" zənciri ilə qur.
 
 🛠️ KOD KEYFİYYƏTİ VƏ DAXİLİ QAYDALAR:
 1. LAYİHƏNİ TƏHLİL ET:
-   - Kodu dəyişməzdən əvvəl mütləq \`glob_search\`, \`grep_search\` və ya \`read_file\` ilə hədəf kod hissəsini və onun asılılıqlarını (dependencies) oxu. Kor-koranə kod yazma!
-   - Layihənin ümumi strukturu üçün \`analyze_codebase\` və \`list_directory\` alətlərindən istifadə et.
-2. DƏQİQ REDAKTƏ (BUG AVOIDANCE):
-   - Dəyişiklik etdikdə mütləq bütöv faylı yenidən yazmaq yerinə, \`file_edit\` və ya \`multi_file_edit\` istifadə et.
-   - \`file_edit\` çağırışında hədəf mətni (TargetContent) boşluqlar, girintilər (indentation) və mötərizələr daxil olmaqla EXACTLY (eyniylə) uyğunlaşdır. Sintaksis xətalarına yol vermə!
+   - Layihə faylları artıq sənin "Project Root" qovluğundadır (${resolvedWD}). Kodu audit etmək üçün qətiyyən \`git_clone\` ALƏTİNİ ÇAĞIRMA. Birbaşa \`list_directory\` və \`read_file\` alətlərindən istifadə edərək mövcud faylları oxu və audit et.
+   - Əgər istifadəçi kodu kompyuterə yükləmədən birbaşa GitHub üzərindən (onlayn) oxumaq istəyirsə, \`github_list_contents\` və \`github_read_file\` alətlərindən istifadə et.
+   - Kodu dəyişməzdən əvvəl mütləq \`glob_search\`, \`grep_search\` və ya \`read_file\` ilə hədəf kod hissəsini oxu. Kor-koranə kod yazma!
+2. DƏQİQ REDAKTƏ:
+   - Dəyişiklik etdikdə \`file_edit\` çağırışında hədəf mətni EXACTLY (eyniylə) uyğunlaşdır. Sintaksis xətalarına yol vermə!
 3. YALNIZ TAM VƏ İŞLƏK KOD:
-   - Heç vaxt kod daxilində placeholder (məsələn: \`// implement later\`, \`// ... rest of code\`) istifadə etmə. Bütün kodu tam, işlək və istehsalata hazır yaz.
-4. YOXLAMA VƏ VERİFİKASİYA:
-   - Kod dəyişikliyindən sonra, əgər testlər varsa \`run_tests\` işə sal. Və ya \`run_terminal_command\` ilə kodun sintaksisini/kompilyasiyasını yoxla.
-5. OPTİMALLIQ:
-   - Eyni məqsəd üçün lazımsız sayda tool call etmə. Hər addımda ən optimal aləti seç.
-
-💡 LİVE PREVIEW & SERVER QAYDALARI (KRİTİK):
-- LivePreview yalnız 'http://localhost:PORT' formatında işləyir.
-- \`start_server\` alətini çağırdıqdan sonra dərhal dayanın və "Server başladıldı!" deyib dayanın. Əlavə yoxlama əmrləri verməyin.
+   - Heç vaxt kod daxilində placeholder (məsələn: \`// implement later\`) istifadə etmə. Bütün kodu tam, işlək yaz.
+4. LİVE PREVIEW:
+   - \`start_server\` alətini çağırdıqdan sonra dərhal dayanın və "Server başladıldı!" deyib dayanın.
 
 Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cavab ver.`;
+
+    if (isLocalOrFlakyModel) {
+       sysPrompt = `SƏN BİR SÜNİ İNTELLEKT ALƏT İCRAÇISISAN (TOOL EXECUTOR). 
+LAYİHƏ QOVLUĞU (Project Root): ${resolvedWD}
+
+QƏTİ QADAĞALAR VƏ QAYDALAR:
+1. İnsanla lazımsız söhbət etmək QƏTİ QADAĞANDIR!
+2. "Hansı fayla baxım?", "Faylın adını deyin" KİMİ SUALLAR VERMƏK QƏTİ QADAĞANDIR! 
+3. Faylın adını bilmirsənsə istifadəçidən SORUŞMA! \`list_directory\` və ya \`github_list_contents\` alətini çağır, alınan siyahıdan ən uyğun faylı (məsələn app.py, index.js) SEÇ və DƏRHAL \`github_read_file\` (onlayndırsa) və ya \`read_file\` (lokaldırsa) ilə oxu!
+4. Əgər istifadəçi "kodu yoxla", "səhvləri tap" deyirsə və sən artıq qovluğun siyahısını görmüsənsə, istifadəçiyə heç nə yazmadan DƏRHAL vacib gördüyün faylları \`github_read_file\` aləti ilə oxumağa başla.
+5. Əgər istifadəçi "maliyyə modulu" və ya başqa bir konseptual ad çəkirsə və hansı fayl olduğunu bilmirsənsə, \`github_search_code\` alətini (owner, repo və axtarış sözü ilə) istifadə edərək kodu axtar, tapdığın faylı sonra oxu. SUAL VERMƏ!
+6. HƏR DƏFƏ YALNIZ BİR ALƏT ÇAĞIR! Alətləri siyahı kimi ardıcıl çap etmək QƏTİ QADAĞANDIR!`;
+    }
 
     let modelMessages = [];
     try {
@@ -2671,9 +2848,6 @@ Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cav
     }
 
     let fullSysPrompt = sysPrompt;
-    const isLocalOrFlakyModel = isLocalMode() || 
-      !effectiveModel || 
-      /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(effectiveModel);
       
     if (isLocalOrFlakyModel) {
       fullSysPrompt += generateToolsSystemPrompt();
@@ -2713,9 +2887,9 @@ Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cav
         while (step < MAX_STEPS && !clientDisconnected) {
             step++;
 
-            // Streaming ilə API çağırışı (180 saniyə timeout - reasoning modellər üçün)
+            // Streaming ilə API çağırışı (600 saniyə timeout - lokal/yavaş modellər üçün)
             const abortController = new AbortController();
-            const timeoutId = setTimeout(() => abortController.abort(), 180000);
+            const timeoutId = setTimeout(() => abortController.abort(), 600000);
 
             let stream;
             let shouldRetryWithDeepSeekRecovery = false;
@@ -2724,7 +2898,7 @@ Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cav
                 stream = await client.chat.completions.create({
                     model: effectiveModel,
                     messages: apiInputMessages,
-                    tools: TOOLS,
+                    tools: isLocalOrFlakyModel ? undefined : TOOLS,
                     temperature: 0.2,
                     stream: true
                 }, { signal: abortController.signal });
@@ -2753,10 +2927,11 @@ Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cav
                         }
                       });
                       const altApiInputMessages = await normalizeMessagesForModel(currentMessages, alt.model);
+                      const altIsLocal = /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(alt.model);
                       stream = await altClient.chat.completions.create({
                         model: alt.model,
                         messages: altApiInputMessages,
-                        tools: TOOLS,
+                        tools: altIsLocal ? undefined : TOOLS,
                         temperature: 0.2,
                         stream: true
                       }, { signal: abortController.signal });
@@ -2778,7 +2953,7 @@ Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cav
                 if (stream) {
                   // fallback succeeded
                 } else if (apiErr.name === 'AbortError') {
-                    res.write(`data: ${JSON.stringify({ type: 'error', message: 'API cavab vaxtı bitdi (60s). Zəhmət olmasa yenidən cəhd edin.' })}\n\n`);
+                    res.write(`data: ${JSON.stringify({ type: 'error', message: 'API cavab vaxtı bitdi (10 dəqiqə). Zəhmət olmasa yenidən cəhd edin.' })}\n\n`);
                     break;
                 } else {
                   const status = apiErr.status || apiErr.code || 'unknown';
@@ -2914,6 +3089,10 @@ Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cav
 
             if (textToolCalls.length > 0) {
               console.log(`🔌 Intercepted ${textToolCalls.length} raw text tool call(s):`, JSON.stringify(textToolCalls));
+              if (textToolCalls.length > 1) {
+                console.log('⚠️ Multiple tool calls found in text. To prevent hallucination loop, keeping only the first one.');
+                textToolCalls = [textToolCalls[0]];
+              }
               normalizedToolCalls = [...normalizedToolCalls, ...textToolCalls];
             }
 
@@ -3085,7 +3264,9 @@ let cachedLocalGithubUsername = null;
 
 app.get('/api/github/status', async (req, res) => {
   if (!db.hasDatabase()) {
-    const token = typeof process.env.GITHUB_TOKEN === 'string' ? process.env.GITHUB_TOKEN.trim() : '';
+    const localDb = await readLocalDb();
+    let token = localDb.settings?.github_token;
+    if (!token) token = typeof process.env.GITHUB_TOKEN === 'string' ? process.env.GITHUB_TOKEN.trim() : '';
     if (!token) {
       return res.json({ connected: false, username: null });
     }
@@ -3155,6 +3336,11 @@ app.post('/api/github/connect', async (req, res) => {
       fs.writeFileSync(envPath, envContent, 'utf8');
       process.env.GITHUB_TOKEN = token;
       cachedLocalGithubUsername = me.login || 'developer';
+
+      const localDb = await readLocalDb();
+      localDb.settings = localDb.settings || {};
+      localDb.settings.github_token = token;
+      await writeLocalDb(localDb);
 
       return res.json({ connected: true, username: me.login || null });
     }
