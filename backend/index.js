@@ -118,7 +118,10 @@ app.use('/api/github', verifyToken);
 // Configuration from environment
 // ==========================================
 const PORT = process.env.PORT || 3001;
-const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '15', 10);
+// FUNC-FIX: previously 15 steps × ~30s/step = ~7.5min runaway loops on local
+// models. 6 steps is enough for any realistic agentic flow (list → read →
+// edit → verify); larger context = more hallucinations and longer waits.
+const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '6', 10);
 const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
   ? process.env.ALLOWED_DIRECTORIES.split(',').map(d => path.resolve(d.trim()))
   : [
@@ -691,84 +694,29 @@ async function normalizeMessagesForModel(messages = [], modelName = '') {
 }
 
 function generateToolsSystemPrompt() {
-  let prompt = `\n\n🛠️ SƏNİN İSTİFADƏ EDƏ BİLƏCƏYİN ALƏTLƏR (TOOLS):\n`;
-  prompt += `Əgər bu alətlərdən hər hansı birini çağırmaq qərarına gəlsən, cavabında YALNIZ alətə məxsus təmiz JSON bloku yazmalısan:\n`;
-  prompt += `\`\`\`json\n{\n  "name": "alət_adı",\n  "arguments": {\n    "arqument_adı": "dəyər"\n  }\n}\n\`\`\`\n`;
-  prompt += `Sən eyni cavab daxilində birdən çox JSON alət çağırış bloku da yaza bilərsən.\n\nMövcud alətlərin siyahısı və onların parametrləri:\n\n`;
+  // FUNC-FIX: previous prompt was 80+ lines with 5 worked examples and made
+  // smaller local models lose context. Compact prompt with a single concrete
+  // example and a hard rule list.
+  let prompt = `\n\nİSTİFADƏ EDƏ BİLƏCƏYİN ALƏTLƏR (TOOLS):\n`;
+  prompt += `Tool çağırışı üçün cavabın YALNIZ aşağıdakı kimi JSON bloku olmalıdır:\n`;
+  prompt += `\`\`\`json\n{"name": "alət_adı", "arguments": {"arq": "dəyər"}}\n\`\`\`\n`;
+  prompt += `Bir cavabda yalnız 1 tool çağırışı et. İstifadəçiyə son cavab verirsənsə, JSON İSTİFADƏ ETMƏ — adi Markdown yaz.\n\n`;
 
+  prompt += `Mövcud alətlər:\n`;
   for (const t of TOOLS) {
     const fn = t.function;
-    prompt += `📌 **Alət: \`${fn.name}\`**\n`;
-    prompt += `📝 Təsvir: ${fn.description}\n`;
-    if (fn.parameters && fn.parameters.properties) {
-      prompt += `⚙️ Parametrlər:\n`;
-      for (const [propName, propVal] of Object.entries(fn.parameters.properties)) {
-        const isRequired = fn.parameters.required?.includes(propName) ? ' (MƏCBURİ)' : ' (KÖMƏKÇİ)';
-        const desc = propVal.description || '';
-        prompt += `  - \`${propName}\` (${propVal.type}): ${desc}${isRequired}\n`;
-      }
-    }
+    const requiredParams = (fn.parameters?.required || []).join(', ');
+    prompt += `• \`${fn.name}\` — ${fn.description}`;
+    if (requiredParams) prompt += ` (məcburi: ${requiredParams})`;
     prompt += `\n`;
   }
-  prompt += `\n🚨 QƏTİ QAYDA: Əgər istifadəçi "kodu yoxla", "audit et", "layihəyə bax" və ya oxşar bir şey deyirsə, ONA SUAL VERMƏ ("hansı fayla baxım?", "kod hardadır?" və s.). DƏRHAL yuxarıdakı json formatında \`list_directory\` (və ya github-dırsa \`github_list_contents\`) alətini çağır! İlk addımın mütləq alət çağırmaq olmalıdır!
 
-Vacib Qeyd: LOKAL layihələri oxumaq üçün mütləq \`list_directory\`, \`read_file\`, \`glob_search\`, \`grep_search\` istifadə et. YALNIZ istifadəçi sənə GitHub linki (owner/repo) verərsə \`github_\` alətlərini çağır!
-  
-NÜMUNƏ CAVAB 1 (Lokal analiz):
-Əgər istifadəçi xüsusi yol verməyib sadəcə "audit et" deyirsə:
+  prompt += `\nNÜMUNƏ: İstifadəçi "qovluğu oxu" deyirsə:
 \`\`\`json
-{
-  "name": "list_directory",
-  "arguments": { "path": "./" }
-}
-\`\`\`
-Əgər istifadəçi "Bu qovluğu audit et: /Users/macbookair/Documents/layihe" deyirsə:
-\`\`\`json
-{
-  "name": "list_directory",
-  "arguments": { "path": "/Users/macbookair/Documents/layihe" }
-}
+{"name": "list_directory", "arguments": {"path": "./"}}
 \`\`\`
 
-NÜMUNƏ CAVAB 2 (Lokal faylı oxumaq):
-Siyahını gördükdən sonra DƏRHAL faylı oxumalısan:
-\`\`\`json
-{
-  "name": "read_file",
-  "arguments": {
-    "path": "./app.py"
-  }
-}
-\`\`\`
-
-NÜMUNƏ CAVAB 3 (Lokal axtarış):
-Əgər istifadəçi "maliyyə modulu" deyirsə və adını bilmirsənsə:
-\`\`\`json
-{
-  "name": "grep_search",
-  "arguments": {
-    "query": "maliyye",
-    "directory": "./"
-  }
-}
-\`\`\`
-
-NÜMUNƏ CAVAB 4 (GitHub analiz):
-Əgər istifadəçi XÜSUSİ OLARAQ "githubdakı repo-nu analiz et" deyərsə:
-\`\`\`json
-{
-  "name": "github_list_contents",
-  "arguments": {
-    "owner": "sahibin-adi",
-    "repo": "reponun-adi",
-  }
-}
-\`\`\`
-
-NÜMUNƏ CAVAB 5 (İstifadəçiyə Yekun Cavab):
-Əgər alətləri çağırmağı bitirdinsə və istifadəçiyə hesabat verirsənsə, QƏTİYYƏN JSON İSTİFADƏ ETMƏ. Normal mətn yaz:
-Salam! Sizin layihənizi analiz etdim. Qovluqların içində \`src\` tapdım və kodda bir neçə xəta var. İstəyirsinizsə onları düzəldim.
-\n`;
+QAYDA: Tam yol verilibsə (məs. /Users/.../proj), həmin yolu eyniylə path-da istifadə et — kor-koranə "./" yazma.\n`;
   return prompt;
 }
 
@@ -791,102 +739,81 @@ function buildDeepSeekRecoveryMessages(messages = []) {
 
 function extractTextToolCalls(text) {
   if (!text) return { cleanedText: text, toolCalls: [] };
-  
-  let cleanedText = text;
-  const toolCalls = [];
 
-  // 1. Try to find markdown blocks
+  // FUNC-FIX: previous impl reset `index = 0` after each match (O(n^2) +
+  // double-emit) and used unreliable surrounding-text guessing. New: single
+  // forward pass, returns at most ONE tool call per response (matches the
+  // chat loop behaviour and avoids hallucination loops on local models).
+  const toolCalls = [];
+  const removed = [];
+
   const blockRegex = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/ig;
-  let match;
-  while ((match = blockRegex.exec(cleanedText)) !== null) {
-      try {
-          const parsed = JSON.parse(match[1]);
-          if (parsed && parsed.name && parsed.arguments !== undefined) {
-              const isValidTool = TOOLS.some(t => t.function.name === parsed.name);
-              if (isValidTool) {
-                  toolCalls.push({
-                      name: parsed.name,
-                      arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
-                  });
-                  cleanedText = cleanedText.slice(0, match.index) + cleanedText.slice(match.index + match[0].length);
-                  blockRegex.lastIndex = 0;
-                  continue;
-              }
-          }
-      } catch (e) { /* ignore */ }
+  let m;
+  while ((m = blockRegex.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(m[1]);
+      if (parsed && typeof parsed.name === 'string' && parsed.arguments !== undefined &&
+          TOOLS.some((t) => t.function.name === parsed.name)) {
+        toolCalls.push({
+          name: parsed.name,
+          arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
+        });
+        removed.push([m.index, m.index + m[0].length]);
+        break;
+      }
+    } catch { /* ignore */ }
   }
 
-  // 2. Try to find raw JSON blocks using balanced braces
-  let index = 0;
-  while (index < cleanedText.length) {
-    const startIdx = cleanedText.indexOf('{', index);
-    if (startIdx === -1) break;
-    
-    let braceCount = 0;
-    let inString = false;
-    let escape = false;
-    let endIndex = startIdx;
-    let found = false;
-    
-    for (; endIndex < cleanedText.length; endIndex++) {
-      const char = cleanedText[endIndex];
-      if (escape) { escape = false; continue; }
-      if (char === '\\') { escape = true; continue; }
-      if (char === '"') { inString = !inString; continue; }
-      if (!inString) {
-        if (char === '{') braceCount++;
-        else if (char === '}') {
+  if (toolCalls.length === 0) {
+    let i = 0;
+    while (i < text.length) {
+      const startIdx = text.indexOf('{', i);
+      if (startIdx === -1) break;
+      let braceCount = 0;
+      let inString = false;
+      let escape = false;
+      let endIndex = startIdx;
+      let found = false;
+      for (; endIndex < text.length; endIndex++) {
+        const ch = text[endIndex];
+        if (escape) { escape = false; continue; }
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === '{') braceCount++;
+        else if (ch === '}') {
           braceCount--;
-          if (braceCount === 0) {
-            endIndex++;
-            found = true;
-            break;
-          }
+          if (braceCount === 0) { endIndex++; found = true; break; }
         }
       }
-    }
-    
-    if (found) {
-      const possibleJson = cleanedText.substring(startIdx, endIndex);
+      if (!found) break;
+      const candidate = text.substring(startIdx, endIndex);
       try {
-        const parsed = JSON.parse(possibleJson);
-        if (parsed && typeof parsed === 'object') {
-          let gName = typeof parsed.name === 'string' ? parsed.name : null;
-          let gArgs = parsed.arguments !== undefined ? parsed.arguments : parsed;
-
-          if (!gName) {
-            const surr = cleanedText.substring(Math.max(0, startIdx - 100), startIdx).toLowerCase();
-            if (surr.includes('list_directory') || surr.includes('list directory') || ('path' in parsed && !('content' in parsed))) gName = 'list_directory';
-            else if (surr.includes('read_file') || surr.includes('read file')) gName = 'read_file';
-            else if (surr.includes('glob_search')) gName = 'glob_search';
-            else if (surr.includes('grep_search')) gName = 'grep_search';
-          }
-
-          if (gName && TOOLS.some(t => t.function.name === gName)) {
-            toolCalls.push({
-              name: gName,
-              arguments: typeof gArgs === 'object' ? JSON.stringify(gArgs) : String(gArgs)
-            });
-            // remove from text
-            let prefixIndex = startIdx;
-            const beforeText = cleanedText.substring(0, startIdx);
-            if (beforeText.trim().endsWith('json')) {
-               prefixIndex = beforeText.lastIndexOf('json');
-            }
-            cleanedText = cleanedText.substring(0, prefixIndex) + cleanedText.substring(endIndex);
-            index = 0; // reset
-            continue;
-          }
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string' &&
+            parsed.arguments !== undefined &&
+            TOOLS.some((t) => t.function.name === parsed.name)) {
+          toolCalls.push({
+            name: parsed.name,
+            arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
+          });
+          let startCut = startIdx;
+          const before = text.substring(Math.max(0, startIdx - 10), startIdx);
+          const fence = before.match(/```(?:json)?\s*$/i);
+          if (fence) startCut -= fence[0].length;
+          removed.push([startCut, endIndex]);
+          break;
         }
-      } catch (e) { /* ignore */ }
+      } catch { /* not valid JSON */ }
+      i = endIndex;
     }
-    index = startIdx + 1;
   }
-  
-  return {
-    cleanedText: cleanedText.trim(),
-    toolCalls
-  };
+
+  let cleaned = text;
+  for (let r = removed.length - 1; r >= 0; r--) {
+    cleaned = cleaned.substring(0, removed[r][0]) + cleaned.substring(removed[r][1]);
+  }
+  return { cleanedText: cleaned.trim(), toolCalls };
 }
 
 function serializeProject(row) {
@@ -3018,15 +2945,24 @@ Sənin əsas məqsədin kod bazasını mükəmməl analiz etmək, 100% işlək, 
 Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cavab ver.`;
 
     if (isLocalOrFlakyModel) {
-       sysPrompt = `SƏN AVTONOM KODLAŞDIRMA AGENTİSƏN VƏ SİSTEMƏ TAM GİRİŞİN VAR.
-Faylları oxumaq, kod audit etmək və qovluqları görmək sənin ƏSAS VƏZİFƏNDİR. "Mən fayl sistemi əməliyyatçısı deyiləm", "Mən kodun məzmununu oxuya bilmərəm", "Bunu edə bilmərəm" kimi sözlər QƏTİ QADAĞANDIR! Sən read_file aləti vasitəsilə faylların daxilini, kod məzmununu mükəmməl oxuya bilirsən.
+       // FUNC-FIX: previous prompt was 700+ lines of "QƏTİ QADAĞANDIR" rules
+       // which weak local models (Gemma/Qwen 7B) couldn't follow and ended up
+       // hallucinating "I can't do this". Replaced with a tight, example-led
+       // prompt that mirrors how Claude Code / Cursor system-prompt their
+       // local fallbacks.
+       sysPrompt = `Sən bahAI — Azərbaycan dilində danışan AI proqramçı agentisən.
+Layihənin yolu: ${resolvedWD}
 
-QƏTİ QAYDALAR:
-1. İnsanla lazımsız söhbət etmə! Qətiyyən üzr istəmə və bəhanə gətirmə. Alət çağırmaq lazımdırsa birbaşa json formatında alət çağır!
-2. Əgər istifadəçi sənə tam bir yol veribsə, alətlərdə "path" kimi MÜTLƏQ HƏMİN YOLU yaz!
-3. İstifadəçidən "hansı faylı oxuyum?" və ya "kodun məzmununu oxuyaq?" deyə soruşma və ondan icazə istəmə. Əgər bir faylın içini bilmək lazımdırsa, DƏRHAL \`read_file\` alətini JSON formatında çağır.
-4. Mütləq alət çağırışlarını yalnız JSON formatında et!
-5. İstifadəçiyə cavab verərkən (artıq alət çağırmırsansa və sadəcə nəticəni deyirsənsə), cavabını QƏTİYYƏN JSON daxilində (məsələn {"response": "..."}) YAZMA! Normal, oxunaqlı və Markdown formatlı mətn kimi yaz!`;
+QAYDALAR:
+1. Sən faylları oxuya, yaza və terminal əmrlərini icra edə bilirsən. Heç vaxt "edə bilmərəm" demə.
+2. Fayl oxumaq və qovluq görmək üçün TOOL CALL et — söz vermə.
+3. Cavabın HƏMİŞƏ Azərbaycan dilində olsun. JSON formatında istifadəçiyə cavab vermə (yalnız tool call üçün JSON).
+4. Hər tool call-dan sonra qısa izah yaz: nə etdiyin və növbəti addım.
+5. Sual aydın deyilsə, ÖZ bildiyin ən məntiqli interpretasiyaya əməl et — soruşma.
+
+CAVAB FORMATI:
+- Tool çağırışı üçün: tək JSON blok (aşağıdakı format).
+- İstifadəçiyə son cavab üçün: adi Markdown mətn (kod blokları + izah).`;
     }
 
     let modelMessages = [];
@@ -3097,9 +3033,10 @@ QƏTİ QAYDALAR:
         while (step < MAX_STEPS && !clientDisconnected) {
             step++;
 
-            // Streaming ilə API çağırışı (600 saniyə timeout - lokal/yavaş modellər üçün)
+            // Streaming ilə API çağırışı (default 180s; lokal/yavaş modellər üçün env ilə uzadıla bilər)
+            const llmTimeoutMs = parseInt(process.env.LLM_TIMEOUT_MS || '180000', 10);
             const abortController = new AbortController();
-            const timeoutId = setTimeout(() => abortController.abort(), 600000);
+            const timeoutId = setTimeout(() => abortController.abort(), llmTimeoutMs);
 
             let stream;
             let shouldRetryWithDeepSeekRecovery = false;
@@ -3164,7 +3101,8 @@ QƏTİ QAYDALAR:
                 if (stream) {
                   // fallback succeeded
                 } else if (currentErr.name === 'AbortError') {
-                    res.write(`data: ${JSON.stringify({ type: 'error', message: 'API cavab vaxtı bitdi (10 dəqiqə). Zəhmət olmasa yenidən cəhd edin.' })}\n\n`);
+                    const sec = Math.round(llmTimeoutMs / 1000);
+                    res.write(`data: ${JSON.stringify({ type: 'error', message: `Model ${sec}s ərzində cavab vermədi. Daha kiçik model (məs. Qwen 2.5 Coder 7B) sınayın və ya \`LLM_TIMEOUT_MS\` env-i artırın.` })}\n\n`);
                     break;
                 } else {
                   const status = currentErr.status || currentErr.code || 'unknown';

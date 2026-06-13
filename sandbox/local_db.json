@@ -9,6 +9,26 @@
       "last_port": 5173,
       "archived": false,
       "created_at": "2026-06-13T08:22:53.270Z"
+    },
+    {
+      "id": "45fec435-eed5-43b4-a311-e5f1fade42cc",
+      "user_id": 1431318336,
+      "name": "test-proj",
+      "path": "workspace://test",
+      "repo_url": null,
+      "last_port": 5173,
+      "archived": false,
+      "created_at": "2026-06-13T15:15:46.042Z"
+    },
+    {
+      "id": "154d2405-836b-4794-b088-74d46c645dd3",
+      "user_id": 9999,
+      "name": "audit-test",
+      "path": "workspace://audit-test",
+      "repo_url": null,
+      "last_port": 5173,
+      "archived": false,
+      "created_at": "2026-06-13T15:18:16.796Z"
     }
   ],
   "conversations": [
@@ -257,6 +277,24 @@
       ],
       "created_at": "2026-06-13T08:22:53.270Z",
       "updated_at": "2026-06-13T14:30:56.052Z"
+    },
+    {
+      "id": "3d607ea2-6976-4a72-8e3c-9d2603e1bb46",
+      "project_id": "45fec435-eed5-43b4-a311-e5f1fade42cc",
+      "user_id": 1431318336,
+      "title": "test-proj",
+      "messages": [],
+      "created_at": "2026-06-13T15:15:46.042Z",
+      "updated_at": "2026-06-13T15:15:46.042Z"
+    },
+    {
+      "id": "a9764f88-e368-4719-9736-5ca17643f88b",
+      "project_id": "154d2405-836b-4794-b088-74d46c645dd3",
+      "user_id": 9999,
+      "title": "audit-test",
+      "messages": [],
+      "created_at": "2026-06-13T15:18:16.796Z",
+      "updated_at": "2026-06-13T15:18:16.796Z"
     }
   ],
   "projectMemories": {},

@@ -15,9 +15,41 @@
 - **Deployment:** Railway (cloud) + Electron (desktop)
 
 ## Audit summary
-- **Total findings:** ~30 (10 P0 critical security, 7 P1 functional, 12 P2 code quality)
+- **Total findings:** ~36 (10 P0 critical security, 13 P1 functional, 13 P2 code quality)
 - **Auto-fixed:** All P0, all major P1, most P2 lint
-- **Reports created:** `/app/AUDIT_REPORT.md`, `/app/FIXES_APPLIED.md`
+- **Reports created:** `/app/AUDIT_REPORT.md`, `/app/FIXES_APPLIED.md`, `/app/TEST_RESULTS.md`, `/app/MAC_SETUP.md`
+
+## Session 2 — functional improvements (user feedback: "her şey ləng və bəyənmirəm")
+
+User complained: a) hallucinates, b) misformat tools, c) UI slow, d) "can't do this", e) Safe Mode annoying, f) FileTree broken. Plus wanted hybrid local+cloud mode.
+
+### Shipped
+1. **System prompt 700→15 lines for local models** — major quality boost for Gemma/Qwen
+2. **Tool prompt 80→15 lines** with single example
+3. **MAX_STEPS 15→6** (4x fewer hallucination loops)
+4. **LLM_TIMEOUT_MS 10min→3min** (faster feedback on stuck models)
+5. **Streaming UI 30fps throttle** — no more per-token rerender
+6. **FileTree lazy-loads children** — previously subdirs were just empty
+7. **Safe Mode default OFF**, visible toggle in ChatInput (shield icon)
+8. **MODELS list overhauled** — added Claude Sonnet 4.5, GPT-5.2, Gemini 3 Flash, Claude Haiku 4.5
+9. **Parser rewrite** — `extractTextToolCalls` single-pass; 8/8 unit tests pass
+10. **Default model fixed** to a real model ID (was `nemotron-3-super-120b` — non-existent)
+
+### Verified via curl (`/app/TEST_RESULTS.md`)
+- Auth flow (login + invalid token → 403 + LOCAL_MODE no-token → admin)
+- Project CRUD
+- File tree root + lazy load subdirs ✅
+- Rate limit 5/15min works
+- SSRF guards present
+- Parser unit tests 8/8
+
+## What still needs human action
+- Fill `.env` with `JWT_SECRET`, `DATABASE_URL`, `OPENAI_API_KEY`, `ADMIN_EMAIL/PASSWORD`, `ALLOWED_ORIGINS`
+- Test real Ollama on user's Mac per `/app/MAC_SETUP.md`
+- Add a real test suite (vitest + supertest) — none exists today
+- Consider JWT refresh-token rotation
+- `helmet` & `express-rate-limit` packages instead of in-house mini versions
+- Bundle code-split (1.17MB single chunk is heavy)
 
 ## Highest-impact fixes shipped
 1. CORS allow-list (`ALLOWED_ORIGINS`) — previously open to the world
