@@ -1,0 +1,74 @@
+[
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "tool",
+    "content": ".DS_Store\n.dockerignore\n.env\n.env.example\n[DIR] .github\n.gitignore\n[DIR] .kiro\n.nvmrc\n[DIR] .vscode\nDockerfile\nREADME.md\n[DIR] data\n[DIR] docs\n[DIR] node_modules\npackage-lock.json\npackage.json\n[DIR] public\n[DIR] src",
+    "tool_call_id": "toolcall_text_1_0_1781339751636"
+  },
+  {
+    "role": "assistant",
+    "content": "```json\n{\n  \"response\": \"Layihəyə baxış edildi. İndi hansı fayla baxmak istəyirsiniz? Və ya kod audit etmək istəyirsiniz?\"\n}\n```"
+  },
+  {
+    "role": "user",
+    "content": "/Users/macbookair/Documents/GitHub/az-finance-ai qovlugun icini oxu\n\n\n\n",
+    "attachments": []
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "tool",
+    "content": ".DS_Store\n.dockerignore\n.env\n.env.example\n[DIR] .github\n.gitignore\n[DIR] .kiro\n.nvmrc\n[DIR] .vscode\nDockerfile\nREADME.md\n[DIR] data\n[DIR] docs\n[DIR] node_modules\npackage-lock.json\npackage.json\n[DIR] public\n[DIR] src",
+    "tool_call_id": "toolcall_text_1_0_1781339990557"
+  },
+  {
+    "role": "assistant",
+    "content": "```json\n{\n  \"response\": \"Layihəyə baxış edildi. İndi hansı fayla baxmak istəyirsiniz? Və ya kod audit etmək istəyirsiniz?\"\n}\n```"
+  },
+  {
+    "role": "user",
+    "content": "salam bugun hava necedir?",
+    "attachments": []
+  },
+  {
+    "role": "assistant",
+    "content": "Üzgünüm, ama mən bir kodlaşdırma agentim və hava səhviyələrini yoxlamaq üçün yetəriçli alətlərim yoxdur. Hava səhviyələrinin yoxlanması üçün bir hava səhviyələrini yoxlamaq üçün yetəriçli bir API istifadə etməliyim. Bununla birlikdə, mən hava səhviyələrinin nəticəsini daxil etmək və ya onları yoxlamaq üçün yetəriçli alətlərim yoxdur."
+  },
+  {
+    "role": "user",
+    "content": "salam necesen?",
+    "attachments": []
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "user",
+    "content": "salam necesen",
+    "attachments": []
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "user",
+    "content": "Gemma 4 12B",
+    "attachments": []
+  },
+  {
+    "role": "assistant",
+    "content": "Üzgünüm, ama mən bir kodlaşdırma agentim və hava səhviyələrini yoxlamaq üçün yetəriçli alətlərim yoxdur. Hava səhviyələrinin yoxlanması üçün bir hava səhviyələrini yoxlamaq üçün yetəriçli bir API istifadə etməliyim. Bununla birlikdə, mən hava səhviyələrinin nəticəsini daxil etmək və ya onları yoxlamaq üçün yetəriçli alətlərim yoxdur."
+  },
+  {
+    "role": "user",
+    "content": "salam necesen?",
+    "attachments": []
+  }
+]

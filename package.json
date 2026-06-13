@@ -10,6 +10,7 @@
     "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
     "start": "node backend/index.js",
     "local": "node bin/cli.js",
+    "desktop": "concurrently \"npm run dev --prefix frontend\" \"npm run desktop:dev\"",
     "desktop:dev": "cd electron && npm start",
     "desktop:build": "npm run build --prefix frontend && cd electron && npm run build:mac",
     "desktop:install": "cd electron && npm install"

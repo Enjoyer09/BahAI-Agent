@@ -154,6 +154,7 @@ function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendMode
   const localOllamaModels = [
     'gemma4:latest',
     'gemma4:e2b',
+    'gemma4:12b',
     'qwen2.5-coder:latest',
     'dagbs/qwen2.5-coder-14b-instruct-abliterated:latest'
   ];
@@ -565,15 +566,30 @@ async function normalizeMessagesForModel(messages = [], modelName = '') {
         tool_call_id = undefined;
         name = undefined;
       }
+
+      // 3. Prevent hallucination loop: if the model previously output {"response": "text"}, flatten it so it doesn't repeat the mistake.
+      if (role === 'assistant' && typeof content === 'string') {
+        const responseMatch = content.match(/\{\s*"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*\}/);
+        if (responseMatch && responseMatch[1]) {
+          content = content.replace(responseMatch[0], responseMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+        }
+      }
     }
 
     normalized.push({
       role,
       content,
-      tool_calls: tool_calls?.length ? tool_calls : undefined,
-      tool_call_id,
-      name
+      tool_calls: (isLocalOrFlakyModel) ? undefined : (tool_calls?.length ? tool_calls : undefined),
+      tool_call_id: (isLocalOrFlakyModel) ? undefined : tool_call_id,
+      name: (isLocalOrFlakyModel) ? undefined : name
     });
+  }
+
+  if (isLocalOrFlakyModel && normalized.length > 0) {
+    const lastMsg = normalized[normalized.length - 1];
+    if (lastMsg.role === 'user' && lastMsg.content.includes('📥 [Alət Nəticəsi')) {
+      lastMsg.content += '\n\n**Təlimat:** Yuxarıdakı nəticəni analiz et və mənə ətraflı cavab yaz. Diqqət: Cavabını qətiyyən JSON formatında yazma, adi mətn (Markdown) kimi yaz!';
+    }
   }
 
   return normalized;
@@ -581,7 +597,7 @@ async function normalizeMessagesForModel(messages = [], modelName = '') {
 
 function generateToolsSystemPrompt() {
   let prompt = `\n\n🛠️ SƏNİN İSTİFADƏ EDƏ BİLƏCƏYİN ALƏTLƏR (TOOLS):\n`;
-  prompt += `Sən lokal sistemdə birbaşa aşağıdakı alətləri (tools) çağıra bilərsən. Aləti çağırmaq üçün cavabında YALNIZ aşağıdakı formatda təmiz JSON bloku yazmalısan:\n`;
+  prompt += `Əgər bu alətlərdən hər hansı birini çağırmaq qərarına gəlsən, cavabında YALNIZ alətə məxsus təmiz JSON bloku yazmalısan:\n`;
   prompt += `\`\`\`json\n{\n  "name": "alət_adı",\n  "arguments": {\n    "arqument_adı": "dəyər"\n  }\n}\n\`\`\`\n`;
   prompt += `Sən eyni cavab daxilində birdən çox JSON alət çağırış bloku da yaza bilərsən.\n\nMövcud alətlərin siyahısı və onların parametrləri:\n\n`;
 
@@ -600,56 +616,63 @@ function generateToolsSystemPrompt() {
     prompt += `\n`;
   }
   prompt += `\n🚨 QƏTİ QAYDA: Əgər istifadəçi "kodu yoxla", "audit et", "layihəyə bax" və ya oxşar bir şey deyirsə, ONA SUAL VERMƏ ("hansı fayla baxım?", "kod hardadır?" və s.). DƏRHAL yuxarıdakı json formatında \`list_directory\` (və ya github-dırsa \`github_list_contents\`) alətini çağır! İlk addımın mütləq alət çağırmaq olmalıdır!
+
+Vacib Qeyd: LOKAL layihələri oxumaq üçün mütləq \`list_directory\`, \`read_file\`, \`glob_search\`, \`grep_search\` istifadə et. YALNIZ istifadəçi sənə GitHub linki (owner/repo) verərsə \`github_\` alətlərini çağır!
   
 NÜMUNƏ CAVAB 1 (Lokal analiz):
-Əgər istifadəçi sadəcə "kodu audit et" deyərsə, YALNIZ bunu yazmalısan:
+Əgər istifadəçi xüsusi yol verməyib sadəcə "audit et" deyirsə:
 \`\`\`json
 {
   "name": "list_directory",
+  "arguments": { "path": "./" }
+}
+\`\`\`
+Əgər istifadəçi "Bu qovluğu audit et: /Users/macbookair/Documents/layihe" deyirsə:
+\`\`\`json
+{
+  "name": "list_directory",
+  "arguments": { "path": "/Users/macbookair/Documents/layihe" }
+}
+\`\`\`
+
+NÜMUNƏ CAVAB 2 (Lokal faylı oxumaq):
+Siyahını gördükdən sonra DƏRHAL faylı oxumalısan:
+\`\`\`json
+{
+  "name": "read_file",
   "arguments": {
-    "path": "./"
+    "path": "./app.py"
   }
 }
 \`\`\`
 
-NÜMUNƏ CAVAB 2 (GitHub analiz):
-Əgər istifadəçi "githubdakı repo-nu analiz et" deyərsə, YALNIZ bunu yazmalısan (owner və repo adını istifadəçinin dediklərindən taparaq):
+NÜMUNƏ CAVAB 3 (Lokal axtarış):
+Əgər istifadəçi "maliyyə modulu" deyirsə və adını bilmirsənsə:
+\`\`\`json
+{
+  "name": "grep_search",
+  "arguments": {
+    "query": "maliyye",
+    "directory": "./"
+  }
+}
+\`\`\`
+
+NÜMUNƏ CAVAB 4 (GitHub analiz):
+Əgər istifadəçi XÜSUSİ OLARAQ "githubdakı repo-nu analiz et" deyərsə:
 \`\`\`json
 {
   "name": "github_list_contents",
   "arguments": {
     "owner": "sahibin-adi",
     "repo": "reponun-adi",
-    "path": ""
   }
 }
 \`\`\`
 
-NÜMUNƏ CAVAB 3 (Faylı oxumaq):
-Sən "github_list_contents" siyahısını gördükdən sonra (və ya istifadəçi faylı yoxla dedikdə) DƏRHAL faylı oxumalısan:
-\`\`\`json
-{
-  "name": "github_read_file",
-  "arguments": {
-    "owner": "sahibin-adi",
-    "repo": "reponun-adi",
-    "path": "faylin/adi.py"
-  }
-}
-\`\`\`
-
-NÜMUNƏ CAVAB 4 (Kodda axtarış):
-Əgər istifadəçi "maliyyə modulunu audit elə" deyərsə və sən o faylın adını bilmirsənsə, DƏRHAL axtarış et (heç bir əlavə söz yazma):
-\`\`\`json
-{
-  "name": "github_search_code",
-  "arguments": {
-    "owner": "sahibin-adi",
-    "repo": "reponun-adi",
-    "query": "maliyye"
-  }
-}
-\`\`\`
+NÜMUNƏ CAVAB 5 (İstifadəçiyə Yekun Cavab):
+Əgər alətləri çağırmağı bitirdinsə və istifadəçiyə hesabat verirsənsə, QƏTİYYƏN JSON İSTİFADƏ ETMƏ. Normal mətn yaz:
+Salam! Sizin layihənizi analiz etdim. Qovluqların içində \`src\` tapdım və kodda bir neçə xəta var. İstəyirsinizsə onları düzəldim.
 \n`;
   return prompt;
 }
@@ -732,14 +755,24 @@ function extractTextToolCalls(text) {
       const possibleJson = cleanedText.substring(startIdx, endIndex);
       try {
         const parsed = JSON.parse(possibleJson);
-        if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string' && parsed.arguments !== undefined) {
-          const isValidTool = TOOLS.some(t => t.function.name === parsed.name);
-          if (isValidTool) {
+        if (parsed && typeof parsed === 'object') {
+          let gName = typeof parsed.name === 'string' ? parsed.name : null;
+          let gArgs = parsed.arguments !== undefined ? parsed.arguments : parsed;
+
+          if (!gName) {
+            const surr = cleanedText.substring(Math.max(0, startIdx - 100), startIdx).toLowerCase();
+            if (surr.includes('list_directory') || surr.includes('list directory') || ('path' in parsed && !('content' in parsed))) gName = 'list_directory';
+            else if (surr.includes('read_file') || surr.includes('read file')) gName = 'read_file';
+            else if (surr.includes('glob_search')) gName = 'glob_search';
+            else if (surr.includes('grep_search')) gName = 'grep_search';
+          }
+
+          if (gName && TOOLS.some(t => t.function.name === gName)) {
             toolCalls.push({
-              name: parsed.name,
-              arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
+              name: gName,
+              arguments: typeof gArgs === 'object' ? JSON.stringify(gArgs) : String(gArgs)
             });
-            // remove from text, also remove trailing/leading word 'json' if present
+            // remove from text
             let prefixIndex = startIdx;
             const beforeText = cleanedText.substring(0, startIdx);
             if (beforeText.trim().endsWith('json')) {
@@ -1030,7 +1063,9 @@ const TOOLS = [
             parameters: {
                 type: "object",
                 properties: {
-                    path: { type: "string" }
+                    path: { type: "string" },
+                    start_line: { type: "number", description: "Optional. Startline to view, 1-indexed as usual, inclusive." },
+                    end_line: { type: "number", description: "Optional. Endline to view, 1-indexed as usual, inclusive." }
                 },
                 required: ["path"]
             }
@@ -1437,13 +1472,29 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                 let content;
                 if (filePath.toLowerCase().endsWith('.pdf')) {
                     content = await readPdfFile(filePath);
+                    if (content.length > 50000) return content.slice(0, 50000) + "\n\n[TRUNCATED... File too large]";
+                    return content;
                 } else {
                     content = await fs.readFile(filePath, 'utf8');
                 }
 
-                // PERF: Simple truncation for very large files
-                if (content.length > 50000) return content.slice(0, 50000) + "\n\n[TRUNCATED... File too large]";
-                return content;
+                const lines = content.split('\n');
+                const totalLines = lines.length;
+                let startLine = args.start_line ? Math.max(1, parseInt(args.start_line, 10)) : 1;
+                let endLine = args.end_line ? Math.max(startLine, parseInt(args.end_line, 10)) : totalLines;
+                
+                // Cap to 800 lines max per request to prevent token overflow
+                if (endLine - startLine + 1 > 800) {
+                    endLine = startLine + 799;
+                }
+                if (endLine > totalLines) {
+                    endLine = totalLines;
+                }
+
+                const selectedLines = lines.slice(startLine - 1, endLine);
+                const formattedLines = selectedLines.map((line, idx) => `${startLine + idx}: ${line}`).join('\n');
+                
+                return `File: ${args.path}\nTotal lines: ${totalLines}\nShowing lines ${startLine} to ${endLine}:\n\n${formattedLines}`;
             }
 
 
@@ -2752,14 +2803,43 @@ app.post('/api/chat', async (req, res) => {
     }
     
     // SEC-1: Verify workingDirectory against ALLOWED_DIRS
-    const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
+    let resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
+    
+    // --- Hardcoded Fallback Redirect for weak models ---
+    let userPathMatch = null;
+    require('fs').writeFileSync('debug_messages.json', JSON.stringify(messages, null, 2));
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user' || messages[i].role === 'system') {
+        let textContent = messages[i].content;
+        if (Array.isArray(textContent)) {
+           // Handle case where content is an array (multimodal)
+           textContent = textContent.map(c => c.text || '').join('\n');
+        }
+        if (typeof textContent === 'string') {
+          const match = textContent.match(/(\/(?:Users|home|opt|usr|var|tmp|etc)[\/\w\.-]+)/i);
+          if (match) {
+            userPathMatch = match;
+            break;
+          }
+        }
+      }
+    }
+    if (userPathMatch && isLocalMode()) {
+      resolvedWD = path.resolve(userPathMatch[1]);
+      console.log(`🚀 HARDCODE REDIRECT: Overriding working directory to user path -> ${resolvedWD}`);
+    }
+    // ---------------------------------------------------
+
     if (!ALLOWED_DIRS.some(base => {
         const r = path.relative(base, resolvedWD);
         return !r.startsWith('..') && !path.isAbsolute(r);
     })) {
         return res.status(403).json({ error: "Unauthorized working directory" });
     }
-    await ensureDir(resolvedWD);
+    // We do not ensureDir for user absolute paths because they already exist and we shouldn't create them if they don't
+    if (!userPathMatch) {
+       await ensureDir(resolvedWD);
+    }
 
     const frontendApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
     const frontendBaseUrl = (typeof baseUrl === 'string' ? baseUrl.trim() : '') || process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
@@ -2815,16 +2895,15 @@ Sənin əsas məqsədin kod bazasını mükəmməl analiz etmək, 100% işlək, 
 Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cavab ver.`;
 
     if (isLocalOrFlakyModel) {
-       sysPrompt = `SƏN BİR SÜNİ İNTELLEKT ALƏT İCRAÇISISAN (TOOL EXECUTOR). 
-LAYİHƏ QOVLUĞU (Project Root): ${resolvedWD}
+       sysPrompt = `SƏN AVTONOM KODLAŞDIRMA AGENTİSƏN VƏ SİSTEMƏ TAM GİRİŞİN VAR.
+Faylları oxumaq, kod audit etmək və qovluqları görmək sənin ƏSAS VƏZİFƏNDİR. "Mən fayl sistemi əməliyyatçısı deyiləm", "Mən kodun məzmununu oxuya bilmərəm", "Bunu edə bilmərəm" kimi sözlər QƏTİ QADAĞANDIR! Sən read_file aləti vasitəsilə faylların daxilini, kod məzmununu mükəmməl oxuya bilirsən.
 
-QƏTİ QADAĞALAR VƏ QAYDALAR:
-1. İnsanla lazımsız söhbət etmək QƏTİ QADAĞANDIR!
-2. "Hansı fayla baxım?", "Faylın adını deyin" KİMİ SUALLAR VERMƏK QƏTİ QADAĞANDIR! 
-3. Faylın adını bilmirsənsə istifadəçidən SORUŞMA! \`list_directory\` və ya \`github_list_contents\` alətini çağır, alınan siyahıdan ən uyğun faylı (məsələn app.py, index.js) SEÇ və DƏRHAL \`github_read_file\` (onlayndırsa) və ya \`read_file\` (lokaldırsa) ilə oxu!
-4. Əgər istifadəçi "kodu yoxla", "səhvləri tap" deyirsə və sən artıq qovluğun siyahısını görmüsənsə, istifadəçiyə heç nə yazmadan DƏRHAL vacib gördüyün faylları \`github_read_file\` aləti ilə oxumağa başla.
-5. Əgər istifadəçi "maliyyə modulu" və ya başqa bir konseptual ad çəkirsə və hansı fayl olduğunu bilmirsənsə, \`github_search_code\` alətini (owner, repo və axtarış sözü ilə) istifadə edərək kodu axtar, tapdığın faylı sonra oxu. SUAL VERMƏ!
-6. HƏR DƏFƏ YALNIZ BİR ALƏT ÇAĞIR! Alətləri siyahı kimi ardıcıl çap etmək QƏTİ QADAĞANDIR!`;
+QƏTİ QAYDALAR:
+1. İnsanla lazımsız söhbət etmə! Qətiyyən üzr istəmə və bəhanə gətirmə. Alət çağırmaq lazımdırsa birbaşa json formatında alət çağır!
+2. Əgər istifadəçi sənə tam bir yol veribsə, alətlərdə "path" kimi MÜTLƏQ HƏMİN YOLU yaz!
+3. İstifadəçidən "hansı faylı oxuyum?" və ya "kodun məzmununu oxuyaq?" deyə soruşma və ondan icazə istəmə. Əgər bir faylın içini bilmək lazımdırsa, DƏRHAL \`read_file\` alətini JSON formatında çağır.
+4. Mütləq alət çağırışlarını yalnız JSON formatında et!
+5. İstifadəçiyə cavab verərkən (artıq alət çağırmırsansa və sadəcə nəticəni deyirsənsə), cavabını QƏTİYYƏN JSON daxilində (məsələn {"response": "..."}) YAZMA! Normal, oxunaqlı və Markdown formatlı mətn kimi yaz!`;
     }
 
     let modelMessages = [];
@@ -2855,6 +2934,14 @@ QƏTİ QADAĞALAR VƏ QAYDALAR:
 
     const memoryPrompt = `Layihə yaddaşı: ${JSON.stringify(projectMemory)}`;
     const apiMessages = [{ role: 'system', content: `${fullSysPrompt}\n${memoryPrompt}` }, ...modelMessages];
+    
+    if (isLocalOrFlakyModel) {
+      apiMessages.push({
+        role: 'system',
+        content: "XATIRLATMA: Sən birbaşa faylları oxuya, dəyişə və command icra edə bilən AI kodlaşdırma agentisən. MÜTLƏQ verilmiş JSON tool (read_file, grep_search, list_directory, və s.) çağırışlarını istifadə et. Qətiyyən 'mən bunu edə bilmərəm' və ya 'mən yalnız bir modeləm' bəhanələrini gətirmə!"
+      });
+    }
+
     const hasAttachmentInRequest = Array.isArray(messages) && messages.some((m) => Array.isArray(m?.attachments) && m.attachments.length > 0);
 
     res.setHeader('Content-Type', 'text/event-stream');

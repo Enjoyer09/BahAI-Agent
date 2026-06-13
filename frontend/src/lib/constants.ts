@@ -15,6 +15,7 @@ export const MODELS: ModelOption[] = [
   { id: 'dagbs/qwen2.5-coder-14b-instruct-abliterated:latest', name: 'Qwen 2.5 Coder 14B', provider: 'Ollama (Lokal)' },
   { id: 'gemma4:latest', name: 'Gemma 4 9B', provider: 'Ollama (Lokal)' },
   { id: 'gemma4:e2b', name: 'Gemma 4 7B', provider: 'Ollama (Lokal)' },
+  { id: 'gemma4:12b', name: 'Gemma 4 12B', provider: 'Ollama (Lokal)' },
 ];
 
 export const DEFAULT_SETTINGS = {
