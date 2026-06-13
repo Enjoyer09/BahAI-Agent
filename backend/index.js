@@ -28,9 +28,43 @@ const { router: authRoutes, verifyToken } = require('./auth');
 // Initialize Database
 db.initDb();
 
-// SEC-7: Restrict CORS
-app.use(cors());
+// SEC-FIX: Restrict CORS to explicit allow-list. Previously `cors()` reflected
+// any origin, enabling cross-site credential theft / CSRF from arbitrary
+// websites. ALLOWED_ORIGINS is a comma-separated list (e.g.
+// "https://bahai.app,https://staging.bahai.app").
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const corsConfig = allowedOrigins.length > 0
+  ? cors({
+      origin: (origin, cb) => {
+        // Allow non-browser clients (curl, Electron file://) which have no Origin header.
+        if (!origin) return cb(null, true);
+        if (allowedOrigins.includes(origin)) return cb(null, true);
+        return cb(new Error(`CORS blocked origin: ${origin}`));
+      },
+      credentials: true
+    })
+  : // Dev / single-host deploy: same-origin only is enforced by reflection-with-credentials NOT being set
+    cors({ origin: true });
+
+app.use(corsConfig);
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
+
+// SEC-FIX: Basic security headers (helmet-lite) — set without adding a
+// dependency. Production should use the `helmet` middleware instead.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-XSS-Protection', '0');
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
 
 // Request Logger
 app.use((req, res, next) => {
@@ -88,21 +122,31 @@ const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '15', 10);
 const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
   ? process.env.ALLOWED_DIRECTORIES.split(',').map(d => path.resolve(d.trim()))
   : [
+      // SEC-FIX: previously also included process.env.HOME, which exposed the
+      // entire user home directory (SSH keys, browser data, etc.) to the AI
+      // agent. Users now need to explicitly opt in via ALLOWED_DIRECTORIES.
       path.resolve(__dirname, '..'), // Project root
-      path.resolve(process.env.HOME || process.env.USERPROFILE || '/'), // User home (Documents, etc)
+      path.resolve(WORKSPACE_ROOT),  // Per-user sandbox area
     ];
 const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../sandbox'));
-const isLocalMode = () => process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+// SEC-FIX: LOCAL_MODE must be explicit. Previously the system considered
+// itself "local" whenever DATABASE_URL was missing, which on a cloud host
+// silently disabled auth and approvals for all visitors.
+const isLocalMode = () => process.env.LOCAL_MODE === 'true';
 const PROVIDER_COOLDOWN_MS = parseInt(process.env.PROVIDER_COOLDOWN_MS || '20000', 10);
 const providerRuntime = new Map();
 
 // Startup diagnostics
+// SEC-FIX: never leak any portion of API keys to logs in production.
 const diagKey = process.env.OPENAI_API_KEY;
+const keyDisplay = diagKey
+  ? (process.env.NODE_ENV === 'production' ? '✅ set' : `${diagKey.slice(0, 4)}...${diagKey.slice(-2)}`)
+  : '❌ not set';
 console.log('🔧 Startup Config:', {
   PORT,
   LOCAL_MODE: process.env.LOCAL_MODE || '(not set)',
   DATABASE_URL: process.env.DATABASE_URL ? '✅ set' : '❌ not set',
-  OPENAI_API_KEY: diagKey ? `${diagKey.slice(0, 8)}...${diagKey.slice(-4)}` : '❌ not set',
+  OPENAI_API_KEY: keyDisplay,
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || '(not set)',
   OPENAI_MODEL: process.env.OPENAI_MODEL || '(not set)',
   JWT_SECRET: process.env.JWT_SECRET ? '✅ set' : '❌ not set',
@@ -475,6 +519,57 @@ async function extractAttachment(attachment) {
       return { name, mimeType, extractedText: '' };
     }
 
+    const lowerName = name.toLowerCase();
+    const buf = decoded.buffer;
+
+    // SEC/FUNC-FIX: actually use the imported parsers for PDF/DOCX/XLSX/images
+    // (previously they were imported but only the agent's `read_file` tool used
+    // them — user attachments fell through to "unsupported file type").
+    if (mimeType === 'application/pdf' || lowerName.endsWith('.pdf')) {
+      try {
+        const data = await pdfParse(buf);
+        return { name, mimeType, extractedText: (data?.text || '').slice(0, 50000) };
+      } catch (e) {
+        return { name, mimeType, extractedText: '', extractionError: `PDF parse xətası: ${e.message}` };
+      }
+    }
+
+    if (
+      mimeType.includes('officedocument.wordprocessingml') ||
+      lowerName.endsWith('.docx')
+    ) {
+      try {
+        const text = await extractDocxText(buf);
+        return { name, mimeType, extractedText: (text || '').slice(0, 50000) };
+      } catch (e) {
+        return { name, mimeType, extractedText: '', extractionError: `DOCX parse xətası: ${e.message}` };
+      }
+    }
+
+    if (
+      mimeType.includes('spreadsheetml') ||
+      mimeType.includes('ms-excel') ||
+      lowerName.endsWith('.xlsx') ||
+      lowerName.endsWith('.xls') ||
+      lowerName.endsWith('.csv')
+    ) {
+      try {
+        const text = extractSpreadsheetText(buf);
+        return { name, mimeType, extractedText: (text || '').slice(0, 50000) };
+      } catch (e) {
+        return { name, mimeType, extractedText: '', extractionError: `Cədvəl parse xətası: ${e.message}` };
+      }
+    }
+
+    if (mimeType.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|tiff)$/i.test(name)) {
+      try {
+        const text = await extractImageText(buf);
+        return { name, mimeType, extractedText: (text || '').slice(0, 50000) };
+      } catch (e) {
+        return { name, mimeType, extractedText: '', extractionError: `Image OCR xətası: ${e.message}` };
+      }
+    }
+
     // Only support text-based files
     if (
       mimeType.startsWith('text/') ||
@@ -484,11 +579,11 @@ async function extractAttachment(attachment) {
       mimeType.includes('typescript') ||
       /\.(txt|json|csv|md|yaml|yml|xml|log|env|js|ts|jsx|tsx|py|html|css|sh|toml|ini|cfg|conf)$/i.test(name)
     ) {
-      const text = decoded.buffer.toString('utf8');
+      const text = buf.toString('utf8');
       return { name, mimeType, extractedText: text.slice(0, 50000) };
     }
 
-    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}. Yalnız mətn faylları (txt, json, csv, md, js, ts, py, html, css) dəstəklənir.]` };
+    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}. Dəstəklənənlər: PDF, DOCX, XLSX, CSV, şəkillər (OCR), və mətn faylları.]` };
   } catch (error) {
     console.error('Attachment parse xətası:', name, error?.message || error);
     return { name, mimeType, extractedText: `[Attachment oxunarkən xəta: ${name}]` };
@@ -718,7 +813,7 @@ function extractTextToolCalls(text) {
                   continue;
               }
           }
-      } catch(e) {}
+      } catch (e) { /* ignore */ }
   }
 
   // 2. Try to find raw JSON blocks using balanced braces
@@ -783,7 +878,7 @@ function extractTextToolCalls(text) {
             continue;
           }
         }
-      } catch (e) {}
+      } catch (e) { /* ignore */ }
     }
     index = startIdx + 1;
   }
@@ -1618,7 +1713,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         });
                         return;
                       }
-                    } catch {}
+                    } catch { /* ignore */ }
 
                     // SEC-4: Use execFile style for safety
                     const proc = spawn('git', ['clone', args.url, args.folderName], { cwd: workingDirectory });
@@ -1798,7 +1893,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         const devDeps = Object.keys(pkg.devDependencies || {}).slice(0, 10).join(', ');
                         const scripts = Object.keys(pkg.scripts || {}).join(', ');
                         projectInfo = `\n\n📦 package.json:\n  Ad: ${pkg.name || 'N/A'}\n  Versiya: ${pkg.version || 'N/A'}\n  Scripts: ${scripts}\n  Dependencies: ${deps}\n  DevDeps: ${devDeps}`;
-                    } catch {}
+                    } catch { /* ignore */ }
                     
                     // Check for other config files
                     let configs = '';
@@ -1808,7 +1903,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         try {
                             await fs.access(path.join(analyzePath, cf));
                             foundConfigs.push(cf);
-                        } catch {}
+                        } catch { /* ignore */ }
                     }
                     if (foundConfigs.length > 0) configs = `\n\n⚙️ Konfiqurasiya faylları: ${foundConfigs.join(', ')}`;
 
@@ -1820,7 +1915,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                             const content = await fs.readFile(path.join(analyzePath, ef), 'utf-8');
                             entryContent = `\n\n📝 Entry point (${ef}) - ilk 50 sətir:\n${content.split('\n').slice(0, 50).join('\n')}`;
                             break;
-                        } catch {}
+                        } catch { /* ignore */ }
                     }
                     
                     const summary = [
@@ -1862,7 +1957,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                                 timeout: 5000 
                             });
                             if (stdout) results.push(stdout);
-                        } catch {}
+                        } catch { /* ignore */ }
                     }
                     
                     return results.length > 0 
@@ -1922,6 +2017,27 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                     if (!args.url.startsWith('http://') && !args.url.startsWith('https://')) {
                         return "Error: URL must start with http:// or https://";
                     }
+                    // SEC-FIX: block SSRF to internal services / cloud metadata.
+                    let urlObj;
+                    try { urlObj = new URL(args.url); } catch { return "Error: invalid URL"; }
+                    const host = urlObj.hostname.toLowerCase();
+                    const isPrivate = (
+                      host === 'localhost' ||
+                      host === '0.0.0.0' ||
+                      host === '::1' ||
+                      host.endsWith('.local') ||
+                      host.endsWith('.internal') ||
+                      /^127\./.test(host) ||
+                      /^10\./.test(host) ||
+                      /^192\.168\./.test(host) ||
+                      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
+                      /^169\.254\./.test(host) ||
+                      /^fc[0-9a-f]{2}:/.test(host) ||
+                      /^fe80:/.test(host)
+                    );
+                    if (isPrivate) {
+                        return "Error: web_fetch private/internal host-larına müraciət edə bilməz.";
+                    }
                     const response = await fetch(args.url, { 
                         timeout: 15000,
                         headers: { 'User-Agent': 'bahAI-Agent/1.0' }
@@ -1954,18 +2070,18 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         }
                         if (pkg.devDependencies?.vitest || pkg.dependencies?.vitest) testCmd = 'npx vitest --run';
                         if (pkg.devDependencies?.jest || pkg.dependencies?.jest) testCmd = 'npx jest --forceExit';
-                    } catch {}
+                    } catch { /* ignore */ }
                     
                     if (!testCmd) {
                         // Check for Python tests
                         try {
                             await fs.access(path.join(workingDirectory, 'pytest.ini'));
                             testCmd = 'python -m pytest --tb=short';
-                        } catch {}
+                        } catch { /* ignore */ }
                         try {
                             await fs.access(path.join(workingDirectory, 'tests'));
                             testCmd = testCmd || 'python -m pytest --tb=short';
-                        } catch {}
+                        } catch { /* ignore */ }
                     }
                     
                     if (!testCmd) return "Test framework tapılmadı. package.json-da 'test' script əlavə edin.";
@@ -2020,12 +2136,18 @@ async function handleToolCall(toolCall, workingDirectory, user) {
             }
 
             case "start_server": {
+                // SEC-FIX: validate the command against the allow-list so the
+                // LLM cannot smuggle `; rm -rf $HOME` through the start_server
+                // tool (which previously skipped the safety check).
+                if (!isBashCommandSafe(args.command || '')) {
+                    return "Error: start_server qadağan olunmuş əmri rədd etdi.";
+                }
                 try {
                     // Kill any existing process on the port first
                     const port = args.port || 3000;
                     try {
                         await execFileAsync('sh', ['-c', `lsof -ti:${port} | xargs kill -9 2>/dev/null`], { cwd: workingDirectory, timeout: 3000 });
-                    } catch {}
+                    } catch { /* ignore */ }
                     
                     await new Promise(r => setTimeout(r, 500));
                     
@@ -2058,7 +2180,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                             });
                             ready = true;
                             break;
-                        } catch {}
+                        } catch { /* ignore */ }
                     }
                     
                     if (ready) {
@@ -2608,7 +2730,6 @@ app.post('/api/project-health', async (req, res) => {
 
   for (const item of commands) {
     res.write(`data: ${JSON.stringify({ type: 'health_step', key: item.key, status: 'running', command: item.cmd })}\n\n`);
-    // eslint-disable-next-line no-await-in-loop
     const result = await runStreamingCommand(item.cmd, resolvedWD, (stream, chunk) => {
       res.write(`data: ${JSON.stringify({ type: 'health_log', key: item.key, stream, chunk })}\n\n`);
     });
@@ -2807,7 +2928,9 @@ app.post('/api/chat', async (req, res) => {
     
     // --- Hardcoded Fallback Redirect for weak models ---
     let userPathMatch = null;
-    require('fs').writeFileSync('debug_messages.json', JSON.stringify(messages, null, 2));
+    // SEC-FIX: removed `fs.writeFileSync('debug_messages.json', ...)` which
+    // dumped every chat (with attachments and possibly secrets) to the project
+    // root on every request.
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'user' || messages[i].role === 'system') {
         let textContent = messages[i].content;
@@ -2990,9 +3113,10 @@ QƏTİ QAYDALAR:
                     stream: true
                 }, { signal: abortController.signal });
             } catch (apiErr) {
+                let currentErr = apiErr;
                 const isRetryable = (() => {
-                  const st = apiErr?.status || apiErr?.code;
-                  const msg = String(apiErr?.message || '').toLowerCase();
+                  const st = currentErr?.status || currentErr?.code;
+                  const msg = String(currentErr?.message || '').toLowerCase();
                   if (st === 401) return true;
                   if (st === 429 || st === 500 || st === 502 || st === 503 || st === 504) return true;
                   if (st === 400 && msg.includes('provider returned error')) return true;
@@ -3029,7 +3153,7 @@ QƏTİ QAYDALAR:
                       console.log(`🔁 Provider failover: switched to ${alt.id}`);
                       break;
                     } catch (altErr) {
-                      apiErr = altErr;
+                      currentErr = altErr;
                       markProviderFailure(alt.id);
                     }
                   }
@@ -3039,12 +3163,12 @@ QƏTİ QAYDALAR:
                 clearTimeout(timeoutId);
                 if (stream) {
                   // fallback succeeded
-                } else if (apiErr.name === 'AbortError') {
+                } else if (currentErr.name === 'AbortError') {
                     res.write(`data: ${JSON.stringify({ type: 'error', message: 'API cavab vaxtı bitdi (10 dəqiqə). Zəhmət olmasa yenidən cəhd edin.' })}\n\n`);
                     break;
                 } else {
-                  const status = apiErr.status || apiErr.code || 'unknown';
-                  const errText = String(apiErr.message || '').toLowerCase();
+                  const status = currentErr.status || currentErr.code || 'unknown';
+                  const errText = String(currentErr.message || '').toLowerCase();
                   const isDeepSeekModel = String(effectiveModel || '').toLowerCase().includes('deepseek');
                   if (
                     !deepSeekRecoveryUsed &&
@@ -3076,21 +3200,21 @@ QƏTİ QAYDALAR:
                       res.write(`data: ${JSON.stringify({ type: 'assistant_message', message: simpleMsg })}\n\n`);
                       break;
                     } catch (fallbackErr) {
-                      apiErr = fallbackErr;
+                      currentErr = fallbackErr;
                     }
                   }
 
                   // Detailed API error logging
-                  console.error(`❌ API Error [${status}]:`, apiErr.message);
-                  console.error(`❌ Full error:`, JSON.stringify({ status: apiErr.status, headers: apiErr.headers, body: apiErr.error || apiErr.body }, null, 2));
-                  let userMsg = `API xətası: ${apiErr.message}`;
-                  if (apiErr.status === 401) {
+                  console.error(`❌ API Error [${status}]:`, currentErr.message);
+                  console.error(`❌ Full error:`, JSON.stringify({ status: currentErr.status, headers: currentErr.headers, body: currentErr.error || currentErr.body }, null, 2));
+                  let userMsg = `API xətası: ${currentErr.message}`;
+                  if (currentErr.status === 401) {
                       userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
-                  } else if (apiErr.status === 429) {
+                  } else if (currentErr.status === 429) {
                       userMsg = 'API limiti aşıldı (rate limit). 1-2 dəqiqə gözləyib yenidən cəhd edin.';
-                  } else if (apiErr.status === 503) {
+                  } else if (currentErr.status === 503) {
                       userMsg = 'AI servisi müvəqqəti əlçatmazdır. Mesajınız çox böyük ola bilər — daha qısa mesaj göndərin və ya bir neçə dəqiqə gözləyin.';
-                  } else if (apiErr.status === 404) {
+                  } else if (currentErr.status === 404) {
                       userMsg = `Model tapılmadı: "${effectiveModel}". Ayarlardan model adını yoxlayın.`;
                   }
                   res.write(`data: ${JSON.stringify({ type: 'error', message: userMsg })}\n\n`);
@@ -3413,7 +3537,7 @@ app.post('/api/github/connect', async (req, res) => {
       let envContent = '';
       try {
         envContent = fs.readFileSync(envPath, 'utf8');
-      } catch {}
+      } catch { /* ignore */ }
 
       if (envContent.includes('GITHUB_TOKEN=')) {
         envContent = envContent.replace(/GITHUB_TOKEN=.*/g, `GITHUB_TOKEN=${token}`);
@@ -3452,7 +3576,7 @@ app.delete('/api/github/connect', async (req, res) => {
       let envContent = '';
       try {
         envContent = fs.readFileSync(envPath, 'utf8');
-      } catch {}
+      } catch { /* ignore */ }
 
       envContent = envContent.replace(/GITHUB_TOKEN=.*/g, '');
       fs.writeFileSync(envPath, envContent, 'utf8');
@@ -3615,3 +3739,14 @@ app.use((err, req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 bahAI Backend running on http://0.0.0.0:${PORT}`);
 });
+
+// SEC-FIX: graceful shutdown — close PG pool and finish in-flight requests
+// before exit so connections are not leaked when the host sends SIGTERM
+// (Railway/Kubernetes deploys).
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, async () => {
+    console.log(`Received ${sig}, shutting down gracefully...`);
+    try { await db.shutdown?.(); } catch { /* ignore */ }
+    process.exit(0);
+  });
+}

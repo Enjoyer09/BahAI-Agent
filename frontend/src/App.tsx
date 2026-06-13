@@ -16,7 +16,12 @@ import { useTheme } from './hooks/useTheme';
 import { useSettings } from './hooks/useSettings';
 import { ToastProvider, useConfirm } from './components/common/Toast';
 import { trackAppOpen } from './lib/telemetry';
+import { API_BASE_URL } from './lib/constants';
 const ElevenLabsWidget = 'elevenlabs-convai' as any;
+
+// FUNC-FIX: cache so we only check Electron once and avoid repeatedly hitting
+// `window.navigator.userAgent` deep inside render.
+const isElectron = typeof window !== 'undefined' && window.navigator.userAgent.includes('Electron');
 
 function AppContent() {
   const auth = useAuth();
@@ -41,8 +46,10 @@ function AppContent() {
   useEffect(() => { 
     trackAppOpen(); 
     
-    // Fetch ElevenLabs signed URL
-    fetch('/api/signed-url')
+    // FUNC-FIX: use API_BASE_URL so /api/signed-url resolves correctly when
+    // the frontend is served from a different origin (Vite dev on :5173 vs
+    // backend on :3001). Previously the relative path returned the SPA HTML.
+    fetch(`${API_BASE_URL}/api/signed-url`)
       .then(res => {
         if (!res.ok) throw new Error("Key not configured");
         return res.json();
@@ -129,7 +136,7 @@ function AppContent() {
   return (
     <div className="dvh-screen flex overflow-hidden" style={{ background: 'var(--bg-main)' }}>
       {/* Electron Window Drag Handle */}
-      {window.navigator.userAgent.includes('Electron') && (
+      {isElectron && (
         <div 
           className="fixed top-0 left-0 right-0 h-7 z-[9999]" 
           style={{ WebkitAppRegion: 'drag', WebkitUserSelect: 'none' } as any}
@@ -179,7 +186,7 @@ function AppContent() {
       )}
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative" style={{ paddingTop: '28px' }}>
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative" style={{ paddingTop: isElectron ? '28px' : 0 }}>
         {/* Floating toolbar — desktop only */}
         {!isMobile && (
           <div 
