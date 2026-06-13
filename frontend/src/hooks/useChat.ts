@@ -341,6 +341,22 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
             setTaskPlan(Array.isArray(event.items) ? event.items : []);
             return;
           }
+          // FUNC-FIX: surface the Auto router's decision as a small system
+          // message at the top of the assistant turn ("Auto → ...").
+          if (event.type === 'auto_route') {
+            const isCloud = event.providerId?.includes('cloud') || /\//.test(event.chosenModel || '');
+            const icon = isCloud ? '☁️' : '🦙';
+            const tier = event.intent === 'smart' ? 'Mürəkkəb iş' : 'Sürətli sual';
+            const note: Message = {
+              id: generateId(),
+              role: 'system',
+              content: `${icon} Auto → **${event.chosenModel}** (${tier})`,
+              timestamp: Date.now()
+            } as Message;
+            currentMsgs = [...currentMsgs, note];
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+            return;
+          }
           if (event.type === 'error') {
             const errMsg: Message = { id: generateId(), role: 'assistant', content: `❌ Xəta: ${event.message}`, timestamp: Date.now() };
             currentMsgs = [...currentMsgs, errMsg];

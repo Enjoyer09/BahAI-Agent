@@ -98,6 +98,9 @@ yarn electron:dev
 
 ## 5. Audit-dən sonra yeni funksiyalar
 
+✅ **✨ Auto Mode** model selector-da yeni — qısa sual → lokal Qwen 7B, mürəkkəb iş → cloud Claude Sonnet 4.5. Chat-da `🦙 Auto → qwen2.5-coder:7b (Sürətli sual)` kimi pill göstərilir.
+✅ **Ollama avtomatik aşkarlanır** — `gemma4:12b`, `qwen2.5-coder:7b`, `llama3:8b` və ya istənilən `name:tag` modeli avtomatik `http://localhost:11434/v1`-ə yönləndirilir. Əvvəl hardkoded whitelist idi.
+✅ **"Connection error" əvəzinə aydın mesaj:** Ollama söndürülübsə → `🦙 Ollama xidməti işləmir. Terminal-da \`ollama serve\` icra edin`.
 ✅ **Safe Mode toggle** indi chat-input-də görünür (qalxan ikon yanında) — `Auto` ↔ `Safe Mode`. **Default off.**
 ✅ **Model selector**-da indi **Claude Sonnet 4.5 / GPT-5.2 / Gemini 3 Flash** var (OpenRouter key lazımdır).
 ✅ **FileTree lazy load** — qovluqlar artıq genişlədiləndə açılır.
@@ -105,16 +108,56 @@ yarn electron:dev
 ✅ **Sistem prompt-ları** lokal modellər üçün 700→50 sətrə qədər sıxılıb. Modellərin "Edə bilmərəm" tezliyi xeyli azalmalıdır.
 ✅ **MAX_STEPS 15→6** — tool loops 2x daha sürətli bitir.
 ✅ **LLM timeout 10dəq→3dəq** — "ləng cavab" zamanı dərhal bilirsiniz.
+✅ **Helmet + express-rate-limit** — production-grade təhlükəsizlik middleware.
+✅ **Bundle 1.17MB → 326KB** — frontend yüklənmə 4x sürətli.
+✅ **20 avtomat test** (14 unit + 6 API) — `cd backend && npm test`.
 
 ---
 
-## 6. Hibridi istifadə et: "Local Draft → Cloud Polish"
+## 6. Ollama benchmark qaçırın (1 əmr)
 
-İdeya: ucuz lokal modellə qaralama hazırla, sonra ağıllı cloud modellə düzəlt.
+Hansı modelin sizin Mac-da ən sürətli işlədiyini ölçmək üçün:
 
-1. **Sürətli sual** üçün model selector-dan **Qwen 2.5 Coder 7B (Ollama)** seçin.
-2. **Mürəkkəb refactor / architectural qərar** üçün **Claude Sonnet 4.5** seçin (cloud, OpenRouter key lazımdır).
-3. AI_PROVIDER_POOL ilə avtomatik failover qurun (yuxarıdakı `.env` blokunu açın).
+```bash
+cd ~/Documents/GitHub/bahAI
+node scripts/bench-ollama.js
+# və ya konkret modellərlə:
+node scripts/bench-ollama.js qwen2.5-coder:7b gemma4:12b
+```
+
+Çıxış kimi:
+```
+Model                        TTFT (ms)    Tok/s avg    Tövsiyə
+────────────────────────────────────────────────────────────
+qwen2.5-coder:7b             340          45.2         ⚡ çox sürətli
+gemma4:12b                   1200         8.3          🐌 ləng
+```
+
+---
+
+## 7. Hibridi istifadə et: "Local Draft → Cloud Polish"
+
+### Variant A: ✨ Auto Mode (Tövsiyə olunan)
+
+Model selector-dan **"✨ Auto (Smart Router)"** seçin. Sistem avtomatik olaraq:
+- Qısa suallar / chat üçün → lokal Qwen 2.5 Coder 7B
+- Refactor / architecture / file attachment → Claude Sonnet 4.5
+
+`.env`-də cloud key qoyun:
+```bash
+OPENAI_API_KEY=sk-or-v1-...    # OpenRouter
+AUTO_FAST_MODEL=qwen2.5-coder:7b
+AUTO_SMART_MODEL=anthropic/claude-sonnet-4.5
+```
+
+### Variant B: Manual Provider Pool (failover)
+
+```bash
+cd ~/Documents/GitHub/bahAI
+# scripts/provider-pool.example.js-i öz keylərinizlə düzəldin
+AI_PROVIDER_POOL=$(node -e "console.log(JSON.stringify(require('./scripts/provider-pool.example.js')))")
+echo "AI_PROVIDER_POOL='$AI_PROVIDER_POOL'" >> .env
+```
 
 ---
 

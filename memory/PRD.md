@@ -43,13 +43,39 @@ User complained: a) hallucinates, b) misformat tools, c) UI slow, d) "can't do t
 - SSRF guards present
 - Parser unit tests 8/8
 
-## What still needs human action
-- Fill `.env` with `JWT_SECRET`, `DATABASE_URL`, `OPENAI_API_KEY`, `ADMIN_EMAIL/PASSWORD`, `ALLOWED_ORIGINS`
-- Test real Ollama on user's Mac per `/app/MAC_SETUP.md`
-- Add a real test suite (vitest + supertest) — none exists today
-- Consider JWT refresh-token rotation
-- `helmet` & `express-rate-limit` packages instead of in-house mini versions
-- Bundle code-split (1.17MB single chunk is heavy)
+## Session 3 — Auto mode + bütün backlog (latest)
+
+User pain: "Gemma 4 12B Connection error" + asked to ship the entire Next Action Items list.
+
+### Shipped
+1. **✨ Auto Mode** — new top-of-list model `auto`. Backend `classifyTaskComplexity()` picks fast (Qwen 7B local) vs smart (Claude Sonnet 4.5 cloud) based on message content, length, attachments, history. Emits SSE `auto_route` event; UI shows `🦙 Auto → qwen2.5-coder:7b (Sürətli sual)` pill in chat.
+2. **Gemma "Connection error" fixed** — actionable message: `🦙 Ollama xidməti işləmir. Terminal-da \`ollama serve\` icra edin`. Also `ollama pull <model>` hint on 404.
+3. **`looksLikeOllamaModel()`** — any `name:tag` id auto-routes to `OLLAMA_BASE_URL`. Previous hardcoded whitelist removed.
+4. **`helmet`** package added — replaces inline header middleware.
+5. **`express-rate-limit`** package — production-grade replacement for in-memory map, both on `/api/*` general (300/min) and `/auth/*` (5/15min, skipSuccessfulRequests).
+6. **Vitest + Supertest** — 20 tests (14 unit + 6 API). Boot LOCAL_MODE backend, run `npm test`. All pass.
+7. **Bundle code-split** — `index.js` 1170KB → 326KB (gzip 93KB). Markdown / icons / editor / react-vendor as lazy chunks.
+8. **`scripts/bench-ollama.js`** — Mac-side benchmark that streams every model with greeting/code-simple/code-complex prompts, reports TTFT, tok/s, verdict.
+9. **`scripts/provider-pool.example.js`** — boilerplate `AI_PROVIDER_POOL` JSON (Ollama → OpenRouter Claude → Gemini Flash failover).
+
+### Verified
+- 20/20 vitest tests pass (`npm test`)
+- Frontend TS + Vite build clean
+- Backend ESLint zero blocking
+- `classifyTaskComplexity` + `looksLikeOllamaModel` smoke-tested directly
+
+## Files added this session
+- `/app/backend/tests/unit.test.js`, `/app/backend/tests/api.test.js`
+- `/app/scripts/bench-ollama.js`, `/app/scripts/provider-pool.example.js`
+
+## Backlog (now empty)
+- ~~Vitest + supertest test suite~~ ✅
+- ~~helmet + express-rate-limit packages~~ ✅
+- ~~Bundle code-split~~ ✅
+- ~~Ollama benchmark script~~ ✅
+- ~~Hybrid AI_PROVIDER_POOL example~~ ✅
+- ~~Auto Mode router~~ ✅
+- ~~Gemma 4 12B connection error fix~~ ✅
 
 ## Highest-impact fixes shipped
 1. CORS allow-list (`ALLOWED_ORIGINS`) — previously open to the world

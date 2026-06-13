@@ -410,33 +410,19 @@ router.get('/google-callback', async (req, res) => {
   }
 });
 
-// SEC-FIX: Simple in-memory sliding-window rate limiter for /login and
-// /register to mitigate brute-force / credential-stuffing attacks. 5 attempts
-// per 15 minutes per IP. Replace with redis/express-rate-limit in production
-// behind multiple instances.
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
-const RATE_LIMIT_MAX = 5;
-const rateMap = new Map(); // ip -> [timestamp, ...]
-
-function authRateLimit(req, res, next) {
-  const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim() || 'unknown';
-  const now = Date.now();
-  const arr = (rateMap.get(ip) || []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (arr.length >= RATE_LIMIT_MAX) {
-    return res.status(429).json({ error: 'Çox cəhd olundu. 15 dəqiqə sonra yenidən cəhd edin.' });
-  }
-  arr.push(now);
-  rateMap.set(ip, arr);
-  // Periodic cleanup
-  if (rateMap.size > 5000) {
-    for (const [k, v] of rateMap.entries()) {
-      const fresh = v.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-      if (fresh.length === 0) rateMap.delete(k);
-      else rateMap.set(k, fresh);
-    }
-  }
-  next();
-}
+// SEC-FIX: production-grade auth rate limiter using `express-rate-limit`.
+// 5 attempts / 15 min / IP for /login and /register to mitigate brute-force.
+// Swap the store for redis on multi-instance deploys.
+const rateLimit = require('express-rate-limit');
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çox cəhd olundu. 15 dəqiqə sonra yenidən cəhd edin.' },
+  // Count only failed attempts so a user who logs in correctly isn't blocked.
+  skipSuccessfulRequests: true
+});
 
 // Define Router Paths
 router.post('/login', authRateLimit, login);

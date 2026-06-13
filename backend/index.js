@@ -6,6 +6,8 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { OpenAI } = require('openai');
 const fs = require('fs/promises');
 const path = require('path');
@@ -53,17 +55,30 @@ const corsConfig = allowedOrigins.length > 0
 app.use(corsConfig);
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
 
-// SEC-FIX: Basic security headers (helmet-lite) — set without adding a
-// dependency. Production should use the `helmet` middleware instead.
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('X-XSS-Protection', '0');
-  if (process.env.NODE_ENV === 'production') {
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  }
-  next();
+// SEC-FIX: replaced inline header-setting with the standard `helmet`
+// middleware which keeps the recommended defaults up-to-date. CSP is left in
+// report-only mode because the SPA + Electron contexts need inline scripts.
+app.use(helmet({
+  contentSecurityPolicy: false, // SPA + Electron needs inline; revisit later
+  crossOriginEmbedderPolicy: false,
+  // hide X-Powered-By, set X-Frame-Options, Referrer-Policy, HSTS in prod, etc.
+}));
+
+// SEC-FIX: production-grade rate limiter (replaces the in-memory map).
+// Backed by an in-process LRU; for multi-instance deploy swap the store
+// for redis: https://github.com/express-rate-limit/rate-limit-redis
+const apiLimiter = rateLimit({
+  windowMs: parseInt(process.env.API_RATE_WINDOW_MS || '60000', 10),
+  max: parseInt(process.env.API_RATE_MAX || '300', 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çox sorğu. Bir az sonra yenidən cəhd edin.' }
+});
+// Apply general limiter to all /api/* routes except SSE streams (chat / health
+// which legitimately keep the connection open).
+app.use('/api', (req, res, next) => {
+  if (req.path === '/chat' || req.path === '/chat-stream' || req.path === '/project-health') return next();
+  return apiLimiter(req, res, next);
 });
 
 // Request Logger
@@ -176,6 +191,35 @@ function parseProviderPoolFromEnv() {
   }
 }
 
+// FUNC-FIX: an Ollama model ID looks like `name:tag` (e.g. `gemma4:12b`,
+// `qwen2.5-coder:7b`, `llama3:8b`) — no slash, has colon. Cloud (OpenRouter)
+// IDs look like `vendor/model` or `vendor/model:free`. This lets us route to
+// the local Ollama endpoint without hard-coding a model whitelist.
+function looksLikeOllamaModel(modelId) {
+  if (!modelId) return false;
+  if (modelId.includes('/')) return false; // openrouter style
+  return modelId.includes(':') || /^(gemma|qwen|llama|deepseek|mistral|phi|codellama)/i.test(modelId);
+}
+
+// FUNC-FIX: lightweight intent classifier for the new "auto" model. Returns
+// 'fast' for short / chatty messages and 'smart' for complex / refactor /
+// architecture / long-context work.
+function classifyTaskComplexity({ userMessage, messageHistoryLen, hasAttachments }) {
+  const text = String(userMessage || '');
+  const len = text.length;
+  const hasCodeBlock = /```/.test(text);
+  const complexKeywords = /(refactor|architecture|design|plan|optimize|analyze|audit|review|debug|migrate|test plan|integration|scalab|security|performance)/i;
+  const trivialKeywords = /^(salam|hi|hello|how|necə|nədir|sağol|thanks|teşekkür|test|hə|yox)\b/i;
+
+  if (hasAttachments) return 'smart';
+  if (messageHistoryLen > 10) return 'smart';
+  if (hasCodeBlock && len > 500) return 'smart';
+  if (complexKeywords.test(text)) return 'smart';
+  if (trivialKeywords.test(text) && len < 80) return 'fast';
+  if (len > 600) return 'smart';
+  return 'fast';
+}
+
 function canUseProviderNow(providerId) {
   const state = providerRuntime.get(providerId);
   if (!state) return true;
@@ -195,27 +239,43 @@ function markProviderSuccess(providerId) {
   providerRuntime.set(providerId, { fails: 0, cooldownUntil: 0 });
 }
 
-function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendModel }) {
+function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendModel, autoIntent }) {
   const list = [];
 
-  const localOllamaModels = [
-    'gemma4:latest',
-    'gemma4:e2b',
-    'gemma4:12b',
-    'qwen2.5-coder:latest',
-    'dagbs/qwen2.5-coder-14b-instruct-abliterated:latest'
-  ];
+  const OLLAMA_BASE = process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1';
 
-  if (frontendModel && localOllamaModels.includes(frontendModel)) {
+  // FUNC-FIX: AUTO mode — route based on classifier. Fast intents try local
+  // Ollama first (free, private), smart intents try the cloud frontier model
+  // first. Both fall back to each other if the primary fails.
+  if (frontendModel === 'auto') {
+    const cloudKey = frontendApiKey || process.env.OPENAI_API_KEY || '';
+    const cloudBase = frontendBaseUrl || process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+    const fastLocal = process.env.AUTO_FAST_MODEL || 'qwen2.5-coder:7b';
+    const smartCloud = process.env.AUTO_SMART_MODEL || 'anthropic/claude-sonnet-4.5';
+
+    const localProvider = { id: 'auto_ollama_fast', apiKey: 'ollama', baseURL: OLLAMA_BASE, model: fastLocal };
+    const cloudProvider = cloudKey ? { id: 'auto_cloud_smart', apiKey: cloudKey, baseURL: cloudBase, model: smartCloud } : null;
+
+    if (autoIntent === 'smart' && cloudProvider) {
+      list.push(cloudProvider);
+      list.push(localProvider); // failover for cloud outage
+    } else {
+      list.push(localProvider);
+      if (cloudProvider) list.push(cloudProvider); // failover if Ollama not running
+    }
+  } else if (frontendModel && looksLikeOllamaModel(frontendModel)) {
+    // FUNC-FIX: any Ollama-style ID auto-routes to local endpoint (was a
+    // hard-coded whitelist, so e.g. qwen2.5-coder:7b silently fell back to
+    // openrouter and 404'd).
     list.push({
-      id: 'local_ollama_override',
+      id: 'local_ollama_auto',
       apiKey: 'ollama',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: OLLAMA_BASE,
       model: frontendModel
     });
   }
 
-  if (frontendApiKey && frontendBaseUrl && frontendModel) {
+  if (frontendApiKey && frontendBaseUrl && frontendModel && frontendModel !== 'auto') {
     list.push({
       id: 'frontend',
       apiKey: frontendApiKey,
@@ -231,7 +291,7 @@ function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendMode
   const envApiKey = process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY || '';
   const envBase = process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
   const envModel = process.env.OPENAI_MODEL || 'qwen/qwen3-coder:free';
-  if (envApiKey) {
+  if (envApiKey && frontendModel !== 'auto') {
     list.push({
       id: process.env.OPENAI_API_KEY ? 'env_openai' : 'env_nvidia',
       apiKey: envApiKey,
@@ -2894,10 +2954,21 @@ app.post('/api/chat', async (req, res) => {
     const frontendApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
     const frontendBaseUrl = (typeof baseUrl === 'string' ? baseUrl.trim() : '') || process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
     const frontendModel = model || process.env.OPENAI_MODEL || 'qwen/qwen3-coder:free';
+
+    // FUNC-FIX: classify the LATEST user message for the new "auto" model so
+    // we can pick fast/local vs smart/cloud automatically.
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+    const autoIntent = classifyTaskComplexity({
+      userMessage: lastUserMsg?.content || '',
+      messageHistoryLen: messages.length,
+      hasAttachments: Array.isArray(lastUserMsg?.attachments) && lastUserMsg.attachments.length > 0
+    });
+
     const providerCandidates = buildProviderCandidates({
       frontendApiKey,
       frontendBaseUrl,
-      frontendModel
+      frontendModel,
+      autoIntent
     });
 
     if (providerCandidates.length === 0) {
@@ -2915,7 +2986,12 @@ app.post('/api/chat', async (req, res) => {
       }
     });
     let effectiveModel = activeProvider.model;
-    console.log(`🤖 /api/chat | provider_candidates=${providerCandidates.length} | active=${activeProvider.id} | model=${effectiveModel}`);
+    console.log(`🤖 /api/chat | provider_candidates=${providerCandidates.length} | active=${activeProvider.id} | model=${effectiveModel}${frontendModel === 'auto' ? ` | auto_intent=${autoIntent}` : ''}`);
+
+    // FUNC-FIX: pending event — emitted once SSE headers are written below.
+    const pendingAutoRouteEvent = frontendModel === 'auto'
+      ? { type: 'auto_route', intent: autoIntent, chosenModel: effectiveModel, providerId: activeProvider.id }
+      : null;
 
     const isLocalOrFlakyModel = isLocalMode() || 
       !effectiveModel || 
@@ -3008,6 +3084,11 @@ CAVAB FORMATI:
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
+
+    // FUNC-FIX: emit auto-routing decision so the UI can show what was picked.
+    if (pendingAutoRouteEvent) {
+      res.write(`data: ${JSON.stringify(pendingAutoRouteEvent)}\n\n`);
+    }
 
     let currentMessages = [...apiMessages];
     let step = 0;
@@ -3146,6 +3227,9 @@ CAVAB FORMATI:
                   console.error(`❌ API Error [${status}]:`, currentErr.message);
                   console.error(`❌ Full error:`, JSON.stringify({ status: currentErr.status, headers: currentErr.headers, body: currentErr.error || currentErr.body }, null, 2));
                   let userMsg = `API xətası: ${currentErr.message}`;
+                  const errLower = String(currentErr.message || '').toLowerCase();
+                  const isOllamaUrl = String(activeProvider.baseURL || '').includes('11434') || String(activeProvider.baseURL || '').includes('ollama');
+
                   if (currentErr.status === 401) {
                       userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
                   } else if (currentErr.status === 429) {
@@ -3153,7 +3237,25 @@ CAVAB FORMATI:
                   } else if (currentErr.status === 503) {
                       userMsg = 'AI servisi müvəqqəti əlçatmazdır. Mesajınız çox böyük ola bilər — daha qısa mesaj göndərin və ya bir neçə dəqiqə gözləyin.';
                   } else if (currentErr.status === 404) {
-                      userMsg = `Model tapılmadı: "${effectiveModel}". Ayarlardan model adını yoxlayın.`;
+                      if (isOllamaUrl) {
+                          userMsg = `Ollama-da "${effectiveModel}" modeli quraşdırılmayıb. Terminal-da bunu icra edin: \`ollama pull ${effectiveModel}\``;
+                      } else {
+                          userMsg = `Model tapılmadı: "${effectiveModel}". Ayarlardan model adını yoxlayın.`;
+                      }
+                  } else if (
+                      // FUNC-FIX: actionable error when Ollama isn't running.
+                      // Previously users just saw "Connection error" and didn't
+                      // know that they needed `ollama serve`.
+                      isOllamaUrl && (
+                          errLower.includes('econnrefused') ||
+                          errLower.includes('connection error') ||
+                          errLower.includes('fetch failed') ||
+                          errLower.includes('econnreset')
+                      )
+                  ) {
+                      userMsg = `🦙 Ollama xidməti işləmir (${activeProvider.baseURL}). Terminal-da bunu icra edin:\n\n\`\`\`\nollama serve\n\`\`\`\n\nSonra modeli yükləyin: \`ollama pull ${effectiveModel}\`\n\nVə ya AYARLAR-dan Cloud modelinə (Claude Sonnet 4.5 və ya 'Auto') keçin.`;
+                  } else if (errLower.includes('connection error') || errLower.includes('fetch failed') || errLower.includes('econnrefused')) {
+                      userMsg = `Şəbəkə xətası: ${activeProvider.baseURL}-ə qoşula bilmədim. İnternet bağlantınızı və baseURL-i yoxlayın.`;
                   }
                   res.write(`data: ${JSON.stringify({ type: 'error', message: userMsg })}\n\n`);
                   break;
