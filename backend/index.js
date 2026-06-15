@@ -731,6 +731,8 @@ async function normalizeMessagesForModel(messages = [], modelName = '') {
         if (responseMatch && responseMatch[1]) {
           content = content.replace(responseMatch[0], responseMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
         }
+        // Clean up leaked system prompts to prevent infinite loops
+        content = content.replace(/Layihə yaddaşı:\s*\{[\s\S]*?\}\n*/g, '').trim();
       }
     }
 
@@ -3073,7 +3075,7 @@ CAVAB FORMATI:
     if (isLocalOrFlakyModel) {
       apiMessages.push({
         role: 'system',
-        content: "XATIRLATMA: Sən birbaşa faylları oxuya, dəyişə və command icra edə bilən AI kodlaşdırma agentisən. MÜTLƏQ verilmiş JSON tool (read_file, grep_search, list_directory, və s.) çağırışlarını istifadə et. Qətiyyən 'mən bunu edə bilmərəm' və ya 'mən yalnız bir modeləm' bəhanələrini gətirmə!"
+        content: "XATIRLATMA: Sən birbaşa faylları oxuya, dəyişə və command icra edə bilən AI kodlaşdırma agentisən. MÜTLƏQ verilmiş JSON tool (read_file, grep_search, list_directory, və s.) çağırışlarını istifadə et. Qətiyyən xəyalından uydurma (məsələn, 'faylı oxudum, xəta tapdım' demə)! Real faylları oxumaq üçün mütləq JSON çağırışı et!"
       });
     }
 
