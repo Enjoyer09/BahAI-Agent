@@ -137,6 +137,7 @@ const PORT = process.env.PORT || 3001;
 // models. 6 steps is enough for any realistic agentic flow (list → read →
 // edit → verify); larger context = more hallucinations and longer waits.
 const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '6', 10);
+const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../sandbox'));
 const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
   ? process.env.ALLOWED_DIRECTORIES.split(',').map(d => path.resolve(d.trim()))
   : [
@@ -146,7 +147,6 @@ const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
       path.resolve(__dirname, '..'), // Project root
       path.resolve(WORKSPACE_ROOT),  // Per-user sandbox area
     ];
-const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../sandbox'));
 // SEC-FIX: LOCAL_MODE must be explicit. Previously the system considered
 // itself "local" whenever DATABASE_URL was missing, which on a cloud host
 // silently disabled auth and approvals for all visitors.
