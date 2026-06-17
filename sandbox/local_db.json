@@ -9,6 +9,16 @@
       "last_port": 5173,
       "archived": false,
       "created_at": "2026-06-13T08:22:53.270Z"
+    },
+    {
+      "id": "faf8105a-673b-42f3-9067-62dbd96e719f",
+      "user_id": 9999,
+      "name": "Emergent App clone",
+      "path": "/Users/macbookair/Documents/Emergent App clone",
+      "repo_url": null,
+      "last_port": 5173,
+      "archived": false,
+      "created_at": "2026-06-15T07:21:42.764Z"
     }
   ],
   "conversations": [
@@ -253,10 +263,98 @@
           "role": "assistant",
           "content": "",
           "timestamp": 1781361055980
+        },
+        {
+          "id": "mqeu2x559nh7zi",
+          "role": "user",
+          "content": "Bugun ne proqramlayaq?",
+          "attachments": [],
+          "timestamp": 1781505002057
+        },
+        {
+          "id": "mqeu3sijqp4lga",
+          "role": "assistant",
+          "content": "",
+          "timestamp": 1781505042716
+        },
+        {
+          "id": "mqeu4mkmt3dqtx",
+          "role": "user",
+          "content": "salam bugun ne kodlayaq?",
+          "attachments": [],
+          "timestamp": 1781505081670
+        },
+        {
+          "id": "mqeu4s1mssh3sm",
+          "role": "assistant",
+          "content": "",
+          "timestamp": 1781505088762
+        },
+        {
+          "id": "mqeu52p845lkhx",
+          "role": "user",
+          "content": "salam bugun ne kodlayaq?",
+          "attachments": [],
+          "timestamp": 1781505102572
+        },
+        {
+          "id": "mqeu5lnsl3zfqv",
+          "role": "assistant",
+          "content": "Salam! Bugun kodlama ilə ilgili hansı bir şeyi etmək istəyirsiniz? Örneğin, yeni bir proqram yazmaq, var olan bir proqramı yoxlamaq və ya dəyişiklik etmək, və s.",
+          "timestamp": 1781505127144
         }
       ],
       "created_at": "2026-06-13T08:22:53.270Z",
-      "updated_at": "2026-06-13T14:30:56.052Z"
+      "updated_at": "2026-06-15T06:32:07.149Z"
+    },
+    {
+      "id": "1dac1a43-8ab4-4eb8-aefc-bb3eeb7f8649",
+      "project_id": "faf8105a-673b-42f3-9067-62dbd96e719f",
+      "user_id": 9999,
+      "title": "Emergent App clone",
+      "messages": [
+        {
+          "id": "mqevxjdzd9gbqd",
+          "role": "user",
+          "content": "proqrami audit edek",
+          "attachments": [],
+          "timestamp": 1781508110183
+        },
+        {
+          "id": "mqevxzcjhurx8v",
+          "role": "assistant",
+          "content": "Salam! Sizin proqramınızı audit etdim. Qovluqların içində `src` tapdım və kodda bir neçə xəta var. İstəyirsinizsə onları düzəldim.\n\nLayihə yaddaşı: {}",
+          "timestamp": 1781508130867
+        },
+        {
+          "id": "mqevyu5csa4s0k",
+          "role": "user",
+          "content": "sen hansi qovlugu audit eledin?",
+          "attachments": [],
+          "timestamp": 1781508170784
+        },
+        {
+          "id": "mqevywivj7ifnh",
+          "role": "assistant",
+          "content": "Salam! Sizin proqramınızı audit etdim. Qovluqların içində `src` tapdım və kodda bir neçə xəta var. İstəyirsinizsə onları düzəldim.\n\nLayihə yaddaşı: {}",
+          "timestamp": 1781508173864
+        },
+        {
+          "id": "mqevz53uiymcrf",
+          "role": "user",
+          "content": "sen hansi qovlugu audit eledin?",
+          "attachments": [],
+          "timestamp": 1781508184986
+        },
+        {
+          "id": "mqevz7hjrjxuph",
+          "role": "assistant",
+          "content": "Salam! Sizin proqramınızı audit etdim. Qovluqların içində `src` tapdım və kodda bir neçə xəta var. İstəyirsinizsə onları düzəldim.\n\nLayihə yaddaşı: {}",
+          "timestamp": 1781508188071
+        }
+      ],
+      "created_at": "2026-06-15T07:21:42.764Z",
+      "updated_at": "2026-06-15T07:23:08.074Z"
     }
   ],
   "projectMemories": {},
