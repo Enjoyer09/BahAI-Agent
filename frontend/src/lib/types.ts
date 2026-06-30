@@ -24,14 +24,71 @@ export interface Message {
   content: string;
   attachments?: Attachment[];
   timestamp: number;
-  tool_calls?: any[];
+  tool_calls?: ToolCall[];
   tool_call_id?: string;
+}
+
+export interface ToolCall {
+  id?: string;
+  type?: string;
+  status?: 'running' | 'done' | 'error';
+  duration?: number;
+  result?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+  name?: string;
+  args?: string;
 }
 
 export interface ApprovalRequest {
   approvalId: string;
   tool: string;
   args: string;
+  conversationId?: string;
+  runId?: string;
+  phaseRole?: string;
+  expiresAt?: number;
+  meta?: {
+    riskLevel?: 'low' | 'medium' | 'high';
+    reason?: string;
+    title?: string;
+    summary?: string;
+    preview?: string;
+    path?: string;
+    command?: string;
+    diffPreview?: string;
+    diffStats?: {
+      added: number;
+      removed: number;
+    } | null;
+  };
+}
+
+export interface HumanCheckpoint {
+  id: string;
+  kind: 'login' | 'confirmation' | 'manual_step';
+  workflow?: string;
+  sessionId?: string;
+  conversationId?: string;
+  runId?: string;
+  phaseRole?: string;
+  expiresAt?: number;
+  title: string;
+  message: string;
+  resumePrompt: string;
+  cancelPrompt?: string;
+  resumeLabel?: string;
+  cancelLabel?: string;
+}
+
+export interface ActionCenterInteraction {
+  id: string;
+  kind: 'approval' | 'checkpoint';
+  createdAt?: number;
+  approval?: ApprovalRequest;
+  checkpoint?: HumanCheckpoint;
 }
 
 export interface Conversation {
@@ -49,12 +106,59 @@ export interface Settings {
   model: string;
   projectDir: string;
   performanceMode: boolean; // Added for performance toggle
+  orchestrationMode: boolean;
+  workflow: string;
+  guiBrowserMode: string;
+  guiBrowserPath: string;
+  guiBrowserCdpUrl: string;
+  guiAutoStartBrowser: boolean;
 }
 
 export interface ModelOption {
   id: string;
   name: string;
   provider: string;
+}
+
+export interface PlannerArtifact {
+  goal: string;
+  filesToInspect: string[];
+  suspectedRisks: string[];
+  implementationSteps: string[];
+  verificationSteps: string[];
+  workUnits: Array<{
+    label: string;
+    parallel: boolean;
+    blockedBy?: string;
+    role?: string;
+  }>;
+  summary: string;
+}
+
+export interface ExecutionArtifact {
+  role: string;
+  summary: string;
+  toolNames: string[];
+  timestamp: number;
+}
+
+export interface RuntimeArtifact {
+  kind: 'browser' | 'terminal' | 'gui';
+  toolName?: string;
+  command?: string;
+  summary: string;
+  screenshotPath?: string;
+  selector?: string;
+  url?: string;
+  action?: Record<string, unknown> | null;
+  assessment?: {
+    executable?: boolean;
+    reason?: string;
+    source?: string;
+  } | null;
+  output?: string;
+  status?: 'passed' | 'failed' | 'info';
+  timestamp: number;
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -65,7 +169,12 @@ export type SSEEvent =
   | { type: 'tool_execution'; tool: string; args: string; tool_call_id?: string }
   | { type: 'tool_result'; result: any }
   | { type: 'task_plan'; items: string[] }
-  | { type: 'approval_request'; approvalId: string; tool: string; args: string }
+  | { type: 'orchestration_state'; runId: string; workflow: string; mode: 'solo' | 'orchestrated' | 'manager_direct'; agents: string[]; routing?: { mode: 'direct' | 'delegated'; primaryAgent: string; secondaryAgents: string[]; reason: string } }
+  | { type: 'orchestration_phase'; runId: string; currentRole: string; phases: Array<{ role: string; status: 'pending' | 'active' | 'completed' }>; workUnits?: PlannerArtifact['workUnits'] }
+  | { type: 'auto_route'; intent: 'fast' | 'smart'; chosenModel: string; providerId: string }
+  | { type: 'approval_request'; approvalId: string; tool: string; args: string; meta?: ApprovalRequest['meta'] }
+  | { type: 'approval_resolved'; approvalId: string; decision: 'approved' | 'rejected' }
+  | { type: 'human_checkpoint'; checkpoint: HumanCheckpoint }
   | { type: 'workspace_updated'; path: string }
   | { type: 'error'; message: string }
   | { type: 'debug'; info: any };

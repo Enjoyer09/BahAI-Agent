@@ -7,6 +7,7 @@ interface Props {
   onSend: (text: string, attachments?: Attachment[]) => void;
   onStop: () => void;
   loading: boolean;
+  blockedByActionCenter?: boolean;
   safeMode?: boolean;
   onSafeModeToggle?: () => void;
   model?: string;
@@ -14,7 +15,7 @@ interface Props {
   isMobile?: boolean;
 }
 
-export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeModeToggle, model, onModelChange, isMobile }: Props) {
+export default function ChatInput({ onSend, onStop, loading, blockedByActionCenter, safeMode, onSafeModeToggle, model, onModelChange, isMobile }: Props) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -109,12 +110,12 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
   }, [showModelDropdown]);
 
   const handleSend = useCallback(() => {
-    if ((text.trim() || attachments.length > 0) && !loading) {
+    if ((text.trim() || attachments.length > 0) && !loading && !blockedByActionCenter) {
       onSend(text, attachments);
       setText('');
       setAttachments([]);
     }
-  }, [text, attachments, loading, onSend]);
+  }, [text, attachments, loading, blockedByActionCenter, onSend]);
 
   const pushFiles = useCallback((files: FileList | null) => {
     if (!files) return;
@@ -183,7 +184,7 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
     e.stopPropagation();
   }, []);
 
-  const canSend = (text.trim() || attachments.length > 0) && !loading;
+  const canSend = (text.trim() || attachments.length > 0) && !loading && !blockedByActionCenter;
   const selectedModel = MODELS.find(m => m.id === model);
 
   return (
@@ -297,13 +298,14 @@ export default function ChatInput({ onSend, onStop, loading, safeMode, onSafeMod
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
             }}
-            placeholder="bahAI-ya yazın..."
+            placeholder={blockedByActionCenter ? 'Əvvəl Action Center-də login və ya təsdiq addımını tamamlayın...' : 'bahAI-ya yazın...'}
             className="flex-1 bg-transparent border-none outline-none resize-none min-h-[24px] leading-relaxed px-2"
             style={{
               color: 'var(--fg-main)',
               fontSize: isMobile ? '16px' : '14px', // 16px prevents iOS zoom
               maxHeight: isMobile ? '120px' : '200px',
             }}
+            disabled={blockedByActionCenter}
             aria-label="Message input"
           />
 

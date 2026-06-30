@@ -6,6 +6,9 @@ import { API_BASE_URL } from '../../lib/constants';
 declare global {
   interface Window {
     google?: any;
+    electron?: {
+      onAuthCallback?: (callback: (payload: { token?: string; user?: string | null }) => void) => (() => void) | void;
+    };
   }
 }
 
@@ -59,6 +62,20 @@ export default function AuthModal({ isOpen, onClose }: Props) {
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!window.electron?.onAuthCallback) return;
+    const dispose = window.electron.onAuthCallback((payload) => {
+      if (!payload?.token) return;
+      localStorage.removeItem('signed_out');
+      localStorage.setItem('auth_token', payload.token);
+      if (payload.user) {
+        localStorage.setItem('auth_user', payload.user);
+      }
+      window.location.href = '/chat';
+    });
+    return typeof dispose === 'function' ? dispose : undefined;
+  }, []);
 
   const handleGoogleSignIn = () => {
     if (!googleClientId) return;
@@ -188,6 +205,25 @@ export default function AuthModal({ isOpen, onClose }: Props) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-3">
+          {isLogin && (
+            <button
+              type="button"
+              onClick={() => {
+                setEmail('demo@bahai.local');
+                setPassword('demo123');
+                setError(null);
+              }}
+              className="w-full py-2.5 rounded-lg text-sm font-medium transition-all"
+              style={{
+                background: 'var(--bg-hover)',
+                border: '1px solid var(--border)',
+                color: 'var(--fg-main)',
+                minHeight: '44px',
+              }}
+            >
+              Demo girişini doldur
+            </button>
+          )}
           {!isLogin && (
             <div className="relative">
               <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--fg-muted)' }} />
@@ -222,7 +258,7 @@ export default function AuthModal({ isOpen, onClose }: Props) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="Şifrə"
-              minLength={8}
+              minLength={isLogin ? 1 : 8}
               style={inputStyle}
               aria-label="Şifrə"
             />

@@ -17,8 +17,10 @@ let mainWindow = null;
 let backendProcess = null;
 let tray = null;
 const BACKEND_PORT = 3001;
+const verboseDesktopLogs = process.env.BAHAI_DESKTOP_DEBUG === 'true';
 // Detect dev mode: either --dev flag or not packaged (no asar)
 const isDev = process.argv.includes('--dev') || !app.isPackaged;
+const useBackendUiInDev = process.argv.includes('--backend-ui');
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
@@ -42,7 +44,7 @@ if (process.defaultApp) {
 // Handle OAuth callback URL (bahai://auth/callback?token=xxx)
 app.on('open-url', (event, url) => {
   event.preventDefault();
-  console.log('🔑 OAuth callback received:', url);
+  if (verboseDesktopLogs) console.log('🔑 OAuth callback received:', url);
   
   try {
     const parsed = new URL(url);
@@ -50,13 +52,10 @@ app.on('open-url', (event, url) => {
     const userJson = parsed.searchParams.get('user');
     
     if (token && mainWindow) {
-      // Send token to renderer
-      mainWindow.webContents.executeJavaScript(`
-        localStorage.setItem('auth_token', '${token}');
-        localStorage.removeItem('signed_out');
-        ${userJson ? `localStorage.setItem('auth_user', '${userJson}');` : ''}
-        window.location.href = '/chat';
-      `);
+      mainWindow.webContents.send('auth:callback', {
+        token,
+        user: userJson || null
+      });
       mainWindow.focus();
     }
   } catch (err) {
@@ -127,8 +126,9 @@ function startBackend() {
   return new Promise((resolve, reject) => {
     const backendPath = getBackendPath();
     const envPath = getEnvPath();
+    const localDbPath = path.join(app.getPath('userData'), 'local_db.json');
 
-    console.log('🚀 Starting backend:', backendPath);
+    if (verboseDesktopLogs) console.log('🚀 Starting backend:', backendPath);
 
     const env = {
       ...process.env,
@@ -136,6 +136,11 @@ function startBackend() {
       LOCAL_MODE: 'true',
       NODE_ENV: 'development',
       DOTENV_CONFIG_PATH: envPath,
+      LOCAL_DB_PATH: localDbPath,
+      ALLOWED_DIRECTORIES: [
+        path.join(__dirname, '..'),
+        path.join(process.env.HOME || '', 'Documents'),
+      ].join(','),
       PATH: `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:${process.env.PATH || ''}`
     };
 
@@ -164,11 +169,13 @@ function startBackend() {
       selectedNode = 'node';
     }
 
-    console.log('📍 Using node:', selectedNode);
-    console.log('📍 Backend path:', backendPath);
-    console.log('📍 Backend exists:', fs.existsSync(backendPath));
-    console.log('📍 Node exists:', fs.existsSync(selectedNode));
-    console.log('📍 CWD:', path.dirname(backendPath));
+    if (verboseDesktopLogs) {
+      console.log('📍 Using node:', selectedNode);
+      console.log('📍 Backend path:', backendPath);
+      console.log('📍 Backend exists:', fs.existsSync(backendPath));
+      console.log('📍 Node exists:', fs.existsSync(selectedNode));
+      console.log('📍 CWD:', path.dirname(backendPath));
+    }
 
     backendProcess = spawn(selectedNode, [backendPath], {
       cwd: path.dirname(backendPath),
@@ -177,13 +184,15 @@ function startBackend() {
       shell: !selectedNode.startsWith('/')  // Use shell only if not absolute path
     });
 
-    backendProcess.stdout.on('data', (data) => {
-      console.log(`[backend] ${data.toString().trim()}`);
-    });
+    if (verboseDesktopLogs) {
+      backendProcess.stdout.on('data', (data) => {
+        console.log(`[backend] ${data.toString().trim()}`);
+      });
 
-    backendProcess.stderr.on('data', (data) => {
-      console.error(`[backend:err] ${data.toString().trim()}`);
-    });
+      backendProcess.stderr.on('data', (data) => {
+        console.error(`[backend:err] ${data.toString().trim()}`);
+      });
+    }
 
     backendProcess.on('error', (err) => {
       console.error('Backend process error:', err);
@@ -191,14 +200,14 @@ function startBackend() {
     });
 
     backendProcess.on('exit', (code) => {
-      console.log(`Backend exited with code ${code}`);
+      if (verboseDesktopLogs) console.log(`Backend exited with code ${code}`);
       backendProcess = null;
     });
 
     // Wait for backend to be ready
     waitForPort(BACKEND_PORT)
       .then(() => {
-        console.log('✅ Backend is ready on port', BACKEND_PORT);
+        if (verboseDesktopLogs) console.log('✅ Backend is ready on port', BACKEND_PORT);
         resolve();
       })
       .catch(reject);
@@ -232,13 +241,17 @@ function createWindow() {
   });
 
   // Load the app
-  if (process.argv.includes('--dev')) {
+  if (process.argv.includes('--dev') && !useBackendUiInDev) {
     // Dev mode: use Vite dev server
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    // Production/normal mode: start from landing page (user needs to login)
+    // Production/desktop mode: use backend-served frontend build so the app
+    // is not coupled to a stale or conflicting Vite dev server.
     mainWindow.loadURL(`http://localhost:${BACKEND_PORT}`);
+    if (process.argv.includes('--dev')) {
+      mainWindow.webContents.openDevTools();
+    }
   }
 
   // Show window when ready
@@ -248,7 +261,7 @@ function createWindow() {
 
   // Retry loading if page fails (backend might not be fully ready)
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.log('Page load failed, retrying in 1s...', errorDescription);
+    if (verboseDesktopLogs) console.log('Page load failed, retrying in 1s...', errorDescription);
     setTimeout(() => {
       mainWindow.loadURL(`http://localhost:${BACKEND_PORT}/chat`);
     }, 1000);

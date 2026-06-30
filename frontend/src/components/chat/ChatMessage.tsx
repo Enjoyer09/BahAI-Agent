@@ -6,11 +6,21 @@ import type { Message } from '../../lib/types';
 
 interface Props {
   message: Message;
-  pendingApprovals?: { approvalId: string; tool: string; args: string }[];
-  onApprove?: (id: string, decision: 'approve' | 'reject') => void;
+  workingDirectory?: string;
 }
 
-export default function ChatMessage({ message, pendingApprovals, onApprove }: Props) {
+function renderInlineSystemContent(content: string) {
+  const parts = String(content || '').split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
+  return parts.map((part, index) => {
+    const boldMatch = part.match(/^\*\*([^*]+)\*\*$/);
+    if (boldMatch) {
+      return <strong key={`${index}-${boldMatch[1]}`}>{boldMatch[1]}</strong>;
+    }
+    return <span key={`${index}-${part}`}>{part}</span>;
+  });
+}
+
+export default function ChatMessage({ message, workingDirectory }: Props) {
   const [copied, setCopied] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -126,7 +136,7 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
             border: '1px solid var(--border-subtle)'
           }}
         >
-          <span dangerouslySetInnerHTML={{ __html: String(message.content || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') }} />
+          <span>{renderInlineSystemContent(message.content || '')}</span>
         </div>
       </div>
     );
@@ -244,60 +254,11 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
                       result={tc.result}
                       status={tc.status}
                       duration={tc.duration}
+                      workingDirectory={workingDirectory}
                     />
                   ))}
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Pending approvals */}
-          {isBot && pendingApprovals && pendingApprovals.length > 0 && (
-            <div className="mt-3 space-y-2">
-              {pendingApprovals.map((approval) => (
-                <div
-                  key={approval.approvalId}
-                  className="rounded-xl p-4 animate-in"
-                  style={{
-                    background: 'rgba(245, 158, 11, 0.08)',
-                    border: '1px solid rgba(245, 158, 11, 0.2)',
-                  }}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-semibold" style={{ color: '#fbbf24' }}>
-                      Təsdiq tələb olunur
-                    </span>
-                  </div>
-                  <div className="text-xs mb-3" style={{ color: 'var(--fg-secondary)' }}>
-                    <span className="font-mono" style={{ color: 'var(--fg-main)' }}>{approval.tool}</span>
-                  </div>
-                  <pre
-                    className="text-xs p-3 rounded-lg mb-3 overflow-auto max-h-32"
-                    style={{ background: 'var(--bg-hover)', color: 'var(--fg-muted)' }}
-                  >
-                    {(() => {
-                      try { return JSON.stringify(JSON.parse(approval.args), null, 2); }
-                      catch { return approval.args; }
-                    })()}
-                  </pre>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => onApprove?.(approval.approvalId, 'reject')}
-                      className="flex-1 px-4 py-3 text-sm rounded-lg transition-colors font-medium"
-                      style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.2)', minHeight: '44px' }}
-                    >
-                      Rədd et
-                    </button>
-                    <button
-                      onClick={() => onApprove?.(approval.approvalId, 'approve')}
-                      className="flex-1 px-4 py-3 text-sm rounded-lg transition-colors font-medium"
-                      style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.2)', minHeight: '44px' }}
-                    >
-                      Təsdiq et
-                    </button>
-                  </div>
-                </div>
-              ))}
             </div>
           )}
 

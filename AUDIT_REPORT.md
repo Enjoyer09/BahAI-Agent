@@ -222,15 +222,16 @@ Yəni hər hansı yararsız token belə LOCAL_MODE-da avtomatik admin verir. Bu 
 
 ## 📋 Növbəti Tövsiyələr
 
-| Prioritet | Tapşırıq |
-|---|---|
-| P1 | Test infrastrukturu (vitest, supertest) qurmaq |
-| P1 | `helmet` middleware əlavə etmək (CSP, XSS, HSTS) |
-| P1 | JWT refresh-token sistemi |
-| P2 | Sentry və ya tələbə monitorinq inteqrasiyası |
-| P2 | Frontend bundle ölçüsünü azaltmaq (code splitting) |
-| P2 | E2E test (Playwright) auth + chat flow üçün |
-| P3 | i18n full support (yalnız az → en/tr) |
+| Prioritet | Tapşırıq | Status |
+|---|---|---|
+| P1 | Test infrastrukturu (vitest, supertest) qurmaq | ✅ Düzəldildi (v2.1.0) |
+| P1 | `helmet` middleware əlavə etmək (CSP, XSS, HSTS) | ✅ Düzəldildi (v2.1.0) |
+| P1 | JWT refresh-token sistemi | ✅ Düzəldildi (v2.1.0) |
+| P2 | Sentry və ya tələbə monitorinq inteqrasiyası | ✅ Hook hazır (v2.1.0), real provider əlavə olunmalı |
+| P2 | Frontend bundle ölçüsünü azaltmaq (code splitting) | ✅ Düzəldildi (v2.1.0) — 1.17MB → 334KB |
+| P2 | E2E test (Playwright) auth + chat flow üçün | ⏳ Hələ yazılmalı |
+| P2 | Docker / CI-CD pipeline | ✅ Düzəldildi (v2.1.0) |
+| P3 | i18n full support (yalnız az → en/tr) | ✅ Baza hazır (v2.1.0) |
 
 ---
 

@@ -25,6 +25,16 @@ export function useSettings() {
   const [performanceMode, setPerformanceMode] = useState(() => {
     return localStorage.getItem('performanceMode') === 'true';
   });
+  const [orchestrationMode, setOrchestrationMode] = useState(() => {
+    const saved = localStorage.getItem('orchestrationMode');
+    if (saved == null) return DEFAULT_SETTINGS.orchestrationMode;
+    return saved === 'true';
+  });
+  const [workflow, setWorkflow] = useState(() => loadSetting('workflow', DEFAULT_SETTINGS.workflow));
+  const [guiBrowserMode, setGuiBrowserMode] = useState(() => loadSetting('guiBrowserMode', DEFAULT_SETTINGS.guiBrowserMode));
+  const [guiBrowserPath, setGuiBrowserPath] = useState(() => loadSetting('guiBrowserPath', DEFAULT_SETTINGS.guiBrowserPath));
+  const [guiBrowserCdpUrl, setGuiBrowserCdpUrl] = useState(() => loadSetting('guiBrowserCdpUrl', DEFAULT_SETTINGS.guiBrowserCdpUrl));
+  const [guiAutoStartBrowser, setGuiAutoStartBrowser] = useState(() => localStorage.getItem('guiAutoStartBrowser') === 'true');
 
   // Persist to localStorage
   useEffect(() => { localStorage.setItem('apiKey', apiKey); }, [apiKey]);
@@ -32,8 +42,14 @@ export function useSettings() {
   useEffect(() => { localStorage.setItem('model', model); }, [model]);
   useEffect(() => { localStorage.setItem('projectDir', projectDir); }, [projectDir]);
   useEffect(() => { localStorage.setItem('performanceMode', String(performanceMode)); }, [performanceMode]);
+  useEffect(() => { localStorage.setItem('orchestrationMode', String(orchestrationMode)); }, [orchestrationMode]);
+  useEffect(() => { localStorage.setItem('workflow', workflow); }, [workflow]);
+  useEffect(() => { localStorage.setItem('guiBrowserMode', guiBrowserMode); }, [guiBrowserMode]);
+  useEffect(() => { localStorage.setItem('guiBrowserPath', guiBrowserPath); }, [guiBrowserPath]);
+  useEffect(() => { localStorage.setItem('guiBrowserCdpUrl', guiBrowserCdpUrl); }, [guiBrowserCdpUrl]);
+  useEffect(() => { localStorage.setItem('guiAutoStartBrowser', String(guiAutoStartBrowser)); }, [guiAutoStartBrowser]);
 
-  const settings: Settings = { apiKey, baseUrl, model, projectDir, performanceMode };
+  const settings: Settings = { apiKey, baseUrl, model, projectDir, performanceMode, orchestrationMode, workflow, guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser };
 
   return {
     settings,
@@ -42,5 +58,13 @@ export function useSettings() {
     model, setModel,
     projectDir, setProjectDir,
     performanceMode, setPerformanceMode,
+    orchestrationMode, setOrchestrationMode,
+    workflow, setWorkflow,
+    guiBrowserMode, setGuiBrowserMode,
+    guiBrowserPath, setGuiBrowserPath,
+    guiBrowserCdpUrl, setGuiBrowserCdpUrl,
+    guiAutoStartBrowser, setGuiAutoStartBrowser,
   };
 }
+
+export type ReturnTypeUseSettings = ReturnType<typeof useSettings>;

@@ -7,10 +7,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { spawn } from 'node:child_process';
 import { setTimeout as wait } from 'node:timers/promises';
-import getPort from 'node:net';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const PORT = 41737;
 let server;
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const backendRoot = path.resolve(testDir, '..');
 
 beforeAll(async () => {
   // Boot the real backend in LOCAL_MODE so we don't need a database.
@@ -22,7 +25,7 @@ beforeAll(async () => {
   process.env.ALLOWED_DIRECTORIES = '/tmp,/app';
 
   server = spawn(process.execPath, ['index.js'], {
-    cwd: process.cwd(),
+    cwd: backendRoot,
     env: process.env,
     stdio: 'pipe'
   });
@@ -63,7 +66,7 @@ describe('Auth endpoints', () => {
     expect(r.body.token).toMatch(/^eyJ/);
   });
 
-  it('GET /api/projects with invalid token returns 403 (no LOCAL_MODE bypass)', async () => {
+  it('GET /api/projects with invalid token returns 403 in LOCAL_MODE', async () => {
     const r = await request(base).get('/api/projects').set('Authorization', 'Bearer not.a.real.token');
     expect(r.status).toBe(403);
   });
@@ -99,5 +102,21 @@ describe('Project + file endpoints', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(r.status).toBe(200);
     expect(Array.isArray(r.body)).toBe(true);
+  });
+
+  it('returns 404 for unknown checkpoint id', async () => {
+    const r = await request(base)
+      .post('/api/checkpoints/not-found')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ decision: 'resume', workingDirectory: '/tmp' });
+    expect(r.status).toBe(404);
+  });
+
+  it('lists interactions for the user', async () => {
+    const r = await request(base)
+      .get('/api/interactions')
+      .set('Authorization', `Bearer ${token}`);
+    expect(r.status).toBe(200);
+    expect(Array.isArray(r.body.interactions)).toBe(true);
   });
 });

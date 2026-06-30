@@ -3,11 +3,74 @@
 // ==========================================
 
 import { API_BASE_URL } from './constants';
-import type { Attachment, Conversation, Project, SSEEvent } from './types';
+import type { ActionCenterInteraction, Attachment, Conversation, Project, SSEEvent } from './types';
 
 function getAuthHeader() {
   const token = localStorage.getItem('auth_token');
   return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
+async function isLocalMode(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/config`, { cache: 'no-store' });
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.localMode === true;
+  } catch {
+    return false;
+  }
+}
+
+async function apiFetch(input: string, init: RequestInit = {}, retryOnLocalAuth = true): Promise<Response> {
+  const headers = new Headers(init.headers || {});
+  const authHeader = getAuthHeader();
+  for (const [key, value] of Object.entries(authHeader)) headers.set(key, value);
+
+  const response = await fetch(input, { ...init, headers });
+  if (response.status !== 403 || !retryOnLocalAuth) return response;
+
+  if (!(await isLocalMode())) return response;
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('signed_out');
+
+  const retryHeaders = new Headers(init.headers || {});
+  return fetch(input, { ...init, headers: retryHeaders });
+}
+
+async function readError(response: Response, fallback: string): Promise<string> {
+  const data = await response.json().catch(() => null);
+  if (data?.error) return data.error;
+  return fallback;
+}
+
+async function readErrorPayload(response: Response): Promise<{ error?: string; code?: string } | null> {
+  return response.json().catch(() => null);
+}
+
+async function retryQueuedChatRequest(
+  doFetch: () => Promise<Response>,
+  attempts = 3
+): Promise<Response> {
+  let lastResponse: Response | null = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+    }
+    const response = await doFetch();
+    if (response.ok) return response;
+    if (response.status !== 409) return response;
+    const payload = await readErrorPayload(response);
+    const queueCode = payload?.code;
+    if (queueCode !== 'CHAT_QUEUE_BUSY' && queueCode !== 'CHAT_QUEUE_DISCONNECTED') {
+      return response;
+    }
+    lastResponse = new Response(JSON.stringify(payload), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers
+    });
+  }
+  return lastResponse || doFetch();
 }
 
 export async function sendChatMessage(
@@ -16,7 +79,7 @@ export async function sendChatMessage(
   baseUrl: string,
   model: string,
   workingDirectory: string,
-  options: { safeMode: boolean; projectId?: string | null; conversationId?: string | null },
+  options: { safeMode: boolean; projectId?: string | null; conversationId?: string | null; orchestrationMode?: boolean; workflow?: string; guiBrowserMode?: string; guiBrowserPath?: string; guiBrowserCdpUrl?: string },
   onEvent: (event: SSEEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
@@ -29,13 +92,17 @@ export async function sendChatMessage(
     safeMode: options.safeMode,
     projectId: options.projectId || undefined,
     conversationId: options.conversationId || undefined,
+    orchestrationMode: options.orchestrationMode,
+    workflow: options.workflow,
+    guiBrowserMode: options.guiBrowserMode,
+    guiBrowserPath: options.guiBrowserPath,
+    guiBrowserCdpUrl: options.guiBrowserCdpUrl,
   });
 
-  const doFetch = async () => fetch(`${API_BASE_URL}/api/chat`, {
+  const doFetch = async () => apiFetch(`${API_BASE_URL}/api/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: requestBody,
     signal,
@@ -54,13 +121,35 @@ export async function sendChatMessage(
       response = await doFetch();
     } catch (retryErr: any) {
       const msg = retryErr?.message || err?.message || 'Network error';
-      throw new Error(`Şəbəkə xətası: serverə qoşulmaq alınmadı (${msg}).`);
+      throw new Error(`Serverə qoşulmaq alınmadı. Backend işləyirmi? (${API_BASE_URL}) — ${msg}`);
     }
   }
 
   if (!response.ok) {
     if (response.status === 401) throw new Error('Giriş tələb olunur. Zəhmət olmasa daxil olun.');
-    throw new Error(`API xətası: ${response.status} ${response.statusText}`);
+    if (response.status === 409) {
+      const payload = await readErrorPayload(response);
+      if (payload?.code === 'CHAT_QUEUE_BUSY' || payload?.code === 'CHAT_QUEUE_DISCONNECTED') {
+        const retryResponse = await retryQueuedChatRequest(doFetch, 4);
+        if (retryResponse.ok) {
+          response = retryResponse;
+        } else {
+          const retryMsg = await readError(retryResponse, payload?.error || 'Sorğu hazırda icra oluna bilmir');
+          throw new Error(retryMsg);
+        }
+      } else {
+        const msg = payload?.error || 'Sorğu hazırda icra oluna bilmir';
+        throw new Error(msg);
+      }
+    }
+    if (!response.ok && response.status === 503) {
+      const msg = await readError(response, 'Server məşğuldur');
+      throw new Error(`${msg} Bir neçə saniyə sonra yenidən göndərin.`);
+    }
+    if (!response.ok) {
+      const msg = await readError(response, `${response.status} ${response.statusText}`);
+      throw new Error(`API xətası: ${msg}`);
+    }
   }
 
   const reader = response.body?.getReader();
@@ -72,21 +161,29 @@ export async function sendChatMessage(
 
   let buffer = '';
   let done = false;
+  let sawDoneMarker = false;
+  let sawAnyEvent = false;
 
-  while (!done) {
-    const { value, done: readerDone } = await reader.read();
-    done = readerDone;
+  try {
+    while (!done) {
+      const { value, done: readerDone } = await reader.read();
+      done = readerDone;
 
-    if (value) {
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n\n');
-      buffer = lines.pop() || '';
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
           const dataStr = line.slice(6);
+          if (dataStr === '[DONE]') {
+            sawDoneMarker = true;
+            continue;
+          }
           try {
             const data = JSON.parse(dataStr) as SSEEvent;
+            sawAnyEvent = true;
             onEvent(data);
           } catch {
             // ignore
@@ -94,11 +191,21 @@ export async function sendChatMessage(
         }
       }
     }
+  } catch (err: any) {
+    const message = String(err?.message || '');
+    if (sawDoneMarker || sawAnyEvent || /network error|failed to fetch|load failed/i.test(message)) {
+      return;
+    }
+    throw err;
   }
 
   if (buffer.startsWith('data: ')) {
     try {
-      const data = JSON.parse(buffer.slice(6)) as SSEEvent;
+      const payload = buffer.slice(6);
+      if (payload === '[DONE]') {
+        return;
+      }
+      const data = JSON.parse(payload) as SSEEvent;
       onEvent(data);
     } catch {
       // ignore
@@ -107,19 +214,29 @@ export async function sendChatMessage(
 }
 
 export async function loadWorkspaceState(): Promise<{ projects: Project[]; conversations: Conversation[] }> {
-  const response = await fetch(`${API_BASE_URL}/api/projects`, {
-    headers: getAuthHeader()
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/projects`);
   if (!response.ok) throw new Error('Workspace məlumatları yüklənmədi');
   return await response.json();
 }
 
+export async function getInstalledBrowsers(): Promise<{ browsers: Array<{ id: string; name: string; path: string; installed: boolean; supportsCdp: boolean; recommended?: boolean }>; cdpUrl: string; recommendedMode: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/api/browsers`);
+  if (!response.ok) throw new Error('Browser siyahısı yüklənmədi');
+  return await response.json();
+}
+
+export async function getInteractions(): Promise<ActionCenterInteraction[]> {
+  const response = await apiFetch(`${API_BASE_URL}/api/interactions`);
+  if (!response.ok) throw new Error('Interaction-lar yüklənmədi');
+  const data = await response.json();
+  return Array.isArray(data.interactions) ? data.interactions : [];
+}
+
 export async function createProjectOnServer(input: { name: string; path: string; repoUrl?: string }): Promise<{ project: Project; conversation: Conversation }> {
-  const response = await fetch(`${API_BASE_URL}/api/projects`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/projects`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify(input)
   });
@@ -128,11 +245,10 @@ export async function createProjectOnServer(input: { name: string; path: string;
 }
 
 export async function updateProjectOnServer(id: string, updates: Partial<Project>): Promise<Project> {
-  const response = await fetch(`${API_BASE_URL}/api/projects/${encodeURIComponent(id)}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/projects/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify(updates)
   });
@@ -142,19 +258,17 @@ export async function updateProjectOnServer(id: string, updates: Partial<Project
 }
 
 export async function deleteProjectOnServer(id: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/projects/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: getAuthHeader()
+  const response = await apiFetch(`${API_BASE_URL}/api/projects/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
   });
   if (!response.ok) throw new Error('Layihə silinmədi');
 }
 
 export async function createConversationOnServer(projectId: string, title = 'Yeni söhbət'): Promise<Conversation> {
-  const response = await fetch(`${API_BASE_URL}/api/conversations`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/conversations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify({ projectId, title })
   });
@@ -164,11 +278,10 @@ export async function createConversationOnServer(projectId: string, title = 'Yen
 }
 
 export async function updateConversationOnServer(id: string, updates: Partial<Conversation>): Promise<Conversation> {
-  const response = await fetch(`${API_BASE_URL}/api/conversations/${encodeURIComponent(id)}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/conversations/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify(updates)
   });
@@ -178,9 +291,8 @@ export async function updateConversationOnServer(id: string, updates: Partial<Co
 }
 
 export async function deleteConversationOnServer(id: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/conversations/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: getAuthHeader()
+  const response = await apiFetch(`${API_BASE_URL}/api/conversations/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
   });
   if (!response.ok) throw new Error('Söhbət silinmədi');
 }
@@ -193,11 +305,10 @@ export async function extractAttachments(attachments: Attachment[]): Promise<Att
   const timeoutId = setTimeout(() => controller.abort(), 120000);
   
   try {
-    const response = await fetch(`${API_BASE_URL}/api/attachments/extract`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/attachments/extract`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...getAuthHeader()
       },
       body: JSON.stringify({ attachments }),
       signal: controller.signal
@@ -239,28 +350,23 @@ export async function extractAttachments(attachments: Attachment[]): Promise<Att
 }
 
 export async function fetchFileTree(dirPath: string, workingDirectory: string): Promise<any[]> {
-  const response = await fetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(dirPath)}&workingDirectory=${encodeURIComponent(workingDirectory)}`, {
-    headers: getAuthHeader()
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(dirPath)}&workingDirectory=${encodeURIComponent(workingDirectory)}`);
   if (!response.ok) throw new Error('Fayl siyahısı alına bilmədi. Giriş etdiyinizdən əmin olun.');
   return await response.json();
 }
 
 export async function pickDirectory(): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/api/pick-directory`, {
-    headers: getAuthHeader()
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/pick-directory`);
   if (!response.ok) throw new Error('Qovluq seçilə bilmədi');
   const data = await response.json();
   return data.path;
 }
 
 export async function getTaskPlan(prompt: string, workingDirectory: string): Promise<{ items: string[] }> {
-  const response = await fetch(`${API_BASE_URL}/api/task-plan`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/task-plan`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify({ prompt, workingDirectory })
   });
@@ -285,17 +391,16 @@ export interface GithubRepo {
 }
 
 export async function getGithubStatus(): Promise<GithubStatus> {
-  const response = await fetch(`${API_BASE_URL}/api/github/status`, { headers: getAuthHeader() });
+  const response = await apiFetch(`${API_BASE_URL}/api/github/status`);
   if (!response.ok) throw new Error('GitHub status alınmadı');
   return await response.json();
 }
 
 export async function connectGithub(token: string): Promise<GithubStatus> {
-  const response = await fetch(`${API_BASE_URL}/api/github/connect`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/github/connect`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify({ token })
   });
@@ -307,15 +412,14 @@ export async function connectGithub(token: string): Promise<GithubStatus> {
 }
 
 export async function disconnectGithub(): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/github/connect`, {
-    method: 'DELETE',
-    headers: getAuthHeader()
+  const response = await apiFetch(`${API_BASE_URL}/api/github/connect`, {
+    method: 'DELETE'
   });
   if (!response.ok) throw new Error('GitHub ayrılmadı');
 }
 
 export async function listGithubRepos(): Promise<GithubRepo[]> {
-  const response = await fetch(`${API_BASE_URL}/api/github/repos`, { headers: getAuthHeader() });
+  const response = await apiFetch(`${API_BASE_URL}/api/github/repos`);
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.error || 'GitHub repo siyahısı alınmadı');
@@ -325,11 +429,10 @@ export async function listGithubRepos(): Promise<GithubRepo[]> {
 }
 
 export async function previewDiff(input: { path: string; workingDirectory: string; newContent: string }): Promise<{ diff: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/diff/preview`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/diff/preview`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify(input)
   });
@@ -338,11 +441,10 @@ export async function previewDiff(input: { path: string; workingDirectory: strin
 }
 
 export async function applyDiff(input: { path: string; workingDirectory: string; newContent: string }): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/diff/apply`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/diff/apply`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify(input)
   });
@@ -354,11 +456,10 @@ async function streamSse(
   body: unknown,
   onEvent: (event: Record<string, unknown>) => void
 ): Promise<void> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify(body)
   });
@@ -395,20 +496,17 @@ export async function runProjectHealthCheck(workingDirectory: string, onEvent: (
 }
 
 export async function getProjectMemory(projectId: string): Promise<Record<string, unknown>> {
-  const response = await fetch(`${API_BASE_URL}/api/project-memory/${encodeURIComponent(projectId)}`, {
-    headers: getAuthHeader()
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/project-memory/${encodeURIComponent(projectId)}`);
   if (!response.ok) throw new Error('Project memory alınmadı');
   const data = await response.json();
   return data.memory || {};
 }
 
 export async function saveProjectMemory(projectId: string, memory: Record<string, unknown>): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/project-memory/${encodeURIComponent(projectId)}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/project-memory/${encodeURIComponent(projectId)}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify({ memory })
   });
@@ -416,13 +514,31 @@ export async function saveProjectMemory(projectId: string, memory: Record<string
 }
 
 export async function submitApproval(approvalId: string, decision: 'approve' | 'reject'): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/approvals/${encodeURIComponent(approvalId)}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/approvals/${encodeURIComponent(approvalId)}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeader()
     },
     body: JSON.stringify({ decision })
   });
   if (!response.ok) throw new Error('Approval göndərilə bilmədi');
+}
+
+export async function resolveCheckpoint(
+  checkpointId: string,
+  decision: 'resume' | 'cancel',
+  workingDirectory?: string
+): Promise<Response | void> {
+  const response = await apiFetch(`${API_BASE_URL}/api/checkpoints/${encodeURIComponent(checkpointId)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ decision, workingDirectory })
+  });
+  if (!response.ok) throw new Error('Checkpoint göndərilə bilmədi');
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/event-stream')) {
+    return response;
+  }
 }

@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+.venv/
 .npm-cache/
 yarn-error.log
 package-lock.json
@@ -29,9 +30,11 @@ out/
 .gemini/
 backend/node_modules/
 frontend/node_modules/
+electron/node_modules/
 frontend/.npm-cache/
 frontend/dist/
 sandbox/
+sandbox/local_db.json
 .env.*
 *.env
 credentials.json

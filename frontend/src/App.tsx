@@ -1,23 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen, Mic } from 'lucide-react';
 import ChatArea from './components/chat/ChatArea';
 import ChatInput from './components/chat/ChatInput';
-import CodeEditor from './components/chat/CodeEditor';
-import LivePreview from './components/chat/LivePreview';
-import OpsPanel from './components/chat/OpsPanel';
-import Terminal from './components/chat/Terminal';
+import ActionCenterModal from './components/chat/ActionCenterModal';
 import AuthModal from './components/auth/AuthModal';
-import ElevenLabsHelpModal from './components/common/ElevenLabsHelpModal';
 import Sidebar from './components/sidebar/Sidebar';
 import LandingPage from './components/landing/LandingPage';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useAuth } from './hooks/useAuth';
 import { useChat } from './hooks/useChat';
 import { useTheme } from './hooks/useTheme';
 import { useSettings } from './hooks/useSettings';
 import { ToastProvider, useConfirm } from './components/common/Toast';
 import { trackAppOpen } from './lib/telemetry';
-import { API_BASE_URL } from './lib/constants';
+import { API_BASE_URL, MODELS, WORKFLOW_OPTIONS } from './lib/constants';
+
+// P2-FIX: Code-split heavy components that are not needed on initial render
+const CodeEditor = lazy(() => import('./components/chat/CodeEditor'));
+const LivePreview = lazy(() => import('./components/chat/LivePreview'));
+const OpsPanel = lazy(() => import('./components/chat/OpsPanel'));
+const Terminal = lazy(() => import('./components/chat/Terminal'));
+const ElevenLabsHelpModal = lazy(() => import('./components/common/ElevenLabsHelpModal'));
+
 const ElevenLabsWidget = 'elevenlabs-convai' as any;
+
+// Lazy loading fallback
+function LazyFallback() {
+  return (
+    <div className="flex items-center justify-center h-full" style={{ background: 'var(--bg-surface)' }}>
+      <div className="animate-pulse text-sm" style={{ color: 'var(--fg-muted)' }}>Yüklənir...</div>
+    </div>
+  );
+}
 
 // FUNC-FIX: cache so we only check Electron once and avoid repeatedly hitting
 // `window.navigator.userAgent` deep inside render.
@@ -127,6 +141,13 @@ function AppContent() {
   }
 
   const autoPreview = chat.activeProject?.name?.match(/site|web|app|frontend|ui/i);
+  const selectedModel = MODELS.find((item) => item.id === settings.model);
+  const selectedWorkflow = WORKFLOW_OPTIONS.find((item) => item.id === settings.workflow);
+  const browserModeLabel = settings.guiBrowserMode === 'persistent'
+    ? 'Chrome Profile'
+    : settings.guiBrowserMode === 'bundled'
+      ? 'Chrome Testing'
+      : 'CDP';
 
   // Landing page
   if (!isChat) {
@@ -157,6 +178,7 @@ function AppContent() {
             onToggle={() => setSidebarOpen(false)}
             chat={chat}
             themeCtx={themeCtx}
+            settingsCtx={settings}
           />
         </aside>
       )}
@@ -180,6 +202,7 @@ function AppContent() {
               onToggle={() => setSidebarOpen(false)}
               chat={chat}
               themeCtx={themeCtx}
+              settingsCtx={settings}
             />
           </aside>
         </>
@@ -269,19 +292,64 @@ function AppContent() {
           </div>
         )}
 
+        <div
+          className="px-3 sm:px-4 py-2 shrink-0"
+          style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}
+        >
+          <div className="max-w-3xl mx-auto flex flex-wrap items-center gap-2">
+            <span
+              className="text-[11px] px-2.5 py-1 rounded-md"
+              style={{ background: 'var(--bg-hover)', color: 'var(--fg-main)', border: '1px solid var(--border)' }}
+            >
+              {selectedModel?.name || settings.model}
+            </span>
+            <span
+              className="text-[11px] px-2.5 py-1 rounded-md"
+              style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
+            >
+              {settings.orchestrationMode ? `Workflow: ${selectedWorkflow?.name || settings.workflow}` : 'Workflow off'}
+            </span>
+            <span
+              className="text-[11px] px-2.5 py-1 rounded-md"
+              style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
+            >
+              Browser: {browserModeLabel}
+            </span>
+            <span
+              className="text-[11px] px-2.5 py-1 rounded-md"
+              style={{
+                background: chat.safeMode ? 'rgba(245, 158, 11, 0.12)' : 'rgba(34, 197, 94, 0.12)',
+                color: chat.safeMode ? '#fbbf24' : '#86efac',
+                border: '1px solid var(--border)'
+              }}
+            >
+              {chat.safeMode ? 'Safe Mode' : 'Auto Execute'}
+            </span>
+            {chat.activeProject && (
+              <span
+                className="text-[11px] px-2.5 py-1 rounded-md truncate max-w-full"
+                style={{ background: 'var(--bg-hover)', color: 'var(--fg-muted)', border: '1px solid var(--border)' }}
+                title={chat.activeProject.path}
+              >
+                {chat.activeProject.name}
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Chat area */}
         <ChatArea
           messages={chat.messages}
           loading={chat.loading}
           onSend={chat.sendMessage}
           onStop={chat.stop}
-          pendingApprovals={chat.pendingApprovals}
-          onApprove={chat.decideApproval}
+          workingDirectory={chat.activeProject?.path || ''}
         />
         <ChatInput
           onSend={chat.sendMessage}
           onStop={chat.stop}
           loading={chat.loading}
+          blockedByActionCenter={chat.actionCenterInteractions.length > 0}
           safeMode={chat.safeMode}
           onSafeModeToggle={() => chat.setSafeMode(!chat.safeMode)}
           model={isMobile ? undefined : settings.model}
@@ -313,11 +381,15 @@ function AppContent() {
               <X size={18} />
             </button>
           </div>
-          <CodeEditor
-            filePath={selectedFile || ''}
-            workingDirectory={chat.activeProject?.path || ''}
-            onClose={() => setShowEditor(false)}
-          />
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <CodeEditor
+                filePath={selectedFile || ''}
+                workingDirectory={chat.activeProject?.path || ''}
+                onClose={() => setShowEditor(false)}
+              />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       )}
 
@@ -341,11 +413,15 @@ function AppContent() {
               <X size={18} />
             </button>
           </div>
-          <LivePreview
-            port={chat.activeProject?.lastPort}
-            isVisible={showPreview}
-            onClose={() => setShowPreview(false)}
-          />
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <LivePreview
+                port={chat.activeProject?.lastPort}
+                isVisible={showPreview}
+                onClose={() => setShowPreview(false)}
+              />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       )}
 
@@ -369,14 +445,21 @@ function AppContent() {
               <X size={18} />
             </button>
           </div>
-          <OpsPanel
-            safeMode={chat.safeMode}
-            onToggleSafeMode={() => chat.setSafeMode(!chat.safeMode)}
-            pendingApprovals={chat.pendingApprovals}
-            onApprove={chat.decideApproval}
-            taskPlan={chat.taskPlan}
-            activeProject={chat.activeProject}
-          />
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <OpsPanel
+                safeMode={chat.safeMode}
+                onToggleSafeMode={() => chat.setSafeMode(!chat.safeMode)}
+                pendingApprovals={chat.pendingApprovals}
+                onApprove={chat.decideApproval}
+                taskPlan={chat.taskPlan}
+                plannerArtifact={chat.plannerArtifact}
+                executionArtifacts={chat.executionArtifacts}
+                projectMemory={chat.projectMemory}
+                activeProject={chat.activeProject}
+              />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       )}
 
@@ -390,18 +473,30 @@ function AppContent() {
             borderTop: '1px solid var(--border)',
           }}
         >
-          <Terminal
-            projectPath={chat.activeProject?.path || ''}
-            isVisible={showTerminal}
-            onClose={() => setShowTerminal(false)}
-          />
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <Terminal
+                projectPath={chat.activeProject?.path || ''}
+                isVisible={showTerminal}
+                onClose={() => setShowTerminal(false)}
+              />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       )}
 
       {/* MODALS */}
+      <ActionCenterModal
+        interactions={chat.actionCenterInteractions}
+        history={chat.actionCenterHistory}
+        onResolveCheckpoint={chat.resolveHumanCheckpoint}
+        onApprove={chat.decideApproval}
+      />
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
       {ConfirmDialog}
-      <ElevenLabsHelpModal isOpen={showElevenLabsHelp} onClose={() => setShowElevenLabsHelp(false)} />
+      <Suspense fallback={null}>
+        <ElevenLabsHelpModal isOpen={showElevenLabsHelp} onClose={() => setShowElevenLabsHelp(false)} />
+      </Suspense>
 
       {/* ElevenLabs Real-Time Voice Widget / Setup Helper */}
       {signedUrl ? (
@@ -432,8 +527,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AppContent />
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

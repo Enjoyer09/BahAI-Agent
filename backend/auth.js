@@ -35,10 +35,16 @@ async function login(req, res) {
 
   // In local mode, auto-authenticate with any credentials
   if (isLocalMode) {
-    const uid = localUserId(email);
-    const localUser = { id: uid, email: email || 'admin@bahai.local', name: email?.split('@')[0] || 'User', role: 'admin' };
-    const token = jwt.sign(localUser, JWT_SECRET, { expiresIn: '30d' });
-    return res.json({ token, user: localUser });
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const isDemoLogin = normalizedEmail === 'demo' || normalizedEmail === 'demo@bahai.local';
+    if (isDemoLogin && password !== 'demo123') {
+      return res.status(401).json({ error: 'Demo şifrəsi yanlışdır' });
+    }
+    const localEmail = isDemoLogin ? 'demo@bahai.local' : (email || 'admin@bahai.local');
+    const uid = localUserId(localEmail);
+    const localUser = { id: uid, email: localEmail, name: isDemoLogin ? 'Demo User' : (email?.split('@')[0] || 'User'), role: 'admin' };
+    const tokens = generateTokenPair(localUser);
+    return res.json({ token: tokens.accessToken, refreshToken: tokens.refreshToken, user: localUser });
   }
 
   try {
@@ -49,14 +55,11 @@ async function login(req, res) {
       return res.status(401).json({ error: 'E-poçt və ya şifrə yanlışdır' });
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const tokens = generateTokenPair({ id: user.id, email: user.email, role: user.role });
 
     res.json({
-      token,
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       user: { id: user.id, email: user.email, name: user.name, role: user.role }
     });
   } catch (e) {
@@ -74,8 +77,8 @@ async function register(req, res) {
   // In local mode, auto-register without database
   if (isLocalMode) {
     const localUser = { id: 9999, email: email || 'admin@bahai.local', name: displayName || 'bahAI Developer', role: 'admin' };
-    const token = jwt.sign(localUser, JWT_SECRET, { expiresIn: '30d' });
-    return res.json({ token, user: localUser });
+    const tokens = generateTokenPair(localUser);
+    return res.json({ token: tokens.accessToken, refreshToken: tokens.refreshToken, user: localUser });
   }
 
   if (!email || !password) {
@@ -94,13 +97,9 @@ async function register(req, res) {
     );
 
     const user = result.rows[0];
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const tokens = generateTokenPair({ id: user.id, email: user.email, role: user.role });
 
-    res.json({ token, user });
+    res.json({ token: tokens.accessToken, refreshToken: tokens.refreshToken, user });
   } catch (e) {
     if (e.code === '23505') return res.status(400).json({ error: 'Bu e-poçt artıq qeydiyyatdan keçib' });
     console.error('Register Error:', e);
@@ -115,6 +114,10 @@ function isLocalModeEnabled() {
   return process.env.LOCAL_MODE === 'true';
 }
 
+function localDevUser() {
+  return { id: 9999, email: 'demo@bahai.local', name: 'Demo User', role: 'admin' };
+}
+
 // SEC-3: Middleware to verify Token & Role
 function verifyToken(req, res, next) {
   const isLocalMode = isLocalModeEnabled();
@@ -125,9 +128,6 @@ function verifyToken(req, res, next) {
   if (token) {
     jwt.verify(token, JWT_SECRET, (err, decoded) => {
       if (err) {
-        // SEC-FIX: invalid/expired token must NOT silently grant admin in local
-        // mode — that was a token-forgery bypass. Reject explicitly so the
-        // client clears it and re-authenticates.
         return res.status(403).json({ error: 'Sessiya vaxtı bitib və ya etibarsızdır' });
       }
       req.user = decoded;
@@ -145,7 +145,7 @@ function verifyToken(req, res, next) {
   // No token — in LOCAL_MODE auto-login as a local admin (single-user dev
   // machine). On a real cloud deployment LOCAL_MODE must NOT be enabled.
   if (isLocalMode) {
-    req.user = { id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' };
+    req.user = localDevUser();
     return next();
   }
 
@@ -216,14 +216,11 @@ async function googleLogin(req, res) {
     }
 
     // Sign local JWT Token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role }, 
-      JWT_SECRET, 
-      { expiresIn: '7d' }
-    );
+    const tokens = generateTokenPair({ id: user.id, email: user.email, role: user.role });
 
     res.json({
-      token,
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       user: { id: user.id, email: user.email, name: user.name, role: user.role }
     });
   } catch (e) {
@@ -297,8 +294,8 @@ router.post('/google-login-desktop', async (req, res) => {
       name: name || email.split('@')[0], 
       role: 'admin' 
     };
-    const token = jwt.sign(user, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user });
+    const tokens = generateTokenPair(user);
+    res.json({ token: tokens.accessToken, refreshToken: tokens.refreshToken, user });
   } catch (e) {
     console.error('Google Desktop Login Error:', e);
     res.status(500).json({ error: 'Google ilə daxil olarkən xəta' });
@@ -373,20 +370,21 @@ router.get('/google-callback', async (req, res) => {
       user = result.rows[0];
     }
 
-    const jwtToken = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '30d' }
-    );
+    const authTokens = generateTokenPair({ id: user.id, email: user.email, role: user.role });
+    const jwtToken = authTokens.accessToken;
 
     // SEC-FIX: Token and user data must be HTML-/JS-safe. Use JSON.stringify
     // + replace `</` to neutralise `</script>` breakouts, and base64-encode
     // user blob so any quote/script-tag inside the Google name cannot break
-    // out of the JSON literal. postMessage target stays '*' since the popup
-    // origin is unknown; consumer (AuthModal) already validates message shape.
+    // out of the JSON literal.
     const safeJsonScript = (obj) =>
       JSON.stringify(obj).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
-    const payload = safeJsonScript({ token: jwtToken, user, credential: idToken });
+    const payload = safeJsonScript({ token: jwtToken, refreshToken: authTokens.refreshToken, user, credential: idToken });
+    // P2-FIX: Derive the allowed postMessage origin from ALLOWED_ORIGINS env
+    // or the request origin. Using '*' is risky — any window could intercept.
+    const postMessageOrigin = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean)[0]
+      || `${req.protocol}://${req.get('host')}`;
+    const safeOrigin = safeJsonScript(postMessageOrigin);
     res.send(`<!DOCTYPE html>
 <html><head><title>bahAI Login</title></head>
 <body>
@@ -394,8 +392,9 @@ router.get('/google-callback', async (req, res) => {
   (function(){
     var data = ${payload};
     data.type = 'google-oauth-credential';
+    var targetOrigin = ${safeOrigin};
     if (window.opener) {
-      window.opener.postMessage(data, '*');
+      window.opener.postMessage(data, targetOrigin);
       setTimeout(function() { window.close(); }, 1000);
     } else {
       window.location.href = 'bahai://auth/callback?token=' + encodeURIComponent(data.token);
@@ -424,11 +423,58 @@ const authRateLimit = rateLimit({
   skipSuccessfulRequests: true
 });
 
+// ==========================================
+// P1-FIX: JWT Refresh Token System
+// Short-lived access token (15min) + longer refresh token (7d).
+// On 401 the client calls /refresh to get a new pair without re-login.
+// ==========================================
+const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
+const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || '7d';
+
+function generateTokenPair(payload) {
+  const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
+  const refreshToken = jwt.sign({ ...payload, type: 'refresh' }, JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
+  return { accessToken, refreshToken };
+}
+
+async function refreshTokenHandler(req, res) {
+  const { refreshToken } = req.body;
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'Refresh token tələb olunur' });
+  }
+
+  try {
+    const decoded = jwt.verify(refreshToken, JWT_SECRET);
+    if (decoded.type !== 'refresh') {
+      return res.status(401).json({ error: 'Etibarsız refresh token' });
+    }
+
+    // Re-issue tokens with fresh claims from DB (if available)
+    let payload = { id: decoded.id, email: decoded.email, role: decoded.role };
+
+    if (db.hasDatabase() && !isLocalModeEnabled()) {
+      try {
+        const result = await db.query('SELECT id, email, role FROM users WHERE id = $1', [decoded.id]);
+        if (result.rows.length === 0) {
+          return res.status(401).json({ error: 'İstifadəçi tapılmadı' });
+        }
+        payload = result.rows[0];
+      } catch { /* fallback to token claims */ }
+    }
+
+    const tokens = generateTokenPair(payload);
+    res.json({ token: tokens.accessToken, refreshToken: tokens.refreshToken, user: payload });
+  } catch (e) {
+    return res.status(401).json({ error: 'Refresh token vaxtı bitib. Yenidən daxil olun.' });
+  }
+}
+
 // Define Router Paths
 router.post('/login', authRateLimit, login);
 router.post('/register', authRateLimit, register);
 router.post('/google-login', googleLogin);
+router.post('/refresh', refreshTokenHandler);
 router.get('/config', getAuthConfig);
 router.get('/me', verifyToken, getMe);
 
-module.exports = { router, verifyToken };
+module.exports = { router, verifyToken, generateTokenPair, JWT_SECRET };

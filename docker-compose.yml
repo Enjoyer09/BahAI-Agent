@@ -1,0 +1,51 @@
+# ==========================================
+# bahAI — Docker Compose (Development & Production)
+# ==========================================
+
+services:
+  # PostgreSQL database
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bahai
+      POSTGRES_USER: bahai
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-bahai_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bahai"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # bahAI application
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgres://bahai:${DB_PASSWORD:-bahai_dev_password}@db:5432/bahai
+      JWT_SECRET: ${JWT_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-auto}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3001}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    volumes:
+      - workspace:/app/sandbox
+
+volumes:
+  pgdata:
+  workspace:

@@ -9,11 +9,10 @@ interface Props {
   loading: boolean;
   onSend: (msg: string) => void;
   onStop?: () => void;
-  pendingApprovals: { approvalId: string; tool: string; args: string }[];
-  onApprove: (id: string, decision: 'approve' | 'reject') => void;
+  workingDirectory?: string;
 }
 
-export default function ChatArea({ messages, loading, onSend, pendingApprovals, onApprove }: Props) {
+export default function ChatArea({ messages, loading, onSend, workingDirectory }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
 
@@ -85,8 +84,7 @@ export default function ChatArea({ messages, loading, onSend, pendingApprovals, 
           <ChatMessage
             key={msg.id || i}
             message={msg}
-            pendingApprovals={pendingApprovals}
-            onApprove={onApprove}
+            workingDirectory={workingDirectory}
           />
         ))}
 

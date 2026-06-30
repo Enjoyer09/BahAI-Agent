@@ -6,7 +6,7 @@
   "author": "bahAI Team",
   "license": "MIT",
   "scripts": {
-    "start": "electron . --dev",
+    "start": "electron . --dev --backend-ui",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",

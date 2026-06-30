@@ -1,0 +1,83 @@
+# ==========================================
+# bahAI — CI/CD Pipeline
+# Runs on: push to main, pull requests
+# ==========================================
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --ignore-scripts
+        working-directory: backend
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Backend syntax check
+        run: node --check index.js auth.js db.js
+        working-directory: backend
+
+      - name: Backend tests
+        run: npm test
+        working-directory: backend
+        env:
+          LOCAL_MODE: "true"
+          NODE_ENV: test
+
+      - name: Frontend type check
+        run: npx tsc --noEmit -p tsconfig.app.json
+        working-directory: frontend
+
+      - name: Frontend lint
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Frontend build
+        run: npm run build
+        working-directory: frontend
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t bahai-agent:${{ github.sha }} .
+
+      - name: Test Docker image starts
+        run: |
+          docker run -d --name bahai-test \
+            -e LOCAL_MODE=true \
+            -e JWT_SECRET=ci-test-secret \
+            -p 3001:3001 \
+            bahai-agent:${{ github.sha }}
+          sleep 5
+          curl -f http://localhost:3001/api/auth/config || exit 1
+          docker stop bahai-test

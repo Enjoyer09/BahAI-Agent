@@ -1,17 +1,30 @@
 import { useMemo, useState } from 'react';
-import { Code2, Zap, Search, Globe, Key, ShieldAlert } from 'lucide-react';
-import { MODELS } from '../../lib/constants';
-import { useSettings } from '../../hooks/useSettings';
+import { Code2, Zap, Search, Globe, Key, ShieldAlert, Workflow, MonitorCog } from 'lucide-react';
+import { MODELS, WORKFLOW_OPTIONS } from '../../lib/constants';
+import { getInstalledBrowsers } from '../../lib/api';
+import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
 
-export default function SettingsPanel() {
+interface Props {
+  settingsCtx: ReturnTypeUseSettings;
+}
+
+export default function SettingsPanel({ settingsCtx }: Props) {
   const { 
     model, setModel, 
     performanceMode, setPerformanceMode,
+    orchestrationMode, setOrchestrationMode,
+    workflow, setWorkflow,
+    guiBrowserMode, setGuiBrowserMode,
+    guiBrowserPath, setGuiBrowserPath,
+    guiBrowserCdpUrl, setGuiBrowserCdpUrl,
+    guiAutoStartBrowser, setGuiAutoStartBrowser,
     apiKey, setApiKey,
     baseUrl, setBaseUrl
-  } = useSettings();
+  } = settingsCtx;
   
   const [query, setQuery] = useState('');
+  const [browsers, setBrowsers] = useState<Array<{ id: string; name: string; path: string; installed: boolean; supportsCdp: boolean; recommended?: boolean }>>([]);
+  const [browserScanError, setBrowserScanError] = useState('');
   const [isCustomMode, setIsCustomMode] = useState(() => {
     return baseUrl && !baseUrl.includes('openrouter.ai');
   });
@@ -26,9 +39,36 @@ export default function SettingsPanel() {
     );
   }, [query]);
 
-  const selected = MODELS.find(m => m.id === model);
+  const freemodelOptions = useMemo(
+    () => MODELS.filter((m) => m.provider === 'FreeModel'),
+    []
+  );
+  const isFreemodelBase = /api\.freemodel\.dev/i.test(baseUrl);
 
-  const handlePreset = (type: 'ollama' | 'lmstudio' | 'openrouter') => {
+  const selected = MODELS.find(m => m.id === model);
+  const activeWorkflow = WORKFLOW_OPTIONS.find((item) => item.id === workflow);
+
+  const scanBrowsers = async () => {
+    setBrowserScanError('');
+    try {
+      const result = await getInstalledBrowsers();
+      setBrowsers(result.browsers || []);
+      const recommended = result.browsers?.find((item) => item.installed && item.recommended) || result.browsers?.find((item) => item.installed);
+      if (recommended && !guiBrowserPath) {
+        setGuiBrowserPath(recommended.path);
+      }
+      if (result.recommendedMode && !guiBrowserMode) {
+        setGuiBrowserMode(result.recommendedMode);
+      }
+      if (result.cdpUrl && !guiBrowserCdpUrl) {
+        setGuiBrowserCdpUrl(result.cdpUrl);
+      }
+    } catch (error: any) {
+      setBrowserScanError(error?.message || 'Browser scan alınmadı');
+    }
+  };
+
+  const handlePreset = (type: 'ollama' | 'lmstudio' | 'openrouter' | 'freemodel') => {
     if (type === 'ollama') {
       setBaseUrl('http://localhost:11434/v1');
       setApiKey('ollama');
@@ -38,6 +78,10 @@ export default function SettingsPanel() {
       setBaseUrl('http://localhost:1234/v1');
       setApiKey('lm-studio');
       setModel('qwen2.5-coder-7b');
+      setIsCustomMode(true);
+    } else if (type === 'freemodel') {
+      setBaseUrl('https://api.freemodel.dev/v1');
+      setModel('gpt-5.5');
       setIsCustomMode(true);
     } else {
       setBaseUrl('https://openrouter.ai/api/v1');
@@ -71,6 +115,18 @@ export default function SettingsPanel() {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-lg p-3" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+        <div className="text-[11px] font-semibold mb-2" style={{ color: 'var(--fg-main)' }}>
+          Aktiv konfiqurasiya
+        </div>
+        <div className="text-[11px] space-y-1" style={{ color: 'var(--fg-secondary)' }}>
+          <div>Model: <span style={{ color: 'var(--fg-main)' }}>{selected?.name || model}</span></div>
+          <div>Workflow: <span style={{ color: 'var(--fg-main)' }}>{orchestrationMode ? (activeWorkflow?.name || workflow) : 'Söndürülüb'}</span></div>
+          <div>Browser: <span style={{ color: 'var(--fg-main)' }}>{guiBrowserMode}</span></div>
+          <div>Endpoint: <span style={{ color: 'var(--fg-main)' }}>{baseUrl}</span></div>
+        </div>
+      </div>
+
       {/* Provider Selector Tab */}
       <div className="flex rounded-lg p-0.5 bg-[var(--bg-hover)] border border-[var(--border)]">
         <button
@@ -105,6 +161,30 @@ export default function SettingsPanel() {
 
       {!isCustomMode ? (
         <div className="space-y-4">
+          {/* API Key — always visible for cloud mode */}
+          <div className="space-y-1">
+            <label style={labelStyle}>
+              <Key size={12} /> API Açarı (FreeModel / OpenRouter)
+            </label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={e => setApiKey(e.target.value)}
+              placeholder="FreeModel API key daxil edin"
+              style={inputStyle}
+            />
+            {!apiKey && (
+              <p className="text-[10px] mt-1" style={{ color: 'var(--color-warning, #f59e0b)' }}>
+                ⚠️ API key daxil edin. <a href="https://freemodel.dev" target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>freemodel.dev</a>-dən pulsuz key alın.
+              </p>
+            )}
+            {apiKey && (
+              <p className="text-[10px] mt-1" style={{ color: 'var(--color-success, #22c55e)' }}>
+                ✅ API key qeyd olunub
+              </p>
+            )}
+          </div>
+
           {/* Model selection */}
           <div className="space-y-2">
             <label style={labelStyle}>
@@ -132,12 +212,36 @@ export default function SettingsPanel() {
               Aktiv: <span style={{ color: 'var(--fg-main)' }}>{selected?.name || model}</span>
             </div>
           </div>
+
+          {/* Base URL (hidden but configurable) */}
+          <div className="space-y-1">
+            <label style={labelStyle}>
+              <Globe size={12} /> API Endpoint
+            </label>
+            <select
+              value={baseUrl.includes('freemodel') ? 'freemodel' : baseUrl.includes('openrouter') ? 'openrouter' : 'custom'}
+              onChange={e => {
+                if (e.target.value === 'freemodel') setBaseUrl('https://api.freemodel.dev/v1');
+                else if (e.target.value === 'openrouter') setBaseUrl('https://openrouter.ai/api/v1');
+              }}
+              style={{ ...inputStyle, cursor: 'pointer' }}
+            >
+              <option value="freemodel">FreeModel.dev (Pulsuz GPT-5.5)</option>
+              <option value="openrouter">OpenRouter (Ödənişli)</option>
+            </select>
+          </div>
         </div>
       ) : (
         <div className="space-y-4 p-3 rounded-lg border border-[var(--border)] bg-[var(--bg-hover)] bg-opacity-30">
           <div className="flex items-center justify-between">
             <span style={labelStyle}>⚡ Cəld Şablonlar:</span>
             <div className="flex gap-1.5">
+              <button
+                onClick={() => handlePreset('freemodel')}
+                className="text-[10px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] text-[var(--fg-main)] font-semibold transition-all"
+              >
+                FreeModel
+              </button>
               <button
                 onClick={() => handlePreset('ollama')}
                 className="text-[10px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] text-[var(--fg-main)] font-semibold transition-all"
@@ -175,7 +279,7 @@ export default function SettingsPanel() {
               type="password"
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
-              placeholder="ollama (və ya boş qoyun)"
+              placeholder="API açarını daxil edin"
               style={inputStyle}
             />
           </div>
@@ -192,16 +296,150 @@ export default function SettingsPanel() {
             />
           </div>
 
+          {isFreemodelBase && (
+            <div className="space-y-1">
+              <label style={labelStyle}>
+                <Code2 size={12} /> FreeModel Modelləri
+              </label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              >
+                {freemodelOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="flex gap-2 items-start p-2 rounded bg-[var(--bg-main)] border border-[var(--border)] text-[10px]" style={{ color: 'var(--fg-muted)' }}>
             <ShieldAlert size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
             <span>
-              Lokal LLM-lər tamamilə offline işləyir. Cihazınızda <strong>Ollama</strong> və ya <strong>LM Studio</strong>-nun aktiv olduğundan əmin olun.
+              Xüsusi provider üçün endpoint, model ID və API key uyğun olmalıdır. Lokal istifadə üçün <strong>Ollama</strong> və ya <strong>LM Studio</strong>-nun aktiv olduğundan əmin olun.
             </span>
           </div>
+
+          {isFreemodelBase && (
+            <div className="flex gap-2 items-start p-2 rounded bg-[var(--bg-main)] border border-[var(--border)] text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+              <ShieldAlert size={16} className="text-sky-500 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>FreeModel</strong> üçün endpoint <strong>https://api.freemodel.dev/v1</strong> olmalıdır. Bu provider bahAI daxilində <strong>chat-completions</strong> kimi işlədilir.
+              </span>
+            </div>
+          )}
         </div>
       )}
 
       {/* Performance mode */}
+      <div className="space-y-2 pt-2">
+        <button
+          onClick={() => setOrchestrationMode(!orchestrationMode)}
+          className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors"
+          style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
+          role="switch"
+          aria-checked={orchestrationMode}
+        >
+          <div className="flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--fg-main)' }}>
+            <Workflow size={14} style={{ color: orchestrationMode ? 'var(--color-accent)' : 'var(--fg-muted)' }} />
+            Orchestra Mode
+          </div>
+          <div
+            className="w-9 h-5 rounded-full relative transition-colors"
+            style={{ background: orchestrationMode ? 'var(--color-accent)' : 'var(--fg-faint)' }}
+          >
+            <div
+              className="absolute top-0.5 w-4 h-4 rounded-full transition-all"
+              style={{
+                background: 'white',
+                left: orchestrationMode ? '18px' : '2px',
+              }}
+            />
+          </div>
+        </button>
+        <p className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>
+          Aktiv olduqda BahAI tapşırığı workflow üzrə planner/reviewer rolları ilə icra etməyə çalışır.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <label style={labelStyle}>
+          <Workflow size={12} /> Workflow
+        </label>
+        <select
+          value={workflow}
+          onChange={(e) => setWorkflow(e.target.value)}
+          style={{ ...inputStyle, cursor: 'pointer' }}
+          disabled={!orchestrationMode}
+        >
+          {WORKFLOW_OPTIONS.map((item) => (
+            <option key={item.id} value={item.id}>{item.name}</option>
+          ))}
+        </select>
+        <p className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>
+          {WORKFLOW_OPTIONS.find((item) => item.id === workflow)?.description}
+        </p>
+      </div>
+
+      <div className="space-y-2 pt-2 rounded-lg p-3" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <label style={{ ...labelStyle, marginBottom: 0 }}>
+            <MonitorCog size={12} /> GUI Browser
+          </label>
+          <button
+            onClick={scanBrowsers}
+            className="text-[10px] px-2 py-1 rounded border border-[var(--border)] bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] text-[var(--fg-main)] font-semibold"
+          >
+            Sistemi skan et
+          </button>
+        </div>
+        <label className="flex items-center justify-between gap-3 text-[12px]" style={{ color: 'var(--fg-secondary)' }}>
+          <span>Start zamanı browser-i avtomatik aç</span>
+          <input
+            type="checkbox"
+            checked={guiAutoStartBrowser}
+            onChange={(e) => setGuiAutoStartBrowser(e.target.checked)}
+          />
+        </label>
+        <select
+          value={guiBrowserMode}
+          onChange={(e) => setGuiBrowserMode(e.target.value)}
+          style={{ ...inputStyle, cursor: 'pointer' }}
+        >
+          <option value="cdp">Attach to existing Chrome (CDP)</option>
+          <option value="persistent">Real Chrome persistent profile</option>
+          <option value="bundled">Chrome for Testing</option>
+        </select>
+        {browsers.length > 0 && (
+          <select
+            value={guiBrowserPath}
+            onChange={(e) => setGuiBrowserPath(e.target.value)}
+            style={{ ...inputStyle, cursor: 'pointer' }}
+          >
+            <option value="">Browser seç</option>
+            {browsers.filter((item) => item.installed).map((item) => (
+              <option key={item.id} value={item.path}>
+                {item.name}{item.supportsCdp ? ' (CDP)' : ''}
+              </option>
+            ))}
+          </select>
+        )}
+        <input
+          value={guiBrowserCdpUrl}
+          onChange={(e) => setGuiBrowserCdpUrl(e.target.value)}
+          placeholder="http://127.0.0.1:9222"
+          style={inputStyle}
+        />
+        <p className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>
+          CDP mode lazım olsa Chrome-u tələb zamanı özü qaldıra bilər. İstəsən ayrıca <code>npm run chrome:debug</code> ilə əvvəlcədən də başlada bilərsən.
+        </p>
+        {browserScanError && (
+          <p className="text-[11px]" style={{ color: 'var(--color-danger)' }}>{browserScanError}</p>
+        )}
+      </div>
+
       <div className="space-y-1.5 pt-2">
         <button
           onClick={() => setPerformanceMode(!performanceMode)}

@@ -10,7 +10,11 @@
     "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
     "start": "node backend/index.js",
     "local": "node bin/cli.js",
-    "desktop": "concurrently \"npm run dev --prefix frontend\" \"npm run desktop:dev\"",
+    "smoke:gui": "node scripts/gui-smoke.js",
+    "chrome:debug": "bash scripts/start-debug-chrome.sh",
+    "start:gui": "bash scripts/start-bahai-gui.sh",
+    "launch:gui": "bash scripts/launch-bahai-gui.sh",
+    "desktop": "npm run build --prefix frontend && npm run desktop:dev",
     "desktop:dev": "cd electron && npm start",
     "desktop:build": "npm run build --prefix frontend && cd electron && npm run build:mac",
     "desktop:install": "cd electron && npm install"

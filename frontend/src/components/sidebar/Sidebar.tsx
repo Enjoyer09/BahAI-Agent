@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   FolderPlus,
+  FolderOpen,
   Trash2,
   Settings,
   X,
@@ -16,6 +17,7 @@ import {
   User,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
 import type { Project, Conversation } from '../../lib/types';
 import { API_BASE_URL } from '../../lib/constants';
 import { connectGithub, disconnectGithub, getGithubStatus, listGithubRepos } from '../../lib/api';
@@ -48,6 +50,7 @@ interface Props {
   onToggle: () => void;
   chat: ChatState;
   themeCtx: ThemeCtx;
+  settingsCtx: ReturnTypeUseSettings;
 }
 
 function groupByDate(conversations: Conversation[]): { label: string; items: Conversation[] }[] {
@@ -77,8 +80,9 @@ function groupByDate(conversations: Conversation[]): { label: string; items: Con
     .map(([label, items]) => ({ label, items }));
 }
 
-export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
+export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx }: Props) {
   const { signOut, user } = useAuth();
+  const { setProjectDir } = settingsCtx;
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -165,6 +169,7 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
 
       if (chosenPath) {
         setNewProjPath(chosenPath);
+        setProjectDir(chosenPath);
         // Auto-set project name from folder name
         const folderName = chosenPath.replace(/\/$/, '').split('/').pop();
         setNewProjName(folderName || '');
@@ -180,6 +185,49 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
       }
     } catch (e) {
       toast.error('Qovluq seçimi zamanı xəta baş verdi.');
+    }
+  };
+
+  const handleOpenProject = async () => {
+    try {
+      let chosenPath = '';
+      const electron = (window as any).electron;
+
+      if (electron && typeof electron.pickDirectory === 'function') {
+        chosenPath = await electron.pickDirectory();
+      } else {
+        chosenPath = await fetch(`${API_BASE_URL}/api/pick-directory`, {
+          headers: localStorage.getItem('auth_token')
+            ? { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+            : {}
+        }).then(async (response) => {
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || 'Qovluq seçilə bilmədi');
+          }
+          const data = await response.json();
+          return data.path || '';
+        });
+      }
+
+      if (!chosenPath) return;
+
+      setProjectDir(chosenPath);
+      const existingProject = safeProjects.find((project) => project.path === chosenPath);
+      if (existingProject) {
+        const existingConversation = safeConversations.find((conversation) => conversation.projectId === existingProject.id);
+        if (existingConversation) {
+          chat.setActiveConvId(existingConversation.id);
+          return;
+        }
+        chat.createConversation(existingProject.id);
+        return;
+      }
+
+      const folderName = chosenPath.replace(/\/$/, '').split('/').pop() || 'Yeni layihə';
+      chat.createProject(folderName, chosenPath);
+    } catch (e: any) {
+      toast.error(e?.message || 'Layihə açıla bilmədi');
     }
   };
 
@@ -252,6 +300,24 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
             aria-label="Close sidebar"
           >
             <PanelLeftClose size={18} />
+          </button>
+        </div>
+
+        <div className="px-3 pb-2 shrink-0">
+          <button
+            onClick={handleOpenProject}
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            style={{
+              color: 'var(--fg-main)',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              minHeight: '44px',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <FolderOpen size={18} />
+            Projects
           </button>
         </div>
 
@@ -333,11 +399,14 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
               </div>
               {group.items.map(conv => {
                 const isActive = chat.activeConvId === conv.id;
+                const project = safeProjects.find((item) => item.id === conv.projectId) || null;
+                const projectLabel = project?.name || 'Workspace';
+                const isSandbox = projectLabel === 'bahAI Sandbox';
                 return (
                   <div key={conv.id} className="group relative">
                     <button
                       onClick={() => chat.setActiveConvId(conv.id)}
-                      className="w-full flex items-center gap-2 px-3 py-3 rounded-lg text-left transition-colors truncate"
+                      className="w-full flex items-start gap-2 px-3 py-3 rounded-lg text-left transition-colors"
                       style={{
                         background: isActive ? 'var(--bg-hover)' : 'transparent',
                         color: isActive ? 'var(--fg-main)' : 'var(--fg-secondary)',
@@ -346,7 +415,21 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
                       onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'; }}
                       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                     >
-                      <span className="text-sm truncate flex-1">{conv.title || 'Adsız söhbət'}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm truncate">{conv.title || 'Adsız söhbət'}</div>
+                        <div className="mt-1 flex items-center gap-2 min-w-0">
+                          <span
+                            className="text-[10px] px-2 py-0.5 rounded-md truncate"
+                            style={{
+                              color: isSandbox ? 'var(--fg-muted)' : 'var(--color-accent)',
+                              background: isSandbox ? 'var(--bg-surface)' : 'var(--color-accent-muted)',
+                              border: '1px solid var(--border)'
+                            }}
+                          >
+                            {projectLabel}
+                          </span>
+                        </div>
+                      </div>
                     </button>
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 mobile-visible" style={{ opacity: 1 }}>
                       <button
@@ -538,7 +621,7 @@ export default function Sidebar({ onToggle, chat, themeCtx }: Props) {
             </div>
 
             <div className="flex-1 overflow-y-auto premium-scroll space-y-5">
-              <SettingsPanel />
+              <SettingsPanel settingsCtx={settingsCtx} />
               <div className="space-y-2">
                 <label className="text-xs font-medium" style={{ color: 'var(--fg-muted)' }}>GitHub</label>
                 {githubConnected ? (

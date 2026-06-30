@@ -8,7 +8,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { OpenAI } = require('openai');
 const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
@@ -18,6 +17,42 @@ const { glob } = require('glob');
 const mammoth = require('mammoth');
 const XLSX = require('xlsx');
 const { createWorker } = require('tesseract.js');
+const { getSession, closeAllSessions, findInstalledChromePath, listInstalledBrowsers } = require('./browserSession');
+const { inspectGuiState, runGuiAction, stepGuiAgent } = require('./gui/agent');
+const {
+  isGuiObserveSelfTestRequest,
+  isGuiLoginCheckpointRequest,
+  isGuiLoginResumeRequest,
+  buildGuiBrowserOpenArgs
+} = require('./gui/requests');
+const { getRecommendedGuiBrowserMode } = require('./gui/browserPolicy');
+const {
+  handleGuiLoginResume,
+  handleGuiLoginCheckpointAction,
+  handleGuiLoginCheckpoint,
+  handleGuiSelfTest
+} = require('./gui/fastpath');
+const { resolveOrchestrationConfig } = require('./orchestrator/workflowResolver');
+const { buildRoleInstruction, buildPhaseHandoffMessage } = require('./orchestrator/rolePrompts');
+const { createRunManager } = require('./orchestrator/runManager');
+const { extractPlannerArtifact, buildPlannerArtifactPrompt, buildPlannerArtifactContext } = require('./orchestrator/plannerArtifact');
+const { buildExecutionArtifact, buildExecutionArtifactContext, compactMessagesForNextPhase, classifyArtifactQuality } = require('./orchestrator/executionArtifact');
+const { getToolDefinitions } = require('./tools/registry');
+const { getToolsForProfile, getToolsForRole } = require('./tools/profiles');
+const {
+  createProviderRuntime,
+  buildProviderCandidates,
+  normalizeProviderBaseUrl,
+  detectWireApi,
+  isResponsesSchemaMismatchError,
+  buildOpenAIClient
+} = require('./chat/providers');
+const { createChatRuntime } = require('./chat/queue');
+const { writeSse, initSse, emitOrchestrationPrelude, emitTaskPlan } = require('./chat/sse');
+const { collectStreamOutput } = require('./chat/stream');
+const { executeToolCalls } = require('./chat/toolExecutor');
+const { openAiStreamWithFallback } = require('./chat/runner');
+const { runChatSession } = require('./chat/sessionController');
 
 const execFileAsync = util.promisify(execFile);
 const pdfParse = require('pdf-parse');
@@ -56,10 +91,23 @@ app.use(corsConfig);
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
 
 // SEC-FIX: replaced inline header-setting with the standard `helmet`
-// middleware which keeps the recommended defaults up-to-date. CSP is left in
-// report-only mode because the SPA + Electron contexts need inline scripts.
+// middleware which keeps the recommended defaults up-to-date.
+// P1-FIX: CSP enabled in report-only for now with nonce support preparation.
+// The nonce mechanism can be activated by setting CSP_REPORT_ONLY=false.
+const cspReportOnly = process.env.CSP_REPORT_ONLY !== 'false';
 app.use(helmet({
-  contentSecurityPolicy: false, // SPA + Electron needs inline; revisit later
+  contentSecurityPolicy: cspReportOnly ? false : {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Electron inline scripts need this
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://oauth2.googleapis.com", "https://openrouter.ai", "http://localhost:*"],
+      fontSrc: ["'self'", "https:", "data:"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    }
+  },
   crossOriginEmbedderPolicy: false,
   // hide X-Powered-By, set X-Frame-Options, Referrer-Policy, HSTS in prod, etc.
 }));
@@ -152,7 +200,9 @@ const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
 // silently disabled auth and approvals for all visitors.
 const isLocalMode = () => process.env.LOCAL_MODE === 'true';
 const PROVIDER_COOLDOWN_MS = parseInt(process.env.PROVIDER_COOLDOWN_MS || '20000', 10);
-const providerRuntime = new Map();
+const providerRuntime = createProviderRuntime({
+  providerCooldownMs: PROVIDER_COOLDOWN_MS
+});
 
 // Startup diagnostics
 // SEC-FIX: never leak any portion of API keys to logs in production.
@@ -220,92 +270,223 @@ function classifyTaskComplexity({ userMessage, messageHistoryLen, hasAttachments
   return 'fast';
 }
 
-function canUseProviderNow(providerId) {
-  const state = providerRuntime.get(providerId);
-  if (!state) return true;
-  return !state.cooldownUntil || state.cooldownUntil < Date.now();
+function isAuditStyleRequest(text = '') {
+  return /(audit|review|kodu yoxla|yoxla proqrami|proqrami audit|xəta|sehf|səhv|bug|risk|tapıntı|finding)/i.test(String(text));
 }
 
-function markProviderFailure(providerId) {
-  const prev = providerRuntime.get(providerId) || { fails: 0, cooldownUntil: 0 };
-  const fails = prev.fails + 1;
-  providerRuntime.set(providerId, {
-    fails,
-    cooldownUntil: Date.now() + Math.min(PROVIDER_COOLDOWN_MS * fails, 120000)
-  });
+function flattenResponseJsonText(text = '') {
+  if (typeof text !== 'string') return text;
+  const match = text.trim().match(/^\s*\{\s*"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*\}\s*$/);
+  if (!match || !match[1]) return text;
+  return match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim();
 }
 
-function markProviderSuccess(providerId) {
-  providerRuntime.set(providerId, { fails: 0, cooldownUntil: 0 });
+function isFileClarificationLoop(text = '') {
+  return /(hansı faylı|fayl.*belirt|app\.py|read_file alətini|json formatında çağır|yolun doğru olduğunu yoxlayın|yalnız bir faylı audit)/i.test(String(text));
 }
 
-function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendModel, autoIntent }) {
-  const list = [];
-
-  const OLLAMA_BASE = process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1';
-
-  // FUNC-FIX: AUTO mode — route based on classifier. Fast intents try local
-  // Ollama first (free, private), smart intents try the cloud frontier model
-  // first. Both fall back to each other if the primary fails.
-  if (frontendModel === 'auto') {
-    const cloudKey = frontendApiKey || process.env.OPENAI_API_KEY || '';
-    const cloudBase = frontendBaseUrl || process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
-    const fastLocal = process.env.AUTO_FAST_MODEL || 'qwen2.5-coder:7b';
-    const smartCloud = process.env.AUTO_SMART_MODEL || 'anthropic/claude-sonnet-4.5';
-
-    const localProvider = { id: 'auto_ollama_fast', apiKey: 'ollama', baseURL: OLLAMA_BASE, model: fastLocal };
-    const cloudProvider = cloudKey ? { id: 'auto_cloud_smart', apiKey: cloudKey, baseURL: cloudBase, model: smartCloud } : null;
-
-    if (autoIntent === 'smart' && cloudProvider) {
-      list.push(cloudProvider);
-      list.push(localProvider); // failover for cloud outage
-    } else {
-      list.push(localProvider);
-      if (cloudProvider) list.push(cloudProvider); // failover if Ollama not running
+function mapMessagesToResponsesInput(messages = []) {
+  const input = [];
+  for (const message of messages) {
+    if (!message || !message.role) continue;
+    if (message.role === 'tool') {
+      input.push({
+        type: 'function_call_output',
+        call_id: message.tool_call_id || '',
+        output: String(message.content || '')
+      });
+      continue;
     }
-  } else if (frontendModel && looksLikeOllamaModel(frontendModel)) {
-    // FUNC-FIX: any Ollama-style ID auto-routes to local endpoint (was a
-    // hard-coded whitelist, so e.g. qwen2.5-coder:7b silently fell back to
-    // openrouter and 404'd).
-    list.push({
-      id: 'local_ollama_auto',
-      apiKey: 'ollama',
-      baseURL: OLLAMA_BASE,
-      model: frontendModel
-    });
+
+    if (message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      for (const toolCall of message.tool_calls) {
+        input.push({
+          type: 'function_call',
+          call_id: toolCall.id,
+          name: toolCall.function?.name || '',
+          arguments: toolCall.function?.arguments || '{}'
+        });
+      }
+    }
+
+    const contentParts = [];
+    if (typeof message.content === 'string' && message.content.trim()) {
+      contentParts.push({ type: 'input_text', text: message.content });
+    }
+    if (contentParts.length > 0) {
+      input.push({
+        role: message.role,
+        content: contentParts
+      });
+    }
+  }
+  return input;
+}
+
+function mapToolsToResponsesTools(tools = []) {
+  return tools.map((tool) => ({
+    type: 'function',
+    name: tool.function.name,
+    description: tool.function.description,
+    parameters: tool.function.parameters
+  }));
+}
+
+function buildPhaseRecoveryInstruction(role, projectRoot, reason) {
+  return [
+    `${role || 'Agent'} fazasının əvvəlki cavabı kifayət qədər faydalı deyildi.`,
+    `Səbəb: ${reason}.`,
+    'Boş, ümumi və ya yalnız status tipli cavab vermə.',
+    'Konkret nəticə çıxar: ya real tool çağır, ya da faydalı, yoxlanıla bilən məzmun yaz.',
+    `Project Root: ${projectRoot}`
+  ].join(' ');
+}
+
+function normalizeToolName(name = '') {
+  const value = String(name || '').trim();
+  if (!value) return value;
+  const aliases = {
+    run_bash: 'run_terminal_command',
+    bash: 'run_terminal_command',
+    terminal: 'run_terminal_command',
+    browser_snapshot: 'browser_screenshot',
+    screenshot: 'browser_screenshot'
+  };
+  return aliases[value] || value;
+}
+
+function buildToolCallCacheKey(toolName = '', args = '') {
+  const normalizedName = normalizeToolName(toolName);
+  let normalizedArgs = String(args || '').trim();
+  try {
+    normalizedArgs = JSON.stringify(JSON.parse(normalizedArgs || '{}'));
+  } catch {
+    normalizedArgs = String(args || '').trim();
+  }
+  return `${normalizedName}::${normalizedArgs}`;
+}
+
+function isCacheableTool(toolName = '') {
+  return [
+    'list_directory',
+    'glob_search',
+    'read_file',
+    'grep_search',
+    'analyze_codebase',
+    'find_definition',
+    'find_references',
+    'git_status',
+    'git_diff',
+    'git_log',
+    'check_port_status',
+    'github_list_contents',
+    'github_read_file',
+    'github_search_code'
+  ].includes(normalizeToolName(toolName));
+}
+
+function buildToolRecoveryInstruction(role, projectRoot, detail, allowedToolNames = []) {
+  return [
+    `${role || 'Agent'} fazasında tool çağırışı düz olmadı.`,
+    `Səbəb: ${detail}.`,
+    'Yalnız mövcud və bu faza üçün icazəli tool adlarından istifadə et.',
+    'Arguments həmişə keçərli JSON object olmalıdır.',
+    allowedToolNames.length ? `Bu fazada icazəli tool-lar: ${allowedToolNames.join(', ')}` : '',
+    `Project Root: ${projectRoot}`
+  ].filter(Boolean).join(' ');
+}
+
+function normalizeUserFacingError(message = '') {
+  const text = String(message || '').trim();
+  if (!text) return 'Naməlum xəta baş verdi.';
+  if (/^Unknown tool:/i.test(text)) {
+    return 'Agent uyğun tool seçə bilmədi. Daxili bərpa cəhdi edilir.';
+  }
+  if (/^Error executing tool: Unexpected token/i.test(text)) {
+    return 'Tool üçün göndərilən argument forması düzgün deyildi. Daxili bərpa cəhdi edilir.';
+  }
+  return text;
+}
+
+function shouldEmitDebugEvent() {
+  return process.env.BAHAI_DEBUG_EVENTS === '1';
+}
+
+function ensureSection(lines, title, items = [], formatter = (value) => String(value || '').trim()) {
+  const cleaned = (Array.isArray(items) ? items : [])
+    .map(formatter)
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  if (cleaned.length === 0) return;
+  lines.push(`**${title}**`);
+  for (const item of cleaned) {
+    lines.push(`- ${item}`);
+  }
+  lines.push('');
+}
+
+function normalizeFinalAssistantReport(content = '', context = {}) {
+  const text = String(content || '').trim();
+  if (!text) return text;
+  if (/^\*\*Problem\*\*/i.test(text) || /^\*\*Findings\*\*/i.test(text)) {
+    return text;
   }
 
-  if (frontendApiKey && frontendBaseUrl && frontendModel && frontendModel !== 'auto') {
-    list.push({
-      id: 'frontend',
-      apiKey: frontendApiKey,
-      baseURL: frontendBaseUrl,
-      model: frontendModel
-    });
+  const {
+    auditStyleRequest = false,
+    plannerArtifact = null,
+    executionArtifacts = [],
+    executionMemory = null
+  } = context;
+
+  const lines = [];
+  const summary = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  const intro = summary.slice(0, 2).join(' ').slice(0, 500);
+  const enforcedRisks = [];
+
+  if (executionMemory?.lastValidation?.status === 'failed') {
+    enforcedRisks.push(`Son validation failed olub: ${String(executionMemory.lastValidation.summary || '').slice(0, 220)}`);
+    enforcedRisks.push('Validation retry policy təmin olunmalıdır: ya failed check düzəldilib yenidən işlədilməli, ya da blok səbəbi açıq yazılmalıdır.');
+  }
+  if (executionMemory?.lastApprovalDecision?.decision === 'reject') {
+    enforcedRisks.push(
+      `Son approval reject olunub: ${executionMemory.lastApprovalDecision.title || executionMemory.lastApprovalDecision.tool || 'unknown tool'}`
+    );
+  }
+  if (executionMemory?.lastBrowserArtifact?.status === 'failed') {
+    enforcedRisks.push(`Son browser artifact failed olub: ${String(executionMemory.lastBrowserArtifact.summary || '').slice(0, 180)}`);
+  }
+  if (executionMemory?.lastTerminalArtifact?.status === 'failed') {
+    enforcedRisks.push(`Son terminal artifact failed olub: ${String(executionMemory.lastTerminalArtifact.summary || '').slice(0, 180)}`);
   }
 
-  for (const p of parseProviderPoolFromEnv()) {
-    list.push(p);
+  if (auditStyleRequest) {
+    ensureSection(lines, 'Findings', intro ? [intro] : []);
+    ensureSection(lines, 'Plan', plannerArtifact?.implementationSteps || []);
+    ensureSection(lines, 'Validation', plannerArtifact?.verificationSteps || []);
+    ensureSection(
+      lines,
+      'Remaining Risks',
+      [...(plannerArtifact?.suspectedRisks || []), ...enforcedRisks]
+    );
+  } else {
+    ensureSection(lines, 'Problem', intro ? [intro] : []);
+    ensureSection(lines, 'Plan', plannerArtifact?.implementationSteps || []);
+    ensureSection(
+      lines,
+      'Changes',
+      executionArtifacts.slice(-3).map((artifact) => artifact?.summary).filter(Boolean)
+    );
+    ensureSection(lines, 'Validation', plannerArtifact?.verificationSteps || []);
+    ensureSection(
+      lines,
+      'Remaining Risks',
+      [...(plannerArtifact?.suspectedRisks || []), ...enforcedRisks]
+    );
   }
 
-  const envApiKey = process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY || '';
-  const envBase = process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
-  const envModel = process.env.OPENAI_MODEL || 'qwen/qwen3-coder:free';
-  if (envApiKey && frontendModel !== 'auto') {
-    list.push({
-      id: process.env.OPENAI_API_KEY ? 'env_openai' : 'env_nvidia',
-      apiKey: envApiKey,
-      baseURL: envBase,
-      model: envModel
-    });
-  }
-
-  const dedup = new Map();
-  for (const p of list) {
-    const k = `${p.apiKey}|${p.baseURL}|${p.model}`;
-    if (!dedup.has(k)) dedup.set(k, p);
-  }
-  return Array.from(dedup.values());
+  if (lines.length === 0) return text;
+  return lines.join('\n').trim();
 }
 
 // ==========================================
@@ -451,6 +632,18 @@ function resolveWorkingDirectory(wd, user) {
   return path.resolve(cleanWd);
 }
 
+function isWorkingDirectoryAllowed(resolvedWD) {
+  const normalized = path.resolve(String(resolvedWD || '.'));
+  if (isLocalMode()) {
+    return true;
+  }
+
+  return ALLOWED_DIRS.some((base) => {
+    const rel = path.relative(base, normalized);
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  });
+}
+
 
 /**
  * Maps a file path from a requested original working directory to a resolved one.
@@ -487,7 +680,7 @@ function isPathSafe(filePath, workingDirectory, user) {
   return !relGlobally.startsWith('..') && !path.isAbsolute(relGlobally);
   });
   
-  const isSafe = isInsideProject || (isLocalMode() && isAllowedGlobally);
+  const isSafe = isInsideProject || (isLocalMode() && (isAllowedGlobally || path.isAbsolute(resolvedPath)));
   
   if (!isSafe) {
     console.warn(`🚨 SECURITY ALERT: Blocked access to ${resolvedPath}`);
@@ -496,6 +689,322 @@ function isPathSafe(filePath, workingDirectory, user) {
   }
 
   return isSafe;
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function detectRepoProfile(analyzePath) {
+  const candidates = [
+    'package.json',
+    'pnpm-lock.yaml',
+    'yarn.lock',
+    'package-lock.json',
+    'bun.lockb',
+    'bun.lock',
+    'pnpm-workspace.yaml',
+    'turbo.json',
+    'nx.json',
+    'tsconfig.json',
+    'vite.config.ts',
+    'vite.config.js',
+    'next.config.js',
+    'next.config.mjs',
+    'nest-cli.json',
+    'requirements.txt',
+    'pyproject.toml',
+    'pytest.ini',
+    'Cargo.toml',
+    'go.mod',
+    'Dockerfile'
+  ];
+
+  const found = {};
+  for (const candidate of candidates) {
+    found[candidate] = await fileExists(path.join(analyzePath, candidate));
+  }
+
+  let packageJson = null;
+  if (found['package.json']) {
+    try {
+      packageJson = JSON.parse(await fs.readFile(path.join(analyzePath, 'package.json'), 'utf8'));
+    } catch {
+      packageJson = null;
+    }
+  }
+
+  const deps = {
+    ...(packageJson?.dependencies || {}),
+    ...(packageJson?.devDependencies || {})
+  };
+  const scripts = packageJson?.scripts || {};
+
+  let ecosystem = 'Unknown';
+  if (packageJson) ecosystem = 'Node.js';
+  else if (found['pyproject.toml'] || found['requirements.txt']) ecosystem = 'Python';
+  else if (found['Cargo.toml']) ecosystem = 'Rust';
+  else if (found['go.mod']) ecosystem = 'Go';
+
+  let packageManager = 'Unknown';
+  if (found['pnpm-lock.yaml']) packageManager = 'pnpm';
+  else if (found['yarn.lock']) packageManager = 'yarn';
+  else if (found['package-lock.json']) packageManager = 'npm';
+  else if (found['bun.lockb'] || found['bun.lock']) packageManager = 'bun';
+  else if (packageJson) packageManager = 'npm';
+  else if (ecosystem === 'Python') packageManager = found['pyproject.toml'] ? 'poetry/pip' : 'pip';
+  else if (ecosystem === 'Rust') packageManager = 'cargo';
+  else if (ecosystem === 'Go') packageManager = 'go';
+
+  const workspaceSignals = [
+    found['pnpm-workspace.yaml'] ? 'pnpm-workspace' : '',
+    found['turbo.json'] ? 'turbo' : '',
+    found['nx.json'] ? 'nx' : '',
+    Array.isArray(packageJson?.workspaces) || typeof packageJson?.workspaces === 'object' ? 'package.json workspaces' : ''
+  ].filter(Boolean);
+  const repoShape = workspaceSignals.length > 0 ? 'Monorepo/Workspace' : 'Single package/service';
+
+  const frameworkDetectors = [
+    ['Next.js', found['next.config.js'] || found['next.config.mjs'] || Boolean(deps.next)],
+    ['Vite', found['vite.config.ts'] || found['vite.config.js'] || Boolean(deps.vite)],
+    ['NestJS', found['nest-cli.json'] || Boolean(deps['@nestjs/core'])],
+    ['React', Boolean(deps.react)],
+    ['Vue', Boolean(deps.vue)],
+    ['Express', Boolean(deps.express)],
+    ['Fastify', Boolean(deps.fastify)],
+    ['Electron', Boolean(deps.electron)],
+    ['Vitest', Boolean(deps.vitest)],
+    ['Jest', Boolean(deps.jest)],
+    ['Pytest', found['pytest.ini']]
+  ];
+  const frameworks = frameworkDetectors.filter(([, ok]) => ok).map(([name]) => name);
+
+  const buildCommand =
+    scripts.build ||
+    (ecosystem === 'Python' ? 'python -m build (əgər qurulubsa)' : '') ||
+    (ecosystem === 'Rust' ? 'cargo build' : '') ||
+    (ecosystem === 'Go' ? 'go build ./...' : '') ||
+    '';
+  const testCommand =
+    scripts.test ||
+    (ecosystem === 'Python' ? 'python -m pytest --tb=short' : '') ||
+    (ecosystem === 'Rust' ? 'cargo test' : '') ||
+    (ecosystem === 'Go' ? 'go test ./...' : '') ||
+    '';
+  const lintCommand = scripts.lint || '';
+
+  const entryCandidates = [
+    'src/main.tsx',
+    'src/main.ts',
+    'src/App.tsx',
+    'src/App.jsx',
+    'src/index.ts',
+    'src/index.js',
+    'index.js',
+    'server.js',
+    'app.js',
+    'main.py'
+  ];
+  const entryPoints = [];
+  for (const candidate of entryCandidates) {
+    if (await fileExists(path.join(analyzePath, candidate))) entryPoints.push(candidate);
+    if (entryPoints.length >= 4) break;
+  }
+
+  return {
+    ecosystem,
+    packageManager,
+    repoShape,
+    workspaceSignals,
+    frameworks,
+    packageJson,
+    buildCommand,
+    testCommand,
+    lintCommand,
+    entryPoints,
+    foundConfigs: Object.entries(found).filter(([, exists]) => exists).map(([name]) => name)
+  };
+}
+
+function serializeRepoProfile(profile = {}) {
+  return {
+    ecosystem: profile.ecosystem || 'Unknown',
+    packageManager: profile.packageManager || 'Unknown',
+    repoShape: profile.repoShape || 'Unknown',
+    workspaceSignals: profile.workspaceSignals || [],
+    frameworks: profile.frameworks || [],
+    buildCommand: profile.buildCommand || '',
+    testCommand: profile.testCommand || '',
+    lintCommand: profile.lintCommand || '',
+    entryPoints: profile.entryPoints || [],
+    foundConfigs: profile.foundConfigs || [],
+    packageName: profile.packageJson?.name || '',
+    packageVersion: profile.packageJson?.version || ''
+  };
+}
+
+function buildValidationHint(repoProfile = {}) {
+  const hints = [];
+  if (repoProfile.buildCommand) hints.push(`build: ${repoProfile.buildCommand}`);
+  if (repoProfile.testCommand) hints.push(`test: ${repoProfile.testCommand}`);
+  if (repoProfile.lintCommand) hints.push(`lint: ${repoProfile.lintCommand}`);
+  if (hints.length === 0) return '';
+  return `Tövsiyə olunan validation komandaları -> ${hints.join(' | ')}`;
+}
+
+function buildExecutionMemoryHint(projectMemory = {}) {
+  const lines = [];
+  const lastValidation = projectMemory?.lastValidation;
+  const lastApprovalDecision = projectMemory?.lastApprovalDecision;
+  const lastBrowserArtifact = projectMemory?.lastBrowserArtifact;
+  const lastTerminalArtifact = projectMemory?.lastTerminalArtifact;
+  const lastRuntimeArtifact = projectMemory?.lastRuntimeArtifact;
+
+  if (lastValidation?.status) {
+    lines.push(`Son validation statusu: ${lastValidation.status}. ${String(lastValidation.summary || '').slice(0, 240)}`);
+  }
+  if (lastApprovalDecision?.decision) {
+    lines.push(
+      `Son approval qərarı: ${lastApprovalDecision.decision} | tool=${lastApprovalDecision.title || lastApprovalDecision.tool || 'unknown'} | risk=${lastApprovalDecision.riskLevel || 'medium'}`
+    );
+  }
+  if (lastBrowserArtifact?.toolName) {
+    lines.push(`Son browser artifact: tool=${lastBrowserArtifact.toolName} | summary=${String(lastBrowserArtifact.summary || '').slice(0, 180)}`);
+  }
+  if (lastTerminalArtifact?.command || lastTerminalArtifact?.summary) {
+    lines.push(`Son terminal artifact: ${String(lastTerminalArtifact.command || lastTerminalArtifact.summary || '').slice(0, 180)}`);
+  }
+  if (lastRuntimeArtifact?.kind === 'browser' && lastRuntimeArtifact?.status) {
+    lines.push(`Son GUI runtime statusu: ${lastRuntimeArtifact.status} | ${String(lastRuntimeArtifact.summary || '').slice(0, 180)}`);
+  }
+
+  if (lines.length === 0) return '';
+  return `Execution yaddaşı:\n${lines.join('\n')}`;
+}
+
+function isPlaceholderTestScript(script = '') {
+  const value = String(script || '').trim().toLowerCase();
+  return (
+    !value ||
+    value.includes('no test specified') ||
+    value === 'exit 1'
+  );
+}
+
+function quoteShellArg(value = '') {
+  const text = String(value ?? '');
+  if (!text) return "''";
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+function buildNodeScriptCommand(packageManager, scriptName, extraArgs = []) {
+  const extras = (extraArgs || []).filter(Boolean).join(' ');
+  if (packageManager === 'pnpm') return `pnpm ${scriptName}${extras ? ` -- ${extras}` : ''}`;
+  if (packageManager === 'yarn') return `yarn ${scriptName}${extras ? ` ${extras}` : ''}`;
+  if (packageManager === 'bun') return `bun run ${scriptName}${extras ? ` -- ${extras}` : ''}`;
+  return `npm run ${scriptName}${extras ? ` -- ${extras}` : ''}`;
+}
+
+function buildValidationPlan(repoProfile = {}, workingDirectory, args = {}) {
+  const ecosystem = repoProfile?.ecosystem || 'Unknown';
+  const packageManager = repoProfile?.packageManager || 'npm';
+  const scripts = repoProfile?.packageJson?.scripts || {};
+  const filterArg = String(args?.filter || '').trim();
+  const extraArgs = filterArg ? [quoteShellArg(filterArg)] : [];
+  const steps = [];
+  const pushStep = (kind, command, reason) => {
+    if (!command) return;
+    const normalized = String(command).trim();
+    if (!normalized) return;
+    if (steps.some((step) => step.command === normalized)) return;
+    steps.push({
+      kind,
+      label: kind === 'typecheck' ? 'type-check' : kind,
+      command: normalized,
+      reason: String(reason || '').trim()
+    });
+  };
+
+  if (ecosystem === 'Node.js') {
+    if (scripts.lint) {
+      pushStep('lint', buildNodeScriptCommand(packageManager, 'lint'), 'package.json içində lint script tapıldı');
+    }
+
+    if (scripts.typecheck) {
+      pushStep('typecheck', buildNodeScriptCommand(packageManager, 'typecheck'), 'package.json içində typecheck script tapıldı');
+    } else if (scripts['check-types']) {
+      pushStep('typecheck', buildNodeScriptCommand(packageManager, 'check-types'), 'package.json içində check-types script tapıldı');
+    } else if (scripts.typescript) {
+      pushStep('typecheck', buildNodeScriptCommand(packageManager, 'typescript'), 'package.json içində typescript script tapıldı');
+    } else if (repoProfile?.foundConfigs?.includes('tsconfig.json')) {
+      pushStep('typecheck', 'npx tsc --noEmit', 'tsconfig.json tapıldığı üçün TypeScript yoxlaması əlavə edildi');
+    }
+
+    if (scripts.test && !isPlaceholderTestScript(scripts.test)) {
+      pushStep('test', buildNodeScriptCommand(packageManager, 'test', extraArgs), 'package.json içində test script tapıldı');
+    } else if (repoProfile?.frameworks?.includes('Vitest')) {
+      pushStep('test', filterArg ? `npx vitest --run ${quoteShellArg(filterArg)}` : 'npx vitest --run', 'Vitest dependency siqnalı tapıldı');
+    } else if (repoProfile?.frameworks?.includes('Jest')) {
+      pushStep('test', filterArg ? `npx jest --runInBand ${quoteShellArg(filterArg)}` : 'npx jest --runInBand', 'Jest dependency siqnalı tapıldı');
+    }
+
+    if (scripts.build) {
+      pushStep('build', buildNodeScriptCommand(packageManager, 'build'), 'package.json içində build script tapıldı');
+    }
+  } else if (ecosystem === 'Python') {
+    if (repoProfile?.lintCommand) pushStep('lint', repoProfile.lintCommand, 'repo profilində lint komandası göstərilib');
+    if (repoProfile?.foundConfigs?.includes('pyproject.toml')) {
+      pushStep('typecheck', 'python -m py_compile $(find . -name "*.py" -not -path "*/.venv/*" -not -path "*/venv/*")', 'Python faylları üçün sintaksis yoxlaması əlavə edildi');
+    }
+    if (repoProfile?.testCommand) pushStep('test', filterArg ? `${repoProfile.testCommand} ${quoteShellArg(filterArg)}` : repoProfile.testCommand, 'repo profilində test komandası göstərilib');
+    if (repoProfile?.buildCommand) pushStep('build', repoProfile.buildCommand, 'repo profilində build komandası göstərilib');
+  } else if (ecosystem === 'Rust') {
+    pushStep('test', 'cargo test', 'Rust layihələri üçün standart test komandası');
+    pushStep('build', 'cargo build', 'Rust layihələri üçün standart build komandası');
+  } else if (ecosystem === 'Go') {
+    pushStep('test', filterArg ? `go test ${quoteShellArg(filterArg)}` : 'go test ./...', 'Go layihələri üçün standart test komandası');
+    pushStep('build', 'go build ./...', 'Go layihələri üçün standart build komandası');
+  }
+
+  if (steps.length === 0 && repoProfile?.testCommand && !isPlaceholderTestScript(repoProfile.testCommand)) {
+    pushStep('test', filterArg ? `${repoProfile.testCommand} ${quoteShellArg(filterArg)}` : repoProfile.testCommand, 'repo profilində test komandası göstərilib');
+  }
+  if (steps.length === 0 && repoProfile?.buildCommand) {
+    pushStep('build', repoProfile.buildCommand, 'test komandası tapılmadığı üçün build fallback seçildi');
+  }
+
+  return {
+    ecosystem,
+    packageManager,
+    repoShape: repoProfile?.repoShape || 'Unknown',
+    steps
+  };
+}
+
+function formatValidationReport(plan, results = []) {
+  const header = [
+    `Validation planı: ${plan?.ecosystem || 'Unknown'} / ${plan?.packageManager || 'Unknown'} / ${plan?.repoShape || 'Unknown'}`
+  ];
+  if (!results.length) {
+    return `${header.join('\n')}\nValidation üçün uyğun komanda tapılmadı.`;
+  }
+
+  const body = results.map((result, index) => {
+    const lines = [
+      `${index + 1}. ${result.label} [${result.status}]`,
+      `Komanda: ${result.command}`
+    ];
+    if (result.reason) lines.push(`Səbəb: ${result.reason}`);
+    if (result.output) lines.push(`Çıxış:\n${result.output}`);
+    return lines.join('\n');
+  });
+
+  return `🧪 Validation nəticələri:\n${header.join('\n')}\n\n${body.join('\n\n')}`.trim();
 }
 
 
@@ -755,7 +1264,7 @@ async function normalizeMessagesForModel(messages = [], modelName = '') {
   return normalized;
 }
 
-function generateToolsSystemPrompt() {
+function generateToolsSystemPrompt(activeTools = TOOLS) {
   // FUNC-FIX: previous prompt was 80+ lines with 5 worked examples and made
   // smaller local models lose context. Compact prompt with a single concrete
   // example and a hard rule list.
@@ -765,7 +1274,7 @@ function generateToolsSystemPrompt() {
   prompt += `Bir cavabda yalnız 1 tool çağırışı et. İstifadəçiyə son cavab verirsənsə, JSON İSTİFADƏ ETMƏ — adi Markdown yaz.\n\n`;
 
   prompt += `Mövcud alətlər:\n`;
-  for (const t of TOOLS) {
+  for (const t of activeTools) {
     const fn = t.function;
     const requiredParams = (fn.parameters?.required || []).join(', ');
     prompt += `• \`${fn.name}\` — ${fn.description}`;
@@ -799,7 +1308,7 @@ function buildDeepSeekRecoveryMessages(messages = []) {
   return recent;
 }
 
-function extractTextToolCalls(text) {
+function extractTextToolCalls(text, activeTools = TOOLS) {
   if (!text) return { cleanedText: text, toolCalls: [] };
 
   // FUNC-FIX: previous impl reset `index = 0` after each match (O(n^2) +
@@ -815,7 +1324,7 @@ function extractTextToolCalls(text) {
     try {
       const parsed = JSON.parse(m[1]);
       if (parsed && typeof parsed.name === 'string' && parsed.arguments !== undefined &&
-          TOOLS.some((t) => t.function.name === parsed.name)) {
+          activeTools.some((t) => t.function.name === parsed.name)) {
         toolCalls.push({
           name: parsed.name,
           arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
@@ -854,7 +1363,7 @@ function extractTextToolCalls(text) {
         const parsed = JSON.parse(candidate);
         if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string' &&
             parsed.arguments !== undefined &&
-            TOOLS.some((t) => t.function.name === parsed.name)) {
+            activeTools.some((t) => t.function.name === parsed.name)) {
           toolCalls.push({
             name: parsed.name,
             arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
@@ -901,148 +1410,35 @@ function serializeConversation(row) {
   };
 }
 
-const pendingApprovals = new Map();
-const activeChatByUser = new Map();
-const activeChatByConversation = new Map();
-let activeChatTotal = 0;
 const MAX_ACTIVE_CHAT_TOTAL = parseInt(process.env.MAX_ACTIVE_CHAT_TOTAL || '50', 10);
 const MAX_ACTIVE_CHAT_PER_USER = parseInt(process.env.MAX_ACTIVE_CHAT_PER_USER || '5', 10);
-const CHAT_QUEUE_TIMEOUT_MS = parseInt(process.env.CHAT_QUEUE_TIMEOUT_MS || '5000', 10);
-const CHAT_SLOT_MAX_AGE_MS = 120000; // Force-release stuck slots after 2 minutes
-const chatQueue = [];
-
-function cleanupStaleSlots() {
-  const now = Date.now();
-  for (const [cid, info] of activeChatByConversation.entries()) {
-    if (now - info.startedAt > CHAT_SLOT_MAX_AGE_MS) {
-      console.warn(`⚠️ Force-releasing stale chat slot: conversation=${cid}, age=${Math.round((now - info.startedAt) / 1000)}s`);
-      releaseChatSlot(info.userId, cid);
-    }
-  }
-}
-
-function acquireChatSlot(userId, conversationId) {
-  const uid = String(userId || 'anon');
-  const cid = String(conversationId || 'default');
-  
-  // Cleanup stale slots first
-  cleanupStaleSlots();
-  
-  // If same conversation has a stuck slot, force-release it
-  if (activeChatByConversation.has(cid)) {
-    const existing = activeChatByConversation.get(cid);
-    const age = Date.now() - existing.startedAt;
-    if (age > CHAT_SLOT_MAX_AGE_MS) {
-      // Force release stale slot
-      releaseChatSlot(existing.userId, cid);
-    } else {
-      return false; // Same conversation already running (legitimately)
-    }
-  }
-  
-  const byUser = activeChatByUser.get(uid) || 0;
-  if (activeChatTotal >= MAX_ACTIVE_CHAT_TOTAL || byUser >= MAX_ACTIVE_CHAT_PER_USER) {
-    return false;
-  }
-  
-  activeChatTotal += 1;
-  activeChatByUser.set(uid, byUser + 1);
-  activeChatByConversation.set(cid, { userId: uid, startedAt: Date.now() });
-  return true;
-}
-
-function releaseChatSlot(userId, conversationId) {
-  const uid = String(userId || 'anon');
-  const cid = String(conversationId || 'default');
-  
-  // Remove conversation lock
-  activeChatByConversation.delete(cid);
-  
-  const byUser = activeChatByUser.get(uid) || 0;
-  if (byUser <= 1) activeChatByUser.delete(uid);
-  else activeChatByUser.set(uid, byUser - 1);
-  if (activeChatTotal > 0) activeChatTotal -= 1;
-  drainChatQueue();
-}
-
-function removeFromChatQueue(ticketId) {
-  const idx = chatQueue.findIndex((x) => x.id === ticketId);
-  if (idx >= 0) chatQueue.splice(idx, 1);
-}
-
-function drainChatQueue() {
-  let progressed = true;
-  while (progressed && chatQueue.length > 0) {
-    progressed = false;
-    for (let i = 0; i < chatQueue.length; i += 1) {
-      const item = chatQueue[i];
-      if (acquireChatSlot(item.userId, item.conversationId)) {
-        chatQueue.splice(i, 1);
-        if (item.timer) clearTimeout(item.timer);
-        item.resolve(true);
-        progressed = true;
-        break;
-      }
-    }
-  }
-}
-
-async function acquireChatSlotQueued(userId, conversationId, req) {
-  // First cleanup any stale slots
-  cleanupStaleSlots();
-  
-  if (acquireChatSlot(userId, conversationId)) return true;
-
-  // Short wait — if slot doesn't free up quickly, fail fast
-  const ticketId = crypto.randomUUID();
-  return new Promise((resolve, reject) => {
-    const onClose = () => {
-      removeFromChatQueue(ticketId);
-      reject(new Error('Client disconnected while waiting in queue'));
-    };
-
-    const timer = setTimeout(() => {
-      removeFromChatQueue(ticketId);
-      req.off('close', onClose);
-      reject(new Error('Queue timeout'));
-    }, CHAT_QUEUE_TIMEOUT_MS);
-
-    chatQueue.push({
-      id: ticketId,
-      userId: String(userId || 'anon'),
-      conversationId: String(conversationId || 'default'),
-      resolve: () => {
-        req.off('close', onClose);
-        resolve(true);
-      },
-      reject,
-      timer
-    });
-    req.on('close', onClose);
-  });
-}
-
-function waitForApproval(approvalId, timeoutMs = 300000) {
-  return new Promise((resolve, reject) => {
-    const pending = pendingApprovals.get(approvalId);
-    if (!pending) return reject(new Error('Approval tapılmadı'));
-
-    pending._resolve = resolve;
-    pending._reject = reject;
-    pendingApprovals.set(approvalId, pending);
-
-    // 5 dəqiqə timeout
-    setTimeout(() => {
-      if (pendingApprovals.has(approvalId)) {
-        const p = pendingApprovals.get(approvalId);
-        if (p.status === 'pending') {
-          pendingApprovals.delete(approvalId);
-          reject(new Error('Approval vaxtı bitdi (5 dəqiqə)'));
-        }
-      }
-    }, timeoutMs);
-  });
-}
+// FIX: Increased default from 5s to 15s. GUI agent operations (browser launch,
+// screenshot capture, etc.) can stall the queue when a previous request on the
+// same conversation is still streaming/finishing. 5s was too aggressive.
+const CHAT_QUEUE_TIMEOUT_MS = parseInt(process.env.CHAT_QUEUE_TIMEOUT_MS || '15000', 10);
+// FIX: Increased max age from 2min to 5min for GUI workflows which legitimately
+// run longer (browser automation loops, human checkpoint waits).
+const CHAT_SLOT_MAX_AGE_MS = parseInt(process.env.CHAT_SLOT_MAX_AGE_MS || '300000', 10);
+const chatRuntime = createChatRuntime({
+  maxActiveChatTotal: MAX_ACTIVE_CHAT_TOTAL,
+  maxActiveChatPerUser: MAX_ACTIVE_CHAT_PER_USER,
+  chatQueueTimeoutMs: CHAT_QUEUE_TIMEOUT_MS,
+  chatSlotMaxAgeMs: CHAT_SLOT_MAX_AGE_MS
+});
+const {
+  interactions,
+  acquireChatSlotQueued,
+  releaseChatSlot,
+  waitForApproval,
+  supersedeConversation,
+  setConversationAbort,
+  createInteraction,
+  getInteraction,
+  deleteInteraction,
+  listInteractionsByUser,
+  createCheckpoint,
+  resolveCheckpoint
+} = chatRuntime;
 
 function makeUnifiedDiff(oldContent, newContent, filePath) {
   const oldLines = String(oldContent || '').split('\n');
@@ -1065,6 +1461,141 @@ function makeUnifiedDiff(oldContent, newContent, filePath) {
 
 function isSensitiveTool(toolName) {
   return toolName === 'write_file' || toolName === 'file_edit' || toolName === 'multi_file_edit' || toolName === 'run_terminal_command' || toolName === 'git_clone' || toolName === 'git_push' || toolName === 'start_server';
+}
+
+function truncatePreview(value = '', max = 280) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}...`;
+}
+
+function summarizeDiff(diffText = '') {
+  const lines = String(diffText || '').split('\n');
+  let added = 0;
+  let removed = 0;
+  const preview = [];
+
+  for (const line of lines) {
+    if (line.startsWith('+++') || line.startsWith('---')) continue;
+    if (line.startsWith('+')) added += 1;
+    if (line.startsWith('-')) removed += 1;
+    if ((line.startsWith('+') || line.startsWith('-')) && preview.length < 16) {
+      preview.push(line);
+    }
+  }
+
+  return {
+    added,
+    removed,
+    preview: preview.join('\n')
+  };
+}
+
+async function buildApprovalMetadata(toolName, rawArgs, workingDirectory, user) {
+  let parsedArgs = {};
+  try {
+    parsedArgs = JSON.parse(rawArgs || '{}');
+  } catch {
+    parsedArgs = {};
+  }
+
+  const metadata = {
+    riskLevel: 'medium',
+    reason: 'Bu əməliyyat workspace və ya sistem vəziyyətini dəyişə bilər.',
+    title: toolName,
+    summary: '',
+    preview: '',
+    path: '',
+    command: '',
+    diffPreview: '',
+    diffStats: null
+  };
+
+  if (toolName === 'run_terminal_command') {
+    const command = String(parsedArgs.command || '').trim();
+    const destructive = /\b(rm|mv|chmod|chown|git reset|git clean|sudo|dd)\b/i.test(command);
+    metadata.riskLevel = destructive ? 'high' : 'medium';
+    metadata.reason = destructive
+      ? 'Terminal komandası faylları silə, dəyişə və ya sistemə təsir edə bilər.'
+      : 'Terminal komandası layihə fayllarını və ya prosesləri dəyişə bilər.';
+    metadata.title = 'Terminal command';
+    metadata.command = command;
+    metadata.summary = command || 'Terminal command';
+    metadata.preview = truncatePreview(command || 'Komanda göstərilməyib');
+  } else if (toolName === 'write_file' || toolName === 'file_edit' || toolName === 'multi_file_edit') {
+    const targetPath = parsedArgs.path || parsedArgs.file || parsedArgs.cwd || '';
+    const contentPreview =
+      parsedArgs.replacement_content ||
+      parsedArgs.content ||
+      parsedArgs.target_content ||
+      '';
+    metadata.riskLevel = 'high';
+    metadata.reason = 'Bu əməliyyat fayl məzmununu dəyişəcək.';
+    metadata.title = toolName === 'write_file' ? 'Write file' : 'Edit file';
+    metadata.path = targetPath ? path.resolve(workingDirectory, targetPath) : '';
+    metadata.summary = targetPath || 'Fayl dəyişikliyi';
+    metadata.preview = truncatePreview(contentPreview || 'Məzmun preview yoxdur');
+
+    try {
+      if (toolName === 'multi_file_edit' && Array.isArray(parsedArgs.edits) && parsedArgs.edits.length > 0) {
+        const diffs = [];
+        for (const edit of parsedArgs.edits.slice(0, 3)) {
+          const editPath = path.resolve(workingDirectory, edit.path || '');
+          if (!isPathSafe(editPath, workingDirectory, user)) continue;
+          const oldContent = await fs.readFile(editPath, 'utf8');
+          const newContent = String(oldContent).replace(edit.target_content, edit.replacement_content);
+          const diff = makeUnifiedDiff(oldContent, newContent, edit.path || editPath);
+          const summary = summarizeDiff(diff);
+          if (summary.preview) {
+            diffs.push(`# ${edit.path || editPath}\n${summary.preview}`);
+            metadata.diffStats = {
+              added: (metadata.diffStats?.added || 0) + summary.added,
+              removed: (metadata.diffStats?.removed || 0) + summary.removed
+            };
+          }
+        }
+        metadata.diffPreview = diffs.join('\n');
+      } else if (metadata.path && isPathSafe(metadata.path, workingDirectory, user)) {
+        const oldContent = await fs.readFile(metadata.path, 'utf8').catch(() => '');
+        const newContent = toolName === 'write_file'
+          ? String(parsedArgs.content || '')
+          : String(oldContent).replace(parsedArgs.target_content || '', parsedArgs.replacement_content || '');
+        const diff = makeUnifiedDiff(oldContent, newContent, targetPath || metadata.path);
+        const summary = summarizeDiff(diff);
+        metadata.diffPreview = summary.preview;
+        metadata.diffStats = {
+          added: summary.added,
+          removed: summary.removed
+        };
+      }
+    } catch {
+      metadata.diffPreview = '';
+      metadata.diffStats = null;
+    }
+  } else if (toolName === 'git_push') {
+    metadata.riskLevel = 'high';
+    metadata.reason = 'Bu əməliyyat dəyişiklikləri uzaq repoya göndərəcək.';
+    metadata.title = 'Git push';
+    metadata.summary = parsedArgs.branch ? `branch: ${parsedArgs.branch}` : 'current branch';
+    metadata.preview = truncatePreview(JSON.stringify(parsedArgs, null, 2));
+  } else if (toolName === 'git_clone') {
+    metadata.riskLevel = 'medium';
+    metadata.reason = 'Yeni repo workspace daxilinə yazılacaq.';
+    metadata.title = 'Git clone';
+    metadata.summary = parsedArgs.url || 'repository clone';
+    metadata.preview = truncatePreview(JSON.stringify(parsedArgs, null, 2));
+  } else if (toolName === 'start_server') {
+    metadata.riskLevel = 'medium';
+    metadata.reason = 'Yeni server/proses başladılacaq.';
+    metadata.title = 'Start server';
+    metadata.summary = parsedArgs.command || parsedArgs.port || 'server start';
+    metadata.preview = truncatePreview(JSON.stringify(parsedArgs, null, 2));
+  } else {
+    metadata.preview = truncatePreview(JSON.stringify(parsedArgs, null, 2));
+    metadata.summary = truncatePreview(toolName, 120);
+  }
+
+  return metadata;
 }
 
 async function runStreamingCommand(command, cwd, onChunk) {
@@ -1109,410 +1640,17 @@ function isBashCommandSafe(command) {
 // ==========================================
 // Tool Definitions
 // ==========================================
-const TOOLS = [
-    {
-        type: "function",
-        function: {
-            name: "list_directory",
-            description: "Lists the files and folders in a given directory.",
-            parameters: {
-                type: "object",
-                properties: {
-                    path: { type: "string" }
-                },
-                required: ["path"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "glob_search",
-            description: "Find files using a glob pattern (e.g., src/**/*.ts).",
-            parameters: {
-                type: "object",
-                properties: {
-                    pattern: { type: "string" },
-                    cwd: { type: "string" }
-                },
-                required: ["pattern", "cwd"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "read_file",
-            description: "Reads the content of a file.",
-            parameters: {
-                type: "object",
-                properties: {
-                    path: { type: "string" },
-                    start_line: { type: "number", description: "Optional. Startline to view, 1-indexed as usual, inclusive." },
-                    end_line: { type: "number", description: "Optional. Endline to view, 1-indexed as usual, inclusive." }
-                },
-                required: ["path"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "write_file",
-            description: "Creates a new file with the given content.",
-            parameters: {
-                type: "object",
-                properties: {
-                    path: { type: "string" },
-                    content: { type: "string" }
-                },
-                required: ["path", "content"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "file_edit",
-            description: "Edits a specific part of a file by replacing a unique string.",
-            parameters: {
-                type: "object",
-                properties: {
-                    path: { type: "string" },
-                    target_content: { type: "string" },
-                    replacement_content: { type: "string" }
-                },
-                required: ["path", "target_content", "replacement_content"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "check_port_status",
-            description: "Checks if a specific port is active and listening for connections.",
-            parameters: {
-                type: "object",
-                properties: {
-                    port: { type: "number", description: "The port number to check (e.g. 5173)" }
-                },
-                required: ["port"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "run_terminal_command",
-            description: "Runs a safe terminal command in the project directory.",
-            parameters: {
-                type: "object",
-                properties: {
-                    command: { type: "string" }
-                },
-                required: ["command"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "git_clone",
-            description: "Clones a git repository from a URL into the current directory.",
-            parameters: {
-                type: "object",
-                properties: {
-                    url: { type: "string", description: "The GitHub repository URL (HTTPS)" },
-                    folderName: { type: "string", description: "The name of the folder to clone into" }
-                },
-                required: ["url", "folderName"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "github_list_contents",
-            description: "List files and directories in a remote GitHub repository via API without cloning. Useful for remote analysis.",
-            parameters: {
-                type: "object",
-                properties: {
-                    owner: { type: "string", description: "The owner of the repository (e.g. 'octocat')" },
-                    repo: { type: "string", description: "The repository name (e.g. 'Hello-World')" },
-                    path: { type: "string", description: "The path inside the repository to list (default is empty string for root)" }
-                },
-                required: ["owner", "repo"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "github_read_file",
-            description: "Reads a file directly from a remote GitHub repository via API without cloning.",
-            parameters: {
-                type: "object",
-                properties: {
-                    owner: { type: "string", description: "The owner of the repository" },
-                    repo: { type: "string", description: "The repository name" },
-                    path: { type: "string", description: "The full path to the file inside the repo" }
-                },
-                required: ["owner", "repo", "path"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "github_search_code",
-            description: "Search for code, keywords, or symbols in a remote GitHub repository using GitHub's Search API.",
-            parameters: {
-                type: "object",
-                properties: {
-                    owner: { type: "string", description: "The owner of the repository" },
-                    repo: { type: "string", description: "The repository name" },
-                    query: { type: "string", description: "The search query (e.g. 'functionName' or 'finance')" }
-                },
-                required: ["owner", "repo", "query"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "grep_search",
-            description: "Search for a string pattern in the codebase using grep.",
-            parameters: {
-                type: "object",
-                properties: {
-                    query: { type: "string" },
-                    cwd: { type: "string" }
-                },
-                required: ["query", "cwd"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "git_status",
-            description: "Shows the current git status (modified, staged, untracked files).",
-            parameters: {
-                type: "object",
-                properties: {},
-                required: []
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "git_diff",
-            description: "Shows git diff for modified files or a specific file.",
-            parameters: {
-                type: "object",
-                properties: {
-                    file: { type: "string", description: "Optional: specific file to diff" }
-                },
-                required: []
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "git_commit",
-            description: "Creates a git commit with the given message.",
-            parameters: {
-                type: "object",
-                properties: {
-                    message: { type: "string", description: "Commit message" },
-                    files: { type: "array", items: { type: "string" }, description: "Files to stage (optional, stages all if empty)" }
-                },
-                required: ["message"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "analyze_codebase",
-            description: "Analyzes the codebase structure and provides a summary (file count, languages, dependencies).",
-            parameters: {
-                type: "object",
-                properties: {
-                    path: { type: "string", description: "Path to analyze (defaults to current directory)" }
-                },
-                required: []
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "find_definition",
-            description: "Finds the definition of a function, class, or variable in the codebase.",
-            parameters: {
-                type: "object",
-                properties: {
-                    symbol: { type: "string", description: "Symbol name to find" },
-                    cwd: { type: "string" }
-                },
-                required: ["symbol", "cwd"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "find_references",
-            description: "Finds all references/usages of a function, class, or variable.",
-            parameters: {
-                type: "object",
-                properties: {
-                    symbol: { type: "string", description: "Symbol name to find references for" },
-                    cwd: { type: "string" }
-                },
-                required: ["symbol", "cwd"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "web_search",
-            description: "Searches the web for information. Use for documentation, error solutions, latest API references.",
-            parameters: {
-                type: "object",
-                properties: {
-                    query: { type: "string", description: "Search query" }
-                },
-                required: ["query"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "web_fetch",
-            description: "Fetches content from a URL. Use to read documentation pages, API references, or web content.",
-            parameters: {
-                type: "object",
-                properties: {
-                    url: { type: "string", description: "URL to fetch" }
-                },
-                required: ["url"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "run_tests",
-            description: "Runs project tests and returns results. Auto-detects test framework (jest, vitest, pytest, mocha).",
-            parameters: {
-                type: "object",
-                properties: {
-                    filter: { type: "string", description: "Optional: filter tests by name or file pattern" }
-                },
-                required: []
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "git_push",
-            description: "Pushes committed changes to remote repository.",
-            parameters: {
-                type: "object",
-                properties: {
-                    branch: { type: "string", description: "Branch name (defaults to current branch)" }
-                },
-                required: []
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "git_log",
-            description: "Shows recent git commit history.",
-            parameters: {
-                type: "object",
-                properties: {
-                    count: { type: "number", description: "Number of commits to show (default: 10)" }
-                },
-                required: []
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "git_branch",
-            description: "Lists branches or creates a new branch.",
-            parameters: {
-                type: "object",
-                properties: {
-                    name: { type: "string", description: "New branch name to create (omit to list branches)" }
-                },
-                required: []
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "start_server",
-            description: "Starts a development server in background (npm run dev, python -m http.server, etc). Returns after server starts.",
-            parameters: {
-                type: "object",
-                properties: {
-                    command: { type: "string", description: "Server start command (e.g. 'npm run dev', 'npx serve')" },
-                    port: { type: "number", description: "Expected port number" }
-                },
-                required: ["command", "port"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "multi_file_edit",
-            description: "Edits multiple files at once. More efficient than calling file_edit multiple times.",
-            parameters: {
-                type: "object",
-                properties: {
-                    edits: {
-                        type: "array",
-                        items: {
-                            type: "object",
-                            properties: {
-                                path: { type: "string" },
-                                target_content: { type: "string" },
-                                replacement_content: { type: "string" }
-                            },
-                            required: ["path", "target_content", "replacement_content"]
-                        },
-                        description: "Array of file edits to apply"
-                    }
-                },
-                required: ["edits"]
-            }
-        }
-    }
-];
+const TOOLS = getToolDefinitions();
 
 // ==========================================
 // Tool Execution Handler
 // ==========================================
 
 async function handleToolCall(toolCall, workingDirectory, user) {
-    const { name, arguments: argsJson } = toolCall.function;
-    const args = JSON.parse(argsJson);
-
     try {
+        const name = normalizeToolName(toolCall?.function?.name);
+        const argsJson = toolCall?.function?.arguments || '{}';
+        const args = typeof argsJson === 'string' ? JSON.parse(argsJson) : (argsJson || {});
         switch (name) {
             case "check_port_status": {
                 const net = require('net');
@@ -1871,49 +2009,49 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         .filter(f => !f.name.startsWith('.') && f.name !== 'node_modules' && f.name !== 'dist' && f.name !== 'build')
                         .map(f => `${f.isDirectory() ? '📁' : '📄'} ${f.name}`)
                         .join('\n');
-                    
-                    // Check for package.json
-                    let projectInfo = '';
-                    try {
-                        const pkgPath = path.join(analyzePath, 'package.json');
-                        const pkgContent = await fs.readFile(pkgPath, 'utf-8');
-                        const pkg = JSON.parse(pkgContent);
-                        const deps = Object.keys(pkg.dependencies || {}).slice(0, 15).join(', ');
-                        const devDeps = Object.keys(pkg.devDependencies || {}).slice(0, 10).join(', ');
-                        const scripts = Object.keys(pkg.scripts || {}).join(', ');
-                        projectInfo = `\n\n📦 package.json:\n  Ad: ${pkg.name || 'N/A'}\n  Versiya: ${pkg.version || 'N/A'}\n  Scripts: ${scripts}\n  Dependencies: ${deps}\n  DevDeps: ${devDeps}`;
-                    } catch { /* ignore */ }
-                    
-                    // Check for other config files
-                    let configs = '';
-                    const configFiles = ['tsconfig.json', 'vite.config.ts', 'next.config.js', 'webpack.config.js', '.env.example', 'Dockerfile', 'requirements.txt', 'Cargo.toml', 'go.mod'];
-                    const foundConfigs = [];
-                    for (const cf of configFiles) {
-                        try {
-                            await fs.access(path.join(analyzePath, cf));
-                            foundConfigs.push(cf);
-                        } catch { /* ignore */ }
-                    }
-                    if (foundConfigs.length > 0) configs = `\n\n⚙️ Konfiqurasiya faylları: ${foundConfigs.join(', ')}`;
+                    const repoProfile = await detectRepoProfile(analyzePath);
+                    const serializedRepoProfile = serializeRepoProfile(repoProfile);
 
                     // Read main entry point
                     let entryContent = '';
-                    const entryFiles = ['src/App.tsx', 'src/App.jsx', 'src/index.ts', 'src/main.ts', 'index.js', 'app.js', 'main.py', 'src/main.tsx'];
-                    for (const ef of entryFiles) {
+                    for (const ef of repoProfile.entryPoints) {
                         try {
                             const content = await fs.readFile(path.join(analyzePath, ef), 'utf-8');
                             entryContent = `\n\n📝 Entry point (${ef}) - ilk 50 sətir:\n${content.split('\n').slice(0, 50).join('\n')}`;
                             break;
                         } catch { /* ignore */ }
                     }
+
+                    const packageInfo = repoProfile.packageJson
+                      ? [
+                          '',
+                          '📦 package.json:',
+                          `  Ad: ${repoProfile.packageJson.name || 'N/A'}`,
+                          `  Versiya: ${repoProfile.packageJson.version || 'N/A'}`,
+                          `  Scripts: ${Object.keys(repoProfile.packageJson.scripts || {}).join(', ') || 'yoxdur'}`,
+                          `  Dependencies: ${Object.keys(repoProfile.packageJson.dependencies || {}).slice(0, 15).join(', ') || 'yoxdur'}`,
+                          `  DevDeps: ${Object.keys(repoProfile.packageJson.devDependencies || {}).slice(0, 10).join(', ') || 'yoxdur'}`
+                        ].join('\n')
+                      : '';
                     
                     const summary = [
                         `📊 Layihə Analizi: ${analyzePath.split('/').pop()}`,
                         `\n📁 Struktur:\n${structure}`,
+                        `\n🧭 Repo Profili:\n` +
+                          `  Ekosistem: ${serializedRepoProfile.ecosystem}\n` +
+                          `  Package manager: ${serializedRepoProfile.packageManager}\n` +
+                          `  Repo tipi: ${serializedRepoProfile.repoShape}\n` +
+                          `  Framework/stack: ${serializedRepoProfile.frameworks.join(', ') || 'tam aşkarlanmadı'}\n` +
+                          `  Workspace siqnalları: ${serializedRepoProfile.workspaceSignals.join(', ') || 'yoxdur'}\n` +
+                          `  Entry points: ${serializedRepoProfile.entryPoints.join(', ') || 'tapılmadı'}\n` +
+                          `  Build command: ${serializedRepoProfile.buildCommand || 'tapılmadı'}\n` +
+                          `  Test command: ${serializedRepoProfile.testCommand || 'tapılmadı'}\n` +
+                          `  Lint command: ${serializedRepoProfile.lintCommand || 'tapılmadı'}`,
                         `\nÜmumi fayl sayı: ${files.length}`,
                         `Fayl tipləri: ${Object.entries(extensions).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}(${v})`).join(', ')}`,
-                        projectInfo,
-                        configs,
+                        packageInfo,
+                        repoProfile.foundConfigs.length ? `\n\n⚙️ Konfiqurasiya faylları: ${repoProfile.foundConfigs.join(', ')}` : '',
+                        `\n\n[REPO_PROFILE_JSON]\n${JSON.stringify(serializedRepoProfile, null, 2)}`,
                         entryContent
                     ].filter(Boolean).join('\n');
                     
@@ -2049,43 +2187,44 @@ async function handleToolCall(toolCall, workingDirectory, user) {
 
             case "run_tests": {
                 try {
-                    // Auto-detect test framework
-                    let testCmd = null;
-                    try {
-                        const pkgContent = await fs.readFile(path.join(workingDirectory, 'package.json'), 'utf-8');
-                        const pkg = JSON.parse(pkgContent);
-                        if (pkg.scripts?.test && pkg.scripts.test !== 'echo "Error: no test specified" && exit 1') {
-                            testCmd = 'npm test -- --run';
-                        }
-                        if (pkg.devDependencies?.vitest || pkg.dependencies?.vitest) testCmd = 'npx vitest --run';
-                        if (pkg.devDependencies?.jest || pkg.dependencies?.jest) testCmd = 'npx jest --forceExit';
-                    } catch { /* ignore */ }
-                    
-                    if (!testCmd) {
-                        // Check for Python tests
-                        try {
-                            await fs.access(path.join(workingDirectory, 'pytest.ini'));
-                            testCmd = 'python -m pytest --tb=short';
-                        } catch { /* ignore */ }
-                        try {
-                            await fs.access(path.join(workingDirectory, 'tests'));
-                            testCmd = testCmd || 'python -m pytest --tb=short';
-                        } catch { /* ignore */ }
+                    const repoProfile = await detectRepoProfile(workingDirectory);
+                    const validationPlan = buildValidationPlan(repoProfile, workingDirectory, args);
+                    if (!validationPlan.steps.length) {
+                        return "Validation üçün uyğun komanda tapılmadı. analyze_codebase və package.json script-lərini yoxlayın.";
                     }
-                    
-                    if (!testCmd) return "Test framework tapılmadı. package.json-da 'test' script əlavə edin.";
-                    
-                    if (args.filter) testCmd += ` ${args.filter}`;
-                    
-                    const { stdout, stderr } = await execFileAsync('sh', ['-c', testCmd], { 
-                        cwd: workingDirectory, 
-                        timeout: 60000,
-                        env: { ...process.env, CI: 'true', FORCE_COLOR: '0' }
-                    });
-                    return `🧪 Test nəticələri:\n${(stdout + stderr).slice(0, 5000)}`;
+
+                    const maxSteps = typeof args.maxSteps === 'number'
+                      ? Math.max(1, Math.min(validationPlan.steps.length, args.maxSteps))
+                      : validationPlan.steps.length;
+                    const stopOnFailure = args.stopOnFailure !== false;
+                    const results = [];
+
+                    for (const step of validationPlan.steps.slice(0, maxSteps)) {
+                        try {
+                            const { stdout, stderr } = await execFileAsync('sh', ['-c', step.command], {
+                                cwd: workingDirectory,
+                                timeout: 90000,
+                                env: { ...process.env, CI: 'true', FORCE_COLOR: '0' }
+                            });
+                            results.push({
+                                ...step,
+                                status: 'passed',
+                                output: `${stdout || ''}${stderr || ''}`.trim().slice(0, 3000)
+                            });
+                        } catch (e) {
+                            const output = `${e.stdout || ''}${e.stderr || ''}`.trim().slice(0, 3000);
+                            results.push({
+                                ...step,
+                                status: 'failed',
+                                output: output || e.message || 'Komanda uğursuz oldu'
+                            });
+                            if (stopOnFailure) break;
+                        }
+                    }
+
+                    return formatValidationReport(validationPlan, results);
                 } catch (e) {
-                    const output = (e.stdout || '') + (e.stderr || '');
-                    return `🧪 Test nəticələri (bəziləri uğursuz):\n${output.slice(0, 5000)}`;
+                    return `Validation error: ${e.message}`;
                 }
             }
 
@@ -2185,6 +2324,313 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                 }
             }
 
+            case "browser_open": {
+                try {
+                    const session = await getSession(args.sessionId || 'default', {
+                        visible: Boolean(args.visible),
+                        slowMoMs: args.slowMoMs,
+                        browserChannel: args.browserChannel,
+                        executablePath: args.executablePath,
+                        cdpUrl: args.cdpUrl,
+                        persistent: Boolean(args.persistent),
+                        userDataDir: args.userDataDir
+                    });
+                    await session.page.goto(args.url, {
+                        waitUntil: 'domcontentloaded',
+                        timeout: 30000
+                    });
+                    const title = await session.page.title().catch(() => '');
+                    return `Browser opened: ${args.url}${title ? `\nTitle: ${title}` : ''}${session.openedVia ? `\nOpened via: ${session.openedVia}` : ''}${session.cdpAttached && session.cdpUrl ? `\nAttached CDP: ${session.cdpUrl}` : ''}${session.visible ? '\nVisible: true' : ''}${session.slowMo ? `\nSlowMo: ${session.slowMo}ms` : ''}${session.browserChannel ? `\nBrowser channel: ${session.browserChannel}` : ''}${session.executablePath ? `\nExecutable: ${session.executablePath}` : ''}${session.persistent ? `\nPersistent profile: ${session.userDataDir}` : ''}${session.launchWarning ? `\nWarning: ${session.launchWarning}` : ''}`;
+                } catch (e) {
+                    return `Browser open error: ${e.message}`;
+                }
+            }
+
+            case "browser_click": {
+                try {
+                    const session = await getSession(args.sessionId || 'default');
+                    await session.page.locator(args.selector).first().click({ timeout: 15000 });
+                    return `Clicked: ${args.selector}`;
+                } catch (e) {
+                    return `Browser click error: ${e.message}`;
+                }
+            }
+
+            case "browser_type": {
+                try {
+                    const session = await getSession(args.sessionId || 'default');
+                    await session.page.locator(args.selector).first().fill(args.text, { timeout: 15000 });
+                    return `Typed into: ${args.selector}`;
+                } catch (e) {
+                    return `Browser type error: ${e.message}`;
+                }
+            }
+
+            case "browser_screenshot": {
+                try {
+                    const session = await getSession(args.sessionId || 'default');
+                    const outputDir = path.resolve(workingDirectory, 'sandbox', 'browser-shots');
+                    await fs.mkdir(outputDir, { recursive: true });
+                    const filePath = path.join(outputDir, `shot-${Date.now()}.png`);
+                    await session.page.screenshot({
+                        path: filePath,
+                        fullPage: args.fullPage !== false
+                    });
+                    return `Screenshot saved: ${filePath}`;
+                } catch (e) {
+                    return `Browser screenshot error: ${e.message}`;
+                }
+            }
+
+            case "browser_wait_for": {
+                try {
+                    const session = await getSession(args.sessionId || 'default');
+                    const timeout = Number(args.timeoutMs) > 0 ? Number(args.timeoutMs) : 15000;
+                    if (args.selector) {
+                        const selectorState = ['visible', 'hidden', 'attached', 'detached'].includes(args.state)
+                            ? args.state
+                            : 'visible';
+                        await session.page.locator(args.selector).first().waitFor({
+                            state: selectorState,
+                            timeout
+                        });
+                        return `Wait complete: ${args.selector} (${selectorState})`;
+                    }
+
+                    const loadState = ['load', 'domcontentloaded', 'networkidle'].includes(args.state)
+                        ? args.state
+                        : 'load';
+                    await session.page.waitForLoadState(loadState, { timeout });
+                    return `Wait complete: page (${loadState})`;
+                } catch (e) {
+                    return `Browser wait error: ${e.message}`;
+                }
+            }
+
+            case "browser_eval": {
+                try {
+                    const session = await getSession(args.sessionId || 'default');
+                    const expression = String(args.expression || '').trim();
+                    if (!expression) {
+                        return 'Browser eval error: expression is required';
+                    }
+                    const value = await session.page.evaluate(`(() => (${expression}))()`);
+                    return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+                } catch (e) {
+                    return `Browser eval error: ${e.message}`;
+                }
+            }
+
+            case "browser_press": {
+                try {
+                    const session = await getSession(args.sessionId || 'default');
+                    const key = String(args.key || '').trim();
+                    if (!key) {
+                        return 'Browser press error: key is required';
+                    }
+                    if (args.selector) {
+                        const locator = session.page.locator(args.selector).first();
+                        await locator.focus({ timeout: 15000 });
+                        await locator.press(key, { timeout: 15000 });
+                        return `Pressed ${key} on ${args.selector}`;
+                    }
+                    await session.page.keyboard.press(key);
+                    return `Pressed ${key}`;
+                } catch (e) {
+                    return `Browser press error: ${e.message}`;
+                }
+            }
+
+            case "browser_scroll": {
+                try {
+                    const session = await getSession(args.sessionId || 'default');
+                    const x = Number.isFinite(Number(args.x)) ? Number(args.x) : 0;
+                    const y = Number.isFinite(Number(args.y)) ? Number(args.y) : 600;
+                    const to = typeof args.to === 'string' ? args.to : '';
+                    if (args.selector) {
+                        const locator = session.page.locator(args.selector).first();
+                        await locator.evaluate((el, options) => {
+                            if (options.to === 'top') {
+                                el.scrollTo({ top: 0, behavior: 'auto' });
+                                return;
+                            }
+                            if (options.to === 'bottom') {
+                                el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+                                return;
+                            }
+                            el.scrollBy(options.x, options.y);
+                        }, { x, y, to });
+                        return `Scrolled ${args.selector}${to ? ` to ${to}` : ` by (${x}, ${y})`}`;
+                    }
+
+                    await session.page.evaluate((options) => {
+                        if (options.to === 'top') {
+                            window.scrollTo({ top: 0, behavior: 'auto' });
+                            return;
+                        }
+                        if (options.to === 'bottom') {
+                            window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' });
+                            return;
+                        }
+                        window.scrollBy(options.x, options.y);
+                    }, { x, y, to });
+                    return `Scrolled page${to ? ` to ${to}` : ` by (${x}, ${y})`}`;
+                } catch (e) {
+                    return `Browser scroll error: ${e.message}`;
+                }
+            }
+
+            case "browser_extract": {
+                try {
+                    const session = await getSession(args.sessionId || 'default');
+                    const selector = String(args.selector || '').trim();
+                    if (!selector) {
+                        return 'Browser extract error: selector is required';
+                    }
+                    const limit = Number.isFinite(Number(args.limit)) && Number(args.limit) > 0
+                        ? Math.min(Number(args.limit), 50)
+                        : 10;
+                    const fields = Array.isArray(args.fields) && args.fields.length > 0
+                        ? args.fields
+                        : ['text'];
+                    const items = await session.page.locator(selector).evaluateAll((elements, options) => {
+                        return elements.slice(0, options.limit).map((el) => {
+                            const record = {};
+                            for (const field of options.fields) {
+                                if (field === 'text') record.text = el.textContent?.trim() || '';
+                                if (field === 'html') record.html = el.innerHTML || '';
+                                if (field === 'href') record.href = el.getAttribute('href') || '';
+                                if (field === 'src') record.src = el.getAttribute('src') || '';
+                                if (field === 'value') record.value = 'value' in el ? (el.value || '') : '';
+                                if (field === 'ariaLabel') record.ariaLabel = el.getAttribute('aria-label') || '';
+                            }
+                            return record;
+                        });
+                    }, { limit, fields });
+                    return JSON.stringify({
+                        selector,
+                        count: items.length,
+                        items
+                    }, null, 2);
+                } catch (e) {
+                    return `Browser extract error: ${e.message}`;
+                }
+            }
+
+            case "gui_observe": {
+                try {
+                    const payload = await inspectGuiState({
+                        sessionId: args.sessionId || 'default',
+                        workingDirectory,
+                        goal: args.goal || '',
+                        history: Array.isArray(args.history) ? args.history : []
+                    });
+                    return JSON.stringify(payload, null, 2);
+                } catch (e) {
+                    return `GUI observe error: ${e.message}`;
+                }
+            }
+
+            case "gui_act": {
+                try {
+                    const payload = await runGuiAction({
+                        sessionId: args.sessionId || 'default',
+                        workingDirectory,
+                        action: args.action || {},
+                        history: Array.isArray(args.history) ? args.history : []
+                    });
+                    return JSON.stringify(payload, null, 2);
+                } catch (e) {
+                    return `GUI act error: ${e.message}`;
+                }
+            }
+
+            case "gui_step": {
+                try {
+                    const payload = await stepGuiAgent({
+                        sessionId: args.sessionId || 'default',
+                        workingDirectory,
+                        goal: args.goal || '',
+                        action: args.action || null,
+                        history: Array.isArray(args.history) ? args.history : [],
+                        autoGround: Boolean(args.autoGround),
+                        groundingMode: args.groundingMode || 'prompt_only',
+                        minConfidence: Number.isFinite(Number(args.minConfidence)) ? Number(args.minConfidence) : 0.35,
+                        grounding: {
+                          client,
+                          model: effectiveModel
+                        }
+                    });
+                    return JSON.stringify(payload, null, 2);
+                } catch (e) {
+                    return `GUI step error: ${e.message}`;
+                }
+            }
+
+            // ─── Screen Agent Tools (TeamViewer-style) ───
+            case "screen_open_url": {
+                try {
+                    const { openUrl } = require('./gui/screen-agent');
+                    const result = await openUrl(args.url);
+                    // Wait for page to load
+                    await new Promise(r => setTimeout(r, 2000));
+                    return `✅ URL açıldı real brauzerdə: ${args.url}\nİndi login ola bilərsiniz. Hazır olduqda deyin.`;
+                } catch (e) {
+                    return `Screen open_url error: ${e.message}`;
+                }
+            }
+
+            case "screen_screenshot": {
+                try {
+                    const { takeScreenshot, getScreenInfo } = require('./gui/screen-agent');
+                    const shot = await takeScreenshot();
+                    const info = await getScreenInfo();
+                    return `Screenshot alındı.\nÖlçü: ${info.screen.width}x${info.screen.height}\nMouse: (${info.mouse.x}, ${info.mouse.y})\nFayl: ${shot.path}\n[SCREENSHOT_PATH:${shot.path}]`;
+                } catch (e) {
+                    return `Screen screenshot error: ${e.message}`;
+                }
+            }
+
+            case "screen_click": {
+                try {
+                    const { mouseClick } = require('./gui/screen-agent');
+                    const result = await mouseClick(args.x, args.y, { clicks: args.clicks, button: args.button });
+                    return `✅ Klik edildi: (${args.x}, ${args.y})${args.clicks > 1 ? ` [${args.clicks}x]` : ''}`;
+                } catch (e) {
+                    return `Screen click error: ${e.message}`;
+                }
+            }
+
+            case "screen_type": {
+                try {
+                    const { typeText } = require('./gui/screen-agent');
+                    await typeText(args.text, { useClipboard: args.useClipboard });
+                    return `✅ Yazıldı: "${String(args.text || '').slice(0, 50)}"`;
+                } catch (e) {
+                    return `Screen type error: ${e.message}`;
+                }
+            }
+
+            case "screen_press": {
+                try {
+                    const { pressKey } = require('./gui/screen-agent');
+                    await pressKey(args.key);
+                    return `✅ Düymə basıldı: ${args.key}`;
+                } catch (e) {
+                    return `Screen press error: ${e.message}`;
+                }
+            }
+
+            case "screen_scroll": {
+                try {
+                    const { scroll } = require('./gui/screen-agent');
+                    await scroll(args.amount, { x: args.x, y: args.y });
+                    return `✅ Scroll edildi: ${args.amount > 0 ? 'yuxarı' : 'aşağı'} (${Math.abs(args.amount)})`;
+                } catch (e) {
+                    return `Screen scroll error: ${e.message}`;
+                }
+            }
+
             case "multi_file_edit": {
                 if (!Array.isArray(args.edits)) return "Error: edits must be an array";
                 const results = [];
@@ -2211,7 +2657,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
             }
 
             default:
-                return "Unknown tool";
+                return `Unknown tool: ${name}`;
         }
     } catch (e) {
         return `Error executing tool: ${e.message}`;
@@ -2222,7 +2668,9 @@ async function handleToolCall(toolCall, workingDirectory, user) {
 // API Endpoints
 // ==========================================
 
-const localDbPath = path.resolve(__dirname, '../sandbox/local_db.json');
+const localDbPath = process.env.LOCAL_DB_PATH
+  ? path.resolve(process.env.LOCAL_DB_PATH)
+  : path.resolve(__dirname, '../sandbox/local_db.json');
 
 async function readLocalDb() {
   try {
@@ -2635,6 +3083,44 @@ app.post('/api/attachments/extract', async (req, res) => {
   }
 });
 
+app.get('/api/browser-shot', async (req, res) => {
+  const requestedPath = String(req.query.path || '');
+  const workingDirectory = String(req.query.workingDirectory || '');
+  const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
+  const resolvedPath = mapPath(requestedPath, workingDirectory, resolvedWD);
+
+  if (!requestedPath) {
+    return res.status(400).json({ error: 'path required' });
+  }
+
+  if (!isPathSafe(resolvedPath, workingDirectory, req.user)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  if (!/\.png$/i.test(resolvedPath)) {
+    return res.status(400).json({ error: 'Only PNG screenshots are supported' });
+  }
+
+  try {
+    await fs.access(resolvedPath);
+    res.sendFile(resolvedPath);
+  } catch (e) {
+    res.status(404).json({ error: e.message });
+  }
+});
+
+app.get('/api/browsers', async (req, res) => {
+  const installed = listInstalledBrowsers();
+  res.json({
+    browsers: installed,
+    cdpUrl: process.env.GUI_BROWSER_CDP_URL || '',
+    recommendedMode: getRecommendedGuiBrowserMode({
+      installedBrowsers: installed,
+      cdpUrl: process.env.GUI_BROWSER_CDP_URL || ''
+    })
+  });
+});
+
 app.post('/api/task-plan', async (req, res) => {
   const { prompt, workingDirectory } = req.body;
   const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
@@ -2777,7 +3263,7 @@ app.post('/api/project-memory/:projectId', async (req, res) => {
 });
 
 app.post('/api/approvals/:id', async (req, res) => {
-  const pending = pendingApprovals.get(req.params.id);
+  const pending = getInteraction(req.params.id);
   if (!pending) return res.status(404).json({ error: 'Approval tapılmadı' });
   if (pending.userId !== req.user.id) return res.status(403).json({ error: 'Access denied' });
   const decision = req.body?.decision === 'approve' ? 'approved' : 'rejected';
@@ -2788,9 +3274,67 @@ app.post('/api/approvals/:id', async (req, res) => {
   }
 
   // Map-dan təmizlə
-  pendingApprovals.delete(req.params.id);
+  deleteInteraction(req.params.id);
 
   res.json({ success: true, status: decision });
+});
+
+app.post('/api/checkpoints/:id', async (req, res) => {
+  const resolved = resolveCheckpoint(req.params.id, req.body?.decision === 'resume' ? 'resume' : 'cancel');
+  if (!resolved) return res.status(404).json({ error: 'Checkpoint tapılmadı' });
+  if (resolved.userId !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+
+  if (resolved.kind === 'login' && resolved.workflow === 'gui') {
+    const orchestration = resolveOrchestrationConfig(true, 'gui', 'login oldum');
+    const runManager = createRunManager(orchestration, crypto.randomUUID());
+    return handleGuiLoginCheckpointAction({
+      res,
+      checkpoint: resolved,
+      orchestration,
+      runManager,
+      resolvedWD: resolveWorkingDirectory(req.body?.workingDirectory, req.user),
+      reqUser: req.user,
+      handleToolCall,
+      normalizeUserFacingError
+    });
+  }
+
+  return res.json({ success: true, status: resolved.decision });
+});
+
+app.get('/api/interactions', async (req, res) => {
+  const items = listInteractionsByUser(req.user?.id).map((item) => ({
+    id: item.id,
+    kind: item.kind,
+    createdAt: item.createdAt,
+    approval: item.kind === 'approval' ? {
+      approvalId: item.id,
+      tool: item.toolCall?.function?.name || '',
+      args: item.toolCall?.function?.arguments || '{}',
+      conversationId: item.conversationId,
+      runId: item.runId,
+      phaseRole: item.phaseRole,
+      expiresAt: item.expiresAt,
+      meta: item.meta
+    } : undefined,
+    checkpoint: item.kind === 'checkpoint' ? {
+      id: item.id,
+      kind: item.kind,
+      workflow: item.workflow,
+      sessionId: item.sessionId,
+      conversationId: item.conversationId,
+      runId: item.runId,
+      phaseRole: item.phaseRole,
+      expiresAt: item.expiresAt,
+      title: item.title || 'Checkpoint',
+      message: item.message || '',
+      resumePrompt: item.resumePrompt || '',
+      cancelPrompt: item.cancelPrompt,
+      resumeLabel: item.resumeLabel,
+      cancelLabel: item.cancelLabel
+    } : undefined
+  }));
+  res.json({ interactions: items });
 });
 
 app.post('/api/tts', async (req, res) => {
@@ -2899,17 +3443,55 @@ app.get('/api/signed-url', async (req, res) => {
 });
 
 app.post('/api/chat', async (req, res) => {
-    const { messages, apiKey, model, workingDirectory, baseUrl, projectId, conversationId, safeMode = true } = req.body;
+    const {
+      messages,
+      apiKey,
+      model,
+      workingDirectory,
+      baseUrl,
+      projectId,
+      conversationId,
+      safeMode = true,
+      orchestrationMode = false,
+      workflow = 'default',
+      guiBrowserMode = 'cdp',
+      guiBrowserPath = '',
+      guiBrowserCdpUrl = ''
+    } = req.body;
+
+    const lastUserMsgForQueue = Array.isArray(messages)
+      ? [...messages].reverse().find((m) => m.role === 'user')
+      : null;
+    const latestUserTextForQueue = String(lastUserMsgForQueue?.content || '');
+    const isGuiFastPathRequest = workflow === 'gui' && (
+      isGuiLoginCheckpointRequest(latestUserTextForQueue) ||
+      isGuiLoginResumeRequest(latestUserTextForQueue) ||
+      isGuiObserveSelfTestRequest(latestUserTextForQueue)
+    );
+
     let slotAcquired = false;
-    try {
-      await acquireChatSlotQueued(req.user?.id, conversationId, req);
-      slotAcquired = true;
-    } catch (queueErr) {
-      res.setHeader('Retry-After', '5');
-      const msg = queueErr?.message === 'Queue timeout'
-        ? 'Bu söhbətdə əvvəlki sorğu hələ davam edir. Bir neçə saniyə gözləyin.'
-        : 'Sorğu göndərilə bilmədi. Yenidən cəhd edin.';
-      return res.status(503).json({ error: msg });
+    if (!isGuiFastPathRequest) {
+      try {
+        const superseded = supersedeConversation(req.user?.id, conversationId);
+        if (superseded) {
+          console.log(`🔁 Superseded active chat for conversation=${String(conversationId || 'default')}`);
+        }
+        await acquireChatSlotQueued(req.user?.id, conversationId, req);
+        slotAcquired = true;
+      } catch (queueErr) {
+        res.setHeader('Retry-After', '5');
+        const isQueueTimeout = queueErr?.message === 'Queue timeout';
+        const isClientDisconnect = queueErr?.message === 'Client disconnected while waiting in queue';
+        const msg = isQueueTimeout
+          ? 'Bu söhbətdə əvvəlki sorğu hələ davam edir. Bir neçə saniyə gözləyin.'
+          : isClientDisconnect
+            ? 'Əvvəlki sorğu bağlandığı üçün bu sorğu növbədən çıxdı.'
+            : 'Sorğu növbəyə alına bilmədi. Yenidən cəhd edin.';
+        return res.status(409).json({
+          error: msg,
+          code: isQueueTimeout ? 'CHAT_QUEUE_BUSY' : (isClientDisconnect ? 'CHAT_QUEUE_DISCONNECTED' : 'CHAT_QUEUE_FAILED')
+        });
+      }
     }
     
     // SEC-1: Verify workingDirectory against ALLOWED_DIRS
@@ -2942,10 +3524,7 @@ app.post('/api/chat', async (req, res) => {
     }
     // ---------------------------------------------------
 
-    if (!ALLOWED_DIRS.some(base => {
-        const r = path.relative(base, resolvedWD);
-        return !r.startsWith('..') && !path.isAbsolute(r);
-    })) {
+    if (!isWorkingDirectoryAllowed(resolvedWD)) {
         return res.status(403).json({ error: "Unauthorized working directory" });
     }
     // We do not ensureDir for user absolute paths because they already exist and we shouldn't create them if they don't
@@ -2960,17 +3539,94 @@ app.post('/api/chat', async (req, res) => {
     // FUNC-FIX: classify the LATEST user message for the new "auto" model so
     // we can pick fast/local vs smart/cloud automatically.
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+    const latestUserText = String(lastUserMsg?.content || '');
+    const pendingGuiLoginCheckpoint = listInteractionsByUser(req.user?.id).find((item) => (
+      item.kind === 'checkpoint' &&
+      item.workflow === 'gui' &&
+      item.sessionId &&
+      (!conversationId || !item.conversationId || String(item.conversationId) === String(conversationId))
+    ));
+    const shouldForceGuiResume = isGuiLoginResumeRequest(latestUserText) && Boolean(pendingGuiLoginCheckpoint);
+    const effectiveWorkflow = shouldForceGuiResume ? 'gui' : workflow;
     const autoIntent = classifyTaskComplexity({
       userMessage: lastUserMsg?.content || '',
       messageHistoryLen: messages.length,
       hasAttachments: Array.isArray(lastUserMsg?.attachments) && lastUserMsg.attachments.length > 0
     });
+    const earlyOrchestration = resolveOrchestrationConfig(orchestrationMode, effectiveWorkflow, latestUserText);
+
+    if (earlyOrchestration.workflow === 'gui' && isGuiLoginResumeRequest(latestUserText)) {
+      const runManager = createRunManager(earlyOrchestration, crypto.randomUUID());
+      await handleGuiLoginResume({
+        res,
+        orchestration: earlyOrchestration,
+        runManager,
+        resolvedWD,
+        reqUser: req.user,
+        checkpoint: pendingGuiLoginCheckpoint,
+        latestUserText,
+        handleToolCall,
+        normalizeUserFacingError
+      });
+      return;
+    }
+
+    if (earlyOrchestration.workflow === 'gui' && isGuiLoginCheckpointRequest(latestUserText)) {
+      const runManager = createRunManager(earlyOrchestration, crypto.randomUUID());
+      await handleGuiLoginCheckpoint({
+        res,
+        orchestration: earlyOrchestration,
+        runManager,
+        resolvedWD,
+        conversationId,
+        reqUser: req.user,
+        handleToolCall,
+        normalizeUserFacingError,
+        browserOpenArgs: buildGuiBrowserOpenArgs({
+          url: 'https://www.wix.com',
+          sessionId: 'gui-wix-live',
+          guiBrowserMode,
+          guiBrowserPath,
+          guiBrowserCdpUrl,
+          defaultCdpUrl: process.env.GUI_BROWSER_CDP_URL || 'http://127.0.0.1:9222',
+          fallbackChromePath: findInstalledChromePath()
+        }),
+        createCheckpoint
+      });
+      return;
+    }
+
+    if (earlyOrchestration.workflow === 'gui' && isGuiObserveSelfTestRequest(latestUserText)) {
+      const runManager = createRunManager(earlyOrchestration, crypto.randomUUID());
+      await handleGuiSelfTest({
+        res,
+        orchestration: earlyOrchestration,
+        runManager,
+        resolvedWD,
+        reqUser: req.user,
+        handleToolCall,
+        normalizeUserFacingError,
+        browserOpenArgs: buildGuiBrowserOpenArgs({
+          url: 'https://example.com',
+          sessionId: 'gui-self-test',
+          guiBrowserMode,
+          guiBrowserPath,
+          guiBrowserCdpUrl,
+          defaultCdpUrl: process.env.GUI_BROWSER_CDP_URL || 'http://127.0.0.1:9222',
+          fallbackChromePath: findInstalledChromePath()
+        })
+      });
+      return;
+    }
 
     const providerCandidates = buildProviderCandidates({
       frontendApiKey,
       frontendBaseUrl,
       frontendModel,
-      autoIntent
+      autoIntent,
+      env: process.env,
+      parseProviderPoolFromEnv,
+      looksLikeOllamaModel
     });
 
     if (providerCandidates.length === 0) {
@@ -2978,15 +3634,8 @@ app.post('/api/chat', async (req, res) => {
             error: "Süni İntellekt API Açarı tapılmadı! Layihəni lokalda (Railway-dən asılı olmadan) işlətmək üçün layihə qovluğundakı `.env` faylına OPENAI_API_KEY və OPENAI_BASE_URL açarlarını əlavə edin."
         });
     }
-    let activeProvider = providerCandidates.find((p) => canUseProviderNow(p.id)) || providerCandidates[0];
-    let client = new OpenAI({ 
-      baseURL: activeProvider.baseURL, 
-      apiKey: activeProvider.apiKey,
-      defaultHeaders: {
-        'HTTP-Referer': 'https://bahai-agent.app',
-        'X-Title': 'bahAI Agent'
-      }
-    });
+    let activeProvider = providerCandidates.find((p) => providerRuntime.canUseProviderNow(p.id)) || providerCandidates[0];
+    let client = buildOpenAIClient(activeProvider);
     let effectiveModel = activeProvider.model;
     console.log(`🤖 /api/chat | provider_candidates=${providerCandidates.length} | active=${activeProvider.id} | model=${effectiveModel}${frontendModel === 'auto' ? ` | auto_intent=${autoIntent}` : ''}`);
 
@@ -2995,9 +3644,17 @@ app.post('/api/chat', async (req, res) => {
       ? { type: 'auto_route', intent: autoIntent, chosenModel: effectiveModel, providerId: activeProvider.id }
       : null;
 
-    const isLocalOrFlakyModel = isLocalMode() || 
-      !effectiveModel || 
-      /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(effectiveModel);
+    const providerLooksLocal =
+      String(activeProvider.baseURL || '').includes('localhost') ||
+      String(activeProvider.baseURL || '').includes('127.0.0.1') ||
+      String(activeProvider.baseURL || '').includes('11434') ||
+      String(activeProvider.baseURL || '').includes('1234');
+    const isLocalOrFlakyModel =
+      providerLooksLocal ||
+      !effectiveModel ||
+      /qwen|ollama|llama|local|nemotron/i.test(effectiveModel);
+
+    const auditStyleRequest = isAuditStyleRequest(latestUserText);
 
     let sysPrompt = `Sən bahAI İDE rəsmi və peşəkar AI Kodlaşdırma Agentisən. Project Root: ${resolvedWD}.
 Sən dünya səviyyəli proqramçı, sistem memarı və UI/UX ekspertisən. Qwen 2.5 Coder modelləri üçün xüsusi olaraq optimallaşdırılmısan.
@@ -3022,6 +3679,30 @@ Sənin əsas məqsədin kod bazasını mükəmməl analiz etmək, 100% işlək, 
 
 Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cavab ver.`;
 
+    if (auditStyleRequest) {
+      sysPrompt += `
+
+AUDIT REJİMİ:
+- İstifadəçi audit istəyirsə, əvvəlcə kodu oxu və konkret findings ver.
+- Düzəlişə keçməzdən əvvəl istifadəçidən təsdiq gözlə, əgər o hələ düzəltməyi istəməyibsə.
+- "Xəta var, istəsən düzəldim" kimi ümumi və boş cümlə yazma. Konkret fayl, risk və səbəb göstər.
+- Əgər hələ fayl oxumamısansa, problem uydurma. Əvvəl tool ilə oxu, sonra danış.
+- Audit cavabında prioritet findings-first olsun, sonra qısa yekun ver.`;
+    }
+
+    // Screen Agent capabilities — compact version for token-limited APIs
+    sysPrompt += `
+
+🖥️ EKRAN AGENTI:
+Sən ekranı görüb mouse/keyboard idarə edə bilirsən. Browser açma — istifadəçi özü açar.
+
+ALƏTLƏR: screen_screenshot, screen_click(x,y), screen_type(text), screen_press(key), screen_scroll(amount), screen_open_url(url)
+
+QAYDALAR:
+- "Ekrana bax" desə → screen_screenshot çağır
+- Klik etməzdən əvvəl icazə al
+- Publish/Delete/Payment düymələrinə HEÇ VAXT toxunma`;
+
     if (isLocalOrFlakyModel) {
        // FUNC-FIX: previous prompt was 700+ lines of "QƏTİ QADAĞANDIR" rules
        // which weak local models (Gemma/Qwen 7B) couldn't follow and ended up
@@ -3037,10 +3718,24 @@ QAYDALAR:
 3. Cavabın HƏMİŞƏ Azərbaycan dilində olsun. JSON formatında istifadəçiyə cavab vermə (yalnız tool call üçün JSON).
 4. Hər tool call-dan sonra qısa izah yaz: nə etdiyin və növbəti addım.
 5. Sual aydın deyilsə, ÖZ bildiyin ən məntiqli interpretasiyaya əməl et — soruşma.
+6. Uydurma nəticə yazma. Faylı oxumadan "xəta tapdım", "src tapdım", "problem var" kimi danışmaq qadağandır.
+7. "read_file alətini JSON formatında çağırın" kimi istifadəçiyə tool təlimatı vermə. Tool-u özün çağır.
+8. Heç vaxt \`{"response":"..."}\` və ya buna bənzər saxta cavab formatı yaratma.
+9. Əgər istifadəçi audit istəyirsə, əvvəl findings ver, düzəltməyə icazə istəmədən keçmə.
+10. Əgər path boş və ya yanlış görünürsə, bunu qısa və peşəkar de; kobud və qeyri-professional cümlə qurma.
 
 CAVAB FORMATI:
 - Tool çağırışı üçün: tək JSON blok (aşağıdakı format).
 - İstifadəçiyə son cavab üçün: adi Markdown mətn (kod blokları + izah).`;
+
+      if (auditStyleRequest) {
+        sysPrompt += `
+
+AUDIT REJİMİ:
+- Əvvəl list_directory / read_file ilə fakt topla.
+- Son cavabda konkret findings yaz: fayl, problem, risk.
+- İstifadəçi "mənimlə paylaş" və ya "əvvəl göstər" deyirsə, yalnız findings paylaş; kodu dəyişmə.`;
+      }
     }
 
     let modelMessages = [];
@@ -3065,374 +3760,170 @@ CAVAB FORMATI:
 
     let fullSysPrompt = sysPrompt;
       
+    const hasAttachmentInRequest = Array.isArray(messages) && messages.some((m) => Array.isArray(m?.attachments) && m.attachments.length > 0);
+    const orchestration = resolveOrchestrationConfig(orchestrationMode, workflow, latestUserText);
+    const runId = crypto.randomUUID();
+    const runManager = createRunManager(orchestration, runId);
+    const initialRole = runManager.currentPhase()?.role || orchestration.agents?.[0] || 'Solo Agent';
+    const initialTools = getToolsForRole(initialRole, orchestration.toolProfile);
     if (isLocalOrFlakyModel) {
-      fullSysPrompt += generateToolsSystemPrompt();
+      fullSysPrompt += generateToolsSystemPrompt(initialTools);
     }
 
-    const memoryPrompt = `Layihə yaddaşı: ${JSON.stringify(projectMemory)}`;
-    const apiMessages = [{ role: 'system', content: `${fullSysPrompt}\n${memoryPrompt}` }, ...modelMessages];
+    const repoProfilePrompt = projectMemory?.repoProfile
+      ? `Repo Profili: ${JSON.stringify(projectMemory.repoProfile)}`
+      : '';
+    const validationHintPrompt = projectMemory?.repoProfile
+      ? buildValidationHint(projectMemory.repoProfile)
+      : '';
+    const executionMemoryHint = buildExecutionMemoryHint(projectMemory);
+    const tokenDisciplinePrompt = orchestration?.routing?.tokenDiscipline
+      ? `Token büdcəsi: ${JSON.stringify(orchestration.routing.tokenDiscipline)}`
+      : '';
+    const memoryPrompt = `Layihə yaddaşı: ${JSON.stringify(projectMemory)}${repoProfilePrompt ? `\n${repoProfilePrompt}` : ''}${executionMemoryHint ? `\n${executionMemoryHint}` : ''}${tokenDisciplinePrompt ? `\n${tokenDisciplinePrompt}` : ''}`;
+    const apiMessages = [{ role: 'system', content: `${fullSysPrompt}\n${memoryPrompt}${validationHintPrompt ? `\n${validationHintPrompt}` : ''}` }, ...modelMessages];
     
     if (isLocalOrFlakyModel) {
       apiMessages.push({
         role: 'system',
-        content: "XATIRLATMA: Sən birbaşa faylları oxuya, dəyişə və command icra edə bilən AI kodlaşdırma agentisən. MÜTLƏQ verilmiş JSON tool (read_file, grep_search, list_directory, və s.) çağırışlarını istifadə et. Qətiyyən xəyalından uydurma (məsələn, 'faylı oxudum, xəta tapdım' demə)! Real faylları oxumaq üçün mütləq JSON çağırışı et!"
+        content: "XATIRLATMA: Sən birbaşa faylları oxuya, dəyişə və command icra edə bilən AI kodlaşdırma agentisən. MÜTLƏQ verilmiş JSON tool (read_file, grep_search, list_directory, və s.) çağırışlarını istifadə et. Qətiyyən xəyalından uydurma (məsələn, 'faylı oxudum, xəta tapdım' demə)! Real faylları oxumaq üçün mütləq JSON çağırışı et! İstifadəçiyə tool necə çağırılmalıdır deyə təlimat yazma; tool-u özün çağır."
       });
     }
 
-    const hasAttachmentInRequest = Array.isArray(messages) && messages.some((m) => Array.isArray(m?.attachments) && m.attachments.length > 0);
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
-
-    // FUNC-FIX: emit auto-routing decision so the UI can show what was picked.
-    if (pendingAutoRouteEvent) {
-      res.write(`data: ${JSON.stringify(pendingAutoRouteEvent)}\n\n`);
+    if (auditStyleRequest) {
+      apiMessages.push({
+        role: 'system',
+        content: `İstifadəçi bütün layihə qovluğunu audit etməyini istəyir, tək fayl soruşmur. Birinci addımda mütləq \`list_directory\` və ya \`analyze_codebase\` ilə Project Root (${resolvedWD}) üzrə audit başlat. İstifadəçidən "hansı faylı oxuyum?" deyə soruşma.`
+      });
     }
 
-    let currentMessages = [...apiMessages];
-    let step = 0;
-    let attachmentRetryUsed = false;
-    let deepSeekRecoveryUsed = false;
-    let providerNoToolsFallbackUsed = false;
-    let clientDisconnected = false;
-
-    // Client disconnect detection
-    req.on('close', () => {
-        clientDisconnected = true;
+    initSse(res);
+    emitOrchestrationPrelude(res, {
+      runId,
+      orchestration,
+      runManager,
+      pendingAutoRouteEvent
     });
-
-    const initialPlan = [
-      'Oxunacaq faylları müəyyən et',
-      'Dəyişiklik planını hazırla',
-      'Diff/Approval ilə tətbiq et',
-      'Build/Test/Health yoxlaması apar'
-    ];
-    res.write(`data: ${JSON.stringify({ type: 'task_plan', items: initialPlan })}\n\n`);
+    const activeProviderRef = { current: activeProvider };
+    const clientRef = { current: client };
+    const effectiveModelRef = { current: effectiveModel };
+    const llmTimeoutMs = parseInt(process.env.LLM_TIMEOUT_MS || '180000', 10);
 
     try {
-        while (step < MAX_STEPS && !clientDisconnected) {
-            step++;
-
-            // Streaming ilə API çağırışı (default 180s; lokal/yavaş modellər üçün env ilə uzadıla bilər)
-            const llmTimeoutMs = parseInt(process.env.LLM_TIMEOUT_MS || '180000', 10);
-            const abortController = new AbortController();
-            const timeoutId = setTimeout(() => abortController.abort(), llmTimeoutMs);
-
-            let stream;
-            let shouldRetryWithDeepSeekRecovery = false;
-            try {
-                const apiInputMessages = await normalizeMessagesForModel(currentMessages, effectiveModel);
-                stream = await client.chat.completions.create({
-                    model: effectiveModel,
-                    messages: apiInputMessages,
-                    tools: isLocalOrFlakyModel ? undefined : TOOLS,
-                    temperature: 0.2,
-                    stream: true
-                }, { signal: abortController.signal });
-            } catch (apiErr) {
-                let currentErr = apiErr;
-                const isRetryable = (() => {
-                  const st = currentErr?.status || currentErr?.code;
-                  const msg = String(currentErr?.message || '').toLowerCase();
-                  if (st === 401) return true;
-                  if (st === 429 || st === 500 || st === 502 || st === 503 || st === 504) return true;
-                  if (st === 400 && msg.includes('provider returned error')) return true;
-                  if (!st && (msg.includes('network') || msg.includes('timeout') || msg.includes('fetch failed'))) return true;
-                  return false;
-                })();
-
-                if (isRetryable && providerCandidates.length > 1) {
-                  markProviderFailure(activeProvider.id);
-                  const alternatives = providerCandidates.filter((p) => p.id !== activeProvider.id && canUseProviderNow(p.id));
-                  for (const alt of alternatives) {
-                    try {
-                      const altClient = new OpenAI({ 
-                        baseURL: alt.baseURL, 
-                        apiKey: alt.apiKey,
-                        defaultHeaders: {
-                          'HTTP-Referer': 'https://bahai-agent.app',
-                          'X-Title': 'bahAI Agent'
-                        }
-                      });
-                      const altApiInputMessages = await normalizeMessagesForModel(currentMessages, alt.model);
-                      const altIsLocal = /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(alt.model);
-                      stream = await altClient.chat.completions.create({
-                        model: alt.model,
-                        messages: altApiInputMessages,
-                        tools: altIsLocal ? undefined : TOOLS,
-                        temperature: 0.2,
-                        stream: true
-                      }, { signal: abortController.signal });
-                      activeProvider = alt;
-                      client = altClient;
-                      effectiveModel = alt.model;
-                      markProviderSuccess(alt.id);
-                      console.log(`🔁 Provider failover: switched to ${alt.id}`);
-                      break;
-                    } catch (altErr) {
-                      currentErr = altErr;
-                      markProviderFailure(alt.id);
-                    }
-                  }
-                } else {
-                  markProviderFailure(activeProvider.id);
-                }
-                clearTimeout(timeoutId);
-                if (stream) {
-                  // fallback succeeded
-                } else if (currentErr.name === 'AbortError') {
-                    const sec = Math.round(llmTimeoutMs / 1000);
-                    res.write(`data: ${JSON.stringify({ type: 'error', message: `Model ${sec}s ərzində cavab vermədi. Daha kiçik model (məs. Qwen 2.5 Coder 7B) sınayın və ya \`LLM_TIMEOUT_MS\` env-i artırın.` })}\n\n`);
-                    break;
-                } else {
-                  const status = currentErr.status || currentErr.code || 'unknown';
-                  const errText = String(currentErr.message || '').toLowerCase();
-                  const isDeepSeekModel = String(effectiveModel || '').toLowerCase().includes('deepseek');
-                  if (
-                    !deepSeekRecoveryUsed &&
-                    isDeepSeekModel &&
-                    String(status) === '400' &&
-                    (errText.includes('provider returned error') || errText.includes('reasoning_content') || errText.includes('tool_call'))
-                  ) {
-                    deepSeekRecoveryUsed = true;
-                    currentMessages = buildDeepSeekRecoveryMessages(currentMessages);
-                    shouldRetryWithDeepSeekRecovery = true;
-                  }
-
-                  if (shouldRetryWithDeepSeekRecovery) {
-                    res.write(`data: ${JSON.stringify({ type: 'debug', info: 'DeepSeek recovery retry activated' })}\n\n`);
-                    continue;
-                  }
-
-                  // Generic provider 400 fallback: retry once with no tools and non-stream request.
-                  if (!providerNoToolsFallbackUsed && String(status) === '400' && errText.includes('provider returned error')) {
-                    providerNoToolsFallbackUsed = true;
-                    try {
-                      const basic = await client.chat.completions.create({
-                        model: effectiveModel,
-                        messages: buildDeepSeekRecoveryMessages(currentMessages),
-                        temperature: 0.2
-                      });
-                      const simpleMsg = basic?.choices?.[0]?.message || { role: 'assistant', content: 'Cavab alınmadı.' };
-                      currentMessages.push(simpleMsg);
-                      res.write(`data: ${JSON.stringify({ type: 'assistant_message', message: simpleMsg })}\n\n`);
-                      break;
-                    } catch (fallbackErr) {
-                      currentErr = fallbackErr;
-                    }
-                  }
-
-                  // Detailed API error logging
-                  console.error(`❌ API Error [${status}]:`, currentErr.message);
-                  console.error(`❌ Full error:`, JSON.stringify({ status: currentErr.status, headers: currentErr.headers, body: currentErr.error || currentErr.body }, null, 2));
-                  let userMsg = `API xətası: ${currentErr.message}`;
-                  const errLower = String(currentErr.message || '').toLowerCase();
-                  const isOllamaUrl = String(activeProvider.baseURL || '').includes('11434') || String(activeProvider.baseURL || '').includes('ollama');
-
-                  if (currentErr.status === 401) {
-                      userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
-                  } else if (currentErr.status === 429) {
-                      userMsg = 'API limiti aşıldı (rate limit). 1-2 dəqiqə gözləyib yenidən cəhd edin.';
-                  } else if (currentErr.status === 503) {
-                      userMsg = 'AI servisi müvəqqəti əlçatmazdır. Mesajınız çox böyük ola bilər — daha qısa mesaj göndərin və ya bir neçə dəqiqə gözləyin.';
-                  } else if (currentErr.status === 404) {
-                      if (isOllamaUrl) {
-                          userMsg = `Ollama-da "${effectiveModel}" modeli quraşdırılmayıb. Terminal-da bunu icra edin: \`ollama pull ${effectiveModel}\``;
-                      } else {
-                          userMsg = `Model tapılmadı: "${effectiveModel}". Ayarlardan model adını yoxlayın.`;
-                      }
-                  } else if (
-                      // FUNC-FIX: actionable error when Ollama isn't running.
-                      // Previously users just saw "Connection error" and didn't
-                      // know that they needed `ollama serve`.
-                      isOllamaUrl && (
-                          errLower.includes('econnrefused') ||
-                          errLower.includes('connection error') ||
-                          errLower.includes('fetch failed') ||
-                          errLower.includes('econnreset')
-                      )
-                  ) {
-                      userMsg = `🦙 Ollama xidməti işləmir (${activeProvider.baseURL}). Terminal-da bunu icra edin:\n\n\`\`\`\nollama serve\n\`\`\`\n\nSonra modeli yükləyin: \`ollama pull ${effectiveModel}\`\n\nVə ya AYARLAR-dan Cloud modelinə (Claude Sonnet 4.5 və ya 'Auto') keçin.`;
-                  } else if (errLower.includes('connection error') || errLower.includes('fetch failed') || errLower.includes('econnrefused')) {
-                      userMsg = `Şəbəkə xətası: ${activeProvider.baseURL}-ə qoşula bilmədim. İnternet bağlantınızı və baseURL-i yoxlayın.`;
-                  }
-                  res.write(`data: ${JSON.stringify({ type: 'error', message: userMsg })}\n\n`);
-                  break;
-                }
-            } finally {
-                clearTimeout(timeoutId);
-            }
-
-            let accumulatedContent = '';
-            let accumulatedReasoning = '';
-            let accumulatedToolCalls = [];
-            let finishReason = null;
-
-            for await (const chunk of stream) {
-              const delta = chunk.choices[0]?.delta;
-              if (!delta) continue;
-
-              // Mətn content-i real-time göndər
-              if (delta.content) {
-                accumulatedContent += delta.content;
-                res.write(`data: ${JSON.stringify({ type: 'assistant_delta', content: delta.content })}\n\n`);
-              }
-
-              // DeepSeek/Nemotron thinking mode compatibility:
-              // reasoning_content must be echoed back in subsequent turns.
-              if (delta.reasoning_content) {
-                accumulatedReasoning += delta.reasoning_content;
-                // Send a "thinking" indicator so user sees activity
-                if (accumulatedReasoning.length <= 5) {
-                  res.write(`data: ${JSON.stringify({ type: 'assistant_delta', content: '🤔 *Düşünürəm...*\n\n' })}\n\n`);
-                }
-              }
-
-              // Tool call-ları yığ
-              if (delta.tool_calls) {
-                for (const tc of delta.tool_calls) {
-                  const idx = tc.index ?? 0;
-                  if (!accumulatedToolCalls[idx]) {
-                    accumulatedToolCalls[idx] = { id: tc.id || '', type: 'function', function: { name: '', arguments: '' } };
-                  }
-                  if (tc.id) accumulatedToolCalls[idx].id = tc.id;
-                  if (tc.function?.name) accumulatedToolCalls[idx].function.name += tc.function.name;
-                  if (tc.function?.arguments) accumulatedToolCalls[idx].function.arguments += tc.function.arguments;
-                }
-              }
-
-              if (chunk.choices[0]?.finish_reason) {
-                finishReason = chunk.choices[0].finish_reason;
-              }
-            }
-
-            // Tamamlanmış mesajı yarat
-            let normalizedToolCalls = accumulatedToolCalls
-              .filter((tc) => tc && tc.function && tc.function.name)
-              .map((tc, idx) => ({
-                id: tc.id || `toolcall_${step}_${idx}_${Date.now()}`,
-                type: 'function',
-                function: {
-                  name: tc.function.name,
-                  arguments: tc.function.arguments || '{}'
-                }
-              }));
-
-            // Universal Tool Call Fallback Parser for text-printed JSON blocks (e.g. from local Ollama/Qwen)
-            let textToolCalls = [];
-            if (accumulatedContent) {
-              try {
-                const parseResult = extractTextToolCalls(accumulatedContent);
-                accumulatedContent = parseResult.cleanedText;
-                textToolCalls = parseResult.toolCalls.map((tc, idx) => ({
-                  id: `toolcall_text_${step}_${idx}_${Date.now()}`,
-                  type: 'function',
-                  function: {
-                    name: tc.name,
-                    arguments: tc.arguments
-                  }
-                }));
-              } catch (parseErr) {
-                console.error("⚠️ Fallback tool call parser xətası:", parseErr);
-              }
-            }
-
-            if (textToolCalls.length > 0) {
-              console.log(`🔌 Intercepted ${textToolCalls.length} raw text tool call(s):`, JSON.stringify(textToolCalls));
-              if (textToolCalls.length > 1) {
-                console.log('⚠️ Multiple tool calls found in text. To prevent hallucination loop, keeping only the first one.');
-                textToolCalls = [textToolCalls[0]];
-              }
-              normalizedToolCalls = [...normalizedToolCalls, ...textToolCalls];
-            }
-
-            const msg = {
-              role: 'assistant',
-              content: accumulatedContent || null,
-              reasoning_content: accumulatedReasoning || undefined,
-              tool_calls: normalizedToolCalls.length > 0 ? normalizedToolCalls : undefined
-            };
-
-            const hasToolCalls = normalizedToolCalls.length > 0;
-            const hasTextContent = accumulatedContent.trim().length > 0;
-
-            if (hasAttachmentInRequest && !hasToolCalls && !hasTextContent && !attachmentRetryUsed) {
-              attachmentRetryUsed = true;
-              currentMessages.push({
-                role: 'system',
-                content: 'İstifadəçi attachment göndərib. Boş cavab vermə. Mövcud attachment məlumatına əsaslanaraq qısa, konkret analiz və nəticə yaz.'
-              });
-              continue;
-            }
-
-            currentMessages.push(msg);
-
-            // Tam mesajı göndər (tool_calls ilə birlikdə)
-            res.write(`data: ${JSON.stringify({ type: 'assistant_message', message: msg })}\n\n`);
-
-            if (msg.tool_calls && msg.tool_calls.length > 0) {
-                for (const toolCall of msg.tool_calls) {
-                    if (clientDisconnected) break;
-                    res.write(`data: ${JSON.stringify({ type: 'tool_execution', tool: toolCall.function.name, args: toolCall.function.arguments, tool_call_id: toolCall.id })}\n\n`);
-                    // In local mode, skip approval for all tools (user's own machine)
-                    if (safeMode && !isLocalMode() && isSensitiveTool(toolCall.function.name)) {
-                        const approvalId = crypto.randomUUID();
-                        pendingApprovals.set(approvalId, {
-                          userId: req.user.id,
-                          status: 'pending',
-                          toolCall,
-                          workingDirectory: resolvedWD,
-                          createdAt: Date.now()
-                        });
-                        res.write(`data: ${JSON.stringify({ type: 'approval_request', approvalId, tool: toolCall.function.name, args: toolCall.function.arguments })}\n\n`);
-
-                        try {
-                          const decision = await waitForApproval(approvalId);
-                          if (decision === 'rejected') {
-                            currentMessages.push({
-                              role: "tool",
-                              tool_call_id: toolCall.id,
-                              content: `İstifadəçi tərəfindən rədd edildi. Bu əməliyyatı icra etmə.`
-                            });
-                            res.write(`data: ${JSON.stringify({ type: 'tool_result', result: 'Rədd edildi' })}\n\n`);
-                          } else {
-                            const result = await handleToolCall(toolCall, resolvedWD, req.user);
-                            currentMessages.push({ role: "tool", tool_call_id: toolCall.id, content: result });
-                            res.write(`data: ${JSON.stringify({ type: 'tool_result', result })}\n\n`);
-                          }
-                        } catch (err) {
-                          currentMessages.push({
-                            role: "tool",
-                            tool_call_id: toolCall.id,
-                            content: `Approval xətası: ${err.message}`
-                          });
-                          res.write(`data: ${JSON.stringify({ type: 'tool_result', result: `Approval xətası: ${err.message}` })}\n\n`);
-                        }
-                        continue;
-                    }
-                    try {
-                      const result = await handleToolCall(toolCall, resolvedWD, req.user);
-                      const toolResultMsg = { role: "tool", tool_call_id: toolCall.id, content: result };
-                      currentMessages.push(toolResultMsg);
-                      res.write(`data: ${JSON.stringify({ type: 'tool_result', result })}\n\n`);
-                    } catch (toolErr) {
-                      const errorText = `Tool xətası: ${toolErr?.message || String(toolErr)}`;
-                      currentMessages.push({ role: "tool", tool_call_id: toolCall.id, content: errorText });
-                      res.write(`data: ${JSON.stringify({ type: 'tool_result', result: errorText })}\n\n`);
-                    }
-                }
-            } else {
-                break;
-            }
+      await runChatSession({
+        req,
+        res,
+        slotAcquired,
+        conversationId,
+        runManager,
+        orchestration,
+        resolvedWD,
+        latestUserText,
+        auditStyleRequest,
+        projectMemory,
+        apiMessages,
+        emitTaskPlan,
+        writeSse,
+        createPhaseContext: ({ currentMessages, runManager, orchestration, resolvedWD, auditStyleRequest, projectMemory }) => {
+          const activePhase = runManager.currentPhase();
+          const phaseTools = getToolsForRole(activePhase?.role, orchestration.toolProfile);
+          const roleInstruction = buildRoleInstruction(activePhase?.role, {
+            workflow: orchestration.workflow,
+            projectRoot: resolvedWD,
+            auditStyleRequest,
+            repoProfile: projectMemory?.repoProfile || null,
+            executionMemory: {
+              lastValidation: projectMemory?.lastValidation || null,
+              lastApprovalDecision: projectMemory?.lastApprovalDecision || null
+            },
+            tokenDiscipline: orchestration?.routing?.tokenDiscipline || null
+          });
+          currentMessages.push({
+            role: 'system',
+            content: roleInstruction
+          });
+          if (activePhase?.role === 'Planner') {
+            currentMessages.push({
+              role: 'system',
+              content: buildPlannerArtifactPrompt()
+            });
+          }
+          const plannerArtifactContext = buildPlannerArtifactContext(runManager.getPlannerArtifact());
+          const executionArtifactContext = buildExecutionArtifactContext(runManager.getExecutionArtifacts());
+          if (plannerArtifactContext && activePhase?.role !== 'Planner') {
+            currentMessages.push({
+              role: 'system',
+              content: `${plannerArtifactContext}\nBu artifact-i əsas input kimi istifadə et.`
+            });
+          }
+          if (executionArtifactContext && activePhase?.role !== 'Planner') {
+            currentMessages.push({
+              role: 'system',
+              content: `${executionArtifactContext}\nƏvvəlki icra izlərini də nəzərə al.`
+            });
+          }
+          return {
+            currentMessages,
+            activePhase,
+            phaseTools
+          };
+        },
+        openAiStreamWithFallback,
+        collectStreamOutput,
+        executeToolCalls,
+        extractPlannerArtifact,
+        buildExecutionArtifact,
+        classifyArtifactQuality,
+        buildPhaseRecoveryInstruction,
+        isFileClarificationLoop,
+        shouldEmitDebugEvent,
+        compactMessagesForNextPhase,
+        buildPhaseHandoffMessage,
+        buildPlannerArtifactContext,
+        buildExecutionArtifactContext,
+        releaseChatSlot,
+        setConversationAbort,
+        reqUser: req.user,
+        dependencies: {
+          MAX_STEPS,
+          effectiveModelRef,
+          activeProviderRef,
+          clientRef,
+          isLocalOrFlakyModel,
+          providerCandidates,
+          providerRuntime,
+          buildOpenAIClient,
+          normalizeMessagesForModel,
+          mapMessagesToResponsesInput,
+          mapToolsToResponsesTools,
+          isResponsesSchemaMismatchError,
+          buildDeepSeekRecoveryMessages,
+          normalizeToolName,
+          extractTextToolCalls,
+          buildToolCallCacheKey,
+          flattenResponseJsonText,
+          normalizeFinalAssistantReport,
+          hasAttachmentInRequest,
+          safeMode,
+          isLocalMode,
+          isSensitiveTool,
+          buildApprovalMetadata,
+          createInteraction,
+          waitForApproval,
+          handleToolCall,
+          isCacheableTool,
+          buildToolRecoveryInstruction,
+          normalizeUserFacingError,
+          crypto,
+          runId,
+          llmTimeoutMs
         }
+      });
+      activeProvider = activeProviderRef.current;
+      client = clientRef.current;
+      effectiveModel = effectiveModelRef.current;
     } catch (e) {
-        res.write(`data: ${JSON.stringify({ type: 'error', message: e.message })}\n\n`);
-    } finally {
-        if (slotAcquired) releaseChatSlot(req.user?.id, conversationId);
-        res.end();
+      writeSse(res, { type: 'error', message: e.message });
     }
 });
 
@@ -3788,6 +4279,7 @@ app.listen(PORT, '0.0.0.0', () => {
 for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, async () => {
     console.log(`Received ${sig}, shutting down gracefully...`);
+    try { await closeAllSessions().catch(() => {}); } catch { /* ignore */ }
     try { await db.shutdown?.(); } catch { /* ignore */ }
     process.exit(0);
   });

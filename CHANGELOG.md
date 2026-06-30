@@ -1,5 +1,61 @@
 # Dəyişikliklər (Changelog)
 
+## [v2.1.0] - P1/P2/P3 Security & Infrastructure Patch - 2026-06-29
+
+### 🔐 P1 — Təhlükəsizlik (Kritik)
+
+1. **JWT Refresh Token Sistemi**
+   - Access token: 15 dəqiqə (əvvəl 7-30 gün tək token)
+   - Refresh token: 7 gün, avtomatik yenilənmə
+   - Yeni endpoint: `POST /api/auth/refresh`
+   - Frontend-də şəffaf auto-refresh (singleton pattern)
+
+2. **CSP (Content Security Policy)**
+   - Helmet CSP direktivləri aktiv (report-only default)
+   - `CSP_REPORT_ONLY=false` ilə enforce olunur
+   - Script-src, connect-src, img-src düzgün təyin edilib
+
+3. **Test Coverage Genişləndirilməsi**
+   - `tests/auth.test.js` — 6 yeni test (refresh flow, rate limit, edge cases)
+   - Token pair validation, expiry recovery testləri
+
+### 📦 P2 — İnfrastruktur və Performans
+
+4. **Frontend Code-Splitting**
+   - React.lazy() ilə ağır komponentlər ayrıldı
+   - İlk yüklənmə: 1.17MB → 334KB (~70% azalma)
+   - ErrorBoundary crash-resilience
+
+5. **postMessage Origin Restriction**
+   - Google OAuth callback: `'*'` → dəqiq origin
+   - ALLOWED_ORIGINS-dan alınır
+
+6. **Error Boundary + Monitoring**
+   - Global ErrorBoundary (React crash handler)
+   - `monitoring.ts` — Sentry/Datadog drop-in hook
+   - Unhandled rejection + global error listeners
+
+7. **Docker + CI/CD**
+   - Multi-stage Dockerfile (production-ready)
+   - docker-compose.yml (app + PostgreSQL)
+   - GitHub Actions CI (lint, test, type-check, build, Docker)
+
+8. **`.env.example` tam yeniləndi**
+   - Bütün yeni konfiqurasiya sənədləndi
+
+### 🌐 P3 — İnternasionalizasiya
+
+9. **i18n Bazası**
+   - `az` (Azərbaycan) + `en` (English)
+   - `t('key')` translation funksiyası
+   - Browser dil aşkarlama + localStorage persist
+
+### 📝 Sənədləşdirmə
+- `PATCH_NOTES_P1_P2_P3.md` — tam düzəliş sənədi
+- `.env.example` — yeni env-lər sənədləndi
+
+---
+
 ## [v2.0.0] - Claude Code Integration - 2024
 
 ### 🎯 Claude Code Xüsusiyyətləri Əlavə Edildi

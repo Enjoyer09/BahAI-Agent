@@ -1,0 +1,112 @@
+const { getToolNames, getToolDefinitions } = require('./registry');
+
+const ALL_TOOLS = getToolNames();
+
+const READ_ONLY_TOOLS = [
+  'list_directory',
+  'glob_search',
+  'read_file',
+  'grep_search',
+  'analyze_codebase',
+  'find_definition',
+  'find_references',
+  'web_search',
+  'web_fetch',
+  'git_status',
+  'git_diff',
+  'git_log',
+  'check_port_status',
+  'github_list_contents',
+  'github_read_file',
+  'github_search_code'
+];
+
+const BUILDER_TOOLS = Array.from(new Set([
+  ...READ_ONLY_TOOLS,
+  'write_file',
+  'file_edit',
+  'multi_file_edit',
+  'run_terminal_command',
+  'run_tests',
+  'start_server',
+  'browser_open',
+  'browser_click',
+  'browser_type',
+  'browser_screenshot',
+  'browser_wait_for',
+  'browser_eval',
+  'browser_press',
+  'browser_scroll',
+  'browser_extract',
+  'gui_observe',
+  'gui_act',
+  'gui_step',
+  'git_branch',
+  'git_commit',
+  'git_push'
+]));
+
+const REVIEWER_TOOLS = Array.from(new Set([
+  ...READ_ONLY_TOOLS,
+  'run_tests'
+]));
+
+const TOOL_PROFILES = {
+  solo: ALL_TOOLS,
+  default: ALL_TOOLS,
+  quick: ALL_TOOLS,
+  thorough: ALL_TOOLS,
+  audit: ALL_TOOLS,
+  coding: ALL_TOOLS,
+  'review-only': ALL_TOOLS,
+  'desktop-local': ALL_TOOLS
+};
+
+const ROLE_TOOL_PROFILES = {
+  Manager: [],
+  'Solo Agent': ALL_TOOLS,
+  Planner: READ_ONLY_TOOLS,
+  Architect: READ_ONLY_TOOLS,
+  Reviewer: REVIEWER_TOOLS,
+  Security: REVIEWER_TOOLS,
+  QA: REVIEWER_TOOLS,
+  Builder: BUILDER_TOOLS,
+  Implementer: BUILDER_TOOLS
+};
+
+const WORKFLOW_TO_PROFILE = {
+  solo: 'solo',
+  quick: 'quick',
+  default: 'default',
+  thorough: 'thorough',
+  'review-only': 'review-only'
+};
+
+function getToolProfile(profileName = 'default') {
+  return TOOL_PROFILES[profileName] || TOOL_PROFILES.default;
+}
+
+function getToolProfileForWorkflow(workflow = 'default') {
+  return WORKFLOW_TO_PROFILE[workflow] || 'default';
+}
+
+function getToolsForProfile(profileName = 'default') {
+  const allowed = new Set(getToolProfile(profileName));
+  return getToolDefinitions().filter((tool) => allowed.has(tool.function.name));
+}
+
+function getToolsForRole(roleName = 'Solo Agent', fallbackProfile = 'default') {
+  const allowedToolNames = ROLE_TOOL_PROFILES[roleName] || getToolProfile(fallbackProfile);
+  const allowed = new Set(allowedToolNames);
+  return getToolDefinitions().filter((tool) => allowed.has(tool.function.name));
+}
+
+module.exports = {
+  TOOL_PROFILES,
+  ROLE_TOOL_PROFILES,
+  WORKFLOW_TO_PROFILE,
+  getToolProfile,
+  getToolProfileForWorkflow,
+  getToolsForProfile,
+  getToolsForRole
+};
