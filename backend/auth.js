@@ -28,6 +28,34 @@ function localUserId(email) {
   return parseInt(hash.substring(0, 8), 16); // 32-bit integer from first 8 hex chars
 }
 
+const DEMO_EMAILS = new Set(['demo', 'demo@bahai.local', 'demo@bahai.az']);
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'demo123';
+
+function isDemoEmail(email) {
+  return DEMO_EMAILS.has(String(email || '').trim().toLowerCase());
+}
+
+async function ensureDemoUser() {
+  if (!db.hasDatabase()) {
+    return { id: 9998, email: 'demo@bahai.local', name: 'Demo User', role: 'user' };
+  }
+
+  const demoEmail = process.env.DEMO_EMAIL || 'demo@bahai.az';
+  const demoName = process.env.DEMO_NAME || 'Demo User';
+  const normalizedEmail = demoEmail.toLowerCase();
+  const existing = await db.query('SELECT id, email, name, role FROM users WHERE email = $1', [normalizedEmail]);
+  if (existing.rows[0]) {
+    return existing.rows[0];
+  }
+
+  const hashedPw = await bcrypt.hash(DEMO_PASSWORD, 10);
+  const inserted = await db.query(
+    'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
+    [normalizedEmail, hashedPw, demoName, 'user']
+  );
+  return inserted.rows[0];
+}
+
 // SEC-1: Login with Role
 async function login(req, res) {
   const { email, password } = req.body;
@@ -48,6 +76,19 @@ async function login(req, res) {
   }
 
   try {
+    if (isDemoEmail(email)) {
+      if (password !== DEMO_PASSWORD) {
+        return res.status(401).json({ error: 'Demo şifrəsi yanlışdır' });
+      }
+      const demoUser = await ensureDemoUser();
+      const tokens = generateTokenPair({ id: demoUser.id, email: demoUser.email, role: demoUser.role });
+      return res.json({
+        token: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        user: { id: demoUser.id, email: demoUser.email, name: demoUser.name, role: demoUser.role }
+      });
+    }
+
     const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     const user = result.rows[0];
 
