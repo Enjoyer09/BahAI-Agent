@@ -3,7 +3,6 @@ node_modules/
 .venv/
 .npm-cache/
 yarn-error.log
-package-lock.json
 yarn.lock
 
 # Build
