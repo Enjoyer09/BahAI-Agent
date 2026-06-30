@@ -1,25 +1,16 @@
 [
   {
     "role": "user",
-    "content": "proqrami audit edek",
+    "content": "salam. bu qovlugu audit et",
     "attachments": []
   },
   {
     "role": "assistant",
-    "content": "Salam! Sizin proqramınızı audit etdim. Qovluqların içində `src` tapdım və kodda bir neçə xəta var. İstəyirsinizsə onları düzəldim.\n\nLayihə yaddaşı: {}"
+    "content": "❌ Xəta: Model tapılmadı: \"deepseek/deepseek-v4-flash:free\". Ayarlardan model adını yoxlayın."
   },
   {
     "role": "user",
-    "content": "sen hansi qovlugu audit eledin?",
-    "attachments": []
-  },
-  {
-    "role": "assistant",
-    "content": "Salam! Sizin proqramınızı audit etdim. Qovluqların içində `src` tapdım və kodda bir neçə xəta var. İstəyirsinizsə onları düzəldim.\n\nLayihə yaddaşı: {}"
-  },
-  {
-    "role": "user",
-    "content": "sen hansi qovlugu audit eledin?",
+    "content": "salam. bu qovlugdaki proqrami audit et",
     "attachments": []
   }
 ]

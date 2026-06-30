@@ -1,24 +1,29 @@
 {
   "projects": [
     {
-      "id": "8c6f7313-aaa4-4f38-a7ea-31243827877e",
+      "id": "6b4f7932-f9d1-4d64-94b9-5c2db60a2900",
       "user_id": 9999,
       "name": "bahAI Sandbox",
       "path": "workspace://default",
       "repo_url": null,
       "last_port": 5173,
       "archived": false,
-      "created_at": "2026-06-13T08:22:53.270Z"
+      "created_at": "2026-06-23T07:49:45.803Z"
     },
     {
+<<<<<<< Updated upstream
 <<<<<<< HEAD
       "id": "faf8105a-673b-42f3-9067-62dbd96e719f",
+=======
+      "id": "be4a2308-1e63-4f31-9243-1c90e127d03d",
+>>>>>>> Stashed changes
       "user_id": 9999,
-      "name": "Emergent App clone",
-      "path": "/Users/macbookair/Documents/Emergent App clone",
+      "name": "ironwaves-pos-platform",
+      "path": "/Users/macbookair/Documents/ironwaves-pos-platform",
       "repo_url": null,
       "last_port": 5173,
       "archived": false,
+<<<<<<< Updated upstream
       "created_at": "2026-06-15T07:21:42.764Z"
 =======
       "id": "45fec435-eed5-43b4-a311-e5f1fade42cc",
@@ -70,299 +75,78 @@
       "archived": false,
       "created_at": "2026-06-13T15:41:50.914Z"
 >>>>>>> 8919a561965f43eec39724994b7ea4073a5b2646
+=======
+      "created_at": "2026-06-23T09:20:15.202Z"
+>>>>>>> Stashed changes
     }
   ],
   "conversations": [
     {
-      "id": "8e8efa1a-6b24-455d-a713-db8149dc558e",
-      "project_id": "8c6f7313-aaa4-4f38-a7ea-31243827877e",
+      "id": "65f3b49b-5671-4c2b-bb51-136614c5e84d",
+      "project_id": "6b4f7932-f9d1-4d64-94b9-5c2db60a2900",
       "user_id": 9999,
       "title": "bahAI Sandbox",
       "messages": [
         {
-          "id": "mqc38cifmieevt",
+          "id": "mqqcg9n1h8qj9z",
           "role": "assistant",
           "content": "Salam! Mən bahAI agentiyəm. Sizin üçün ayrıca şəxsi workspace yaratdım. Buradakı fayllar yalnız sizin hesabınıza bağlıdır.",
-          "timestamp": 1781338973271
+          "timestamp": 1782200985805
         },
         {
-          "id": "mqc38p7bz78xeu",
+          "id": "mqqfmqv0yw6qri",
           "role": "user",
-          "content": "salam necesen?",
+          "content": "salam",
           "attachments": [],
-          "timestamp": 1781338989719
+          "timestamp": 1782206326908
         },
         {
-          "id": "mqc3a9mboutzzi",
+          "id": "mqqfmt4kyhdntc",
           "role": "assistant",
-          "content": "Salam! Sizə necə kömək edə bilərəm? Layihəniz və ya kodunuzla bağlı hər hansı bir tapşırıq varmı?",
-          "timestamp": 1781339062835
+          "content": "❌ Xəta: Model tapılmadı: \"openai-t1-sg\". Ayarlardan model adını yoxlayın.",
+          "timestamp": 1782206329844
         },
         {
-          "id": "mqc3c3nhllskhk",
+          "id": "mqqfn9ipprlgfs",
           "role": "user",
-          "content": " /Users/macbookair/Documents/GitHub/az-finance-ai  qovlugun icini oxu",
+          "content": "salam",
           "attachments": [],
-          "timestamp": 1781339148413
+          "timestamp": 1782206351089
         },
         {
-          "id": "mqc3ccaih75l3n",
+          "id": "mqqfnaqmrwqnym",
           "role": "assistant",
-          "content": "",
-          "tool_calls": [
-            {
-              "id": "toolcall_text_1_0_1781339159606",
-              "type": "function",
-              "function": {
-                "name": "list_directory",
-                "arguments": "{\"path\":\"/Users/macbookair/Documents/GitHub/az-finance-ai\"}"
-              },
-              "status": "done",
-              "result": ".DS_Store\n.dockerignore\n.env\n.env.example\n[DIR] .github\n.gitignore\n[DIR] .kiro\n.nvmrc\n[DIR] .vscode\nDockerfile\nREADME.md\n[DIR] data\n[DIR] docs\n[DIR] node_modules\npackage-lock.json\npackage.json\n[DIR] public\n[DIR] src"
-            }
-          ],
-          "timestamp": 1781339159610
+          "content": "❌ Xəta: Model tapılmadı: \"nvidia/nemotron-3-super-120b-a12b:free\". Ayarlardan model adını yoxlayın.",
+          "timestamp": 1782206352670
         },
         {
-          "id": "mqc3ccat7sou9b",
-          "role": "tool",
-          "content": ".DS_Store\n.dockerignore\n.env\n.env.example\n[DIR] .github\n.gitignore\n[DIR] .kiro\n.nvmrc\n[DIR] .vscode\nDockerfile\nREADME.md\n[DIR] data\n[DIR] docs\n[DIR] node_modules\npackage-lock.json\npackage.json\n[DIR] public\n[DIR] src",
-          "tool_call_id": "toolcall_text_1_0_1781339159606",
-          "timestamp": 1781339159621
-        },
-        {
-          "id": "mqc3cuy1w7jqvj",
-          "role": "assistant",
-          "content": "",
-          "tool_calls": [
-            {
-              "id": "toolcall_text_2_0_1781339183784",
-              "type": "function",
-              "function": {
-                "name": "read_file",
-                "arguments": "{\"path\":\"/Users/macbookair/Documents/GitHub/az-finance-ai/package.json\"}"
-              },
-              "status": "done",
-              "result": "File: /Users/macbookair/Documents/GitHub/az-finance-ai/package.json\nTotal lines: 33\nShowing lines 1 to 33:\n\n1: {\n2:   \"name\": \"az-finance-ai\",\n3:   \"version\": \"0.5.0\",\n4:   \"private\": true,\n5:   \"description\": \"Azərbaycan Vergi və Maliyyə AI Konsaltinq Platforması - Multi-Agent System\",\n6:   \"scripts\": {\n7:     \"start\": \"NODE_ENV=production node src/index.js\",\n8:     \"dev\": \"NODE_ENV=development node src/index.js\",\n9:     \"chat\": \"node src/cli.js\",\n10:     \"web\": \"open http://localhost:4000 && node src/index.js\",\n11:     \"test\": \"node --test src/**/*.test.js\",\n12:     \"lint\": \"echo 'TODO: eslint setup'\",\n13:     \"docker:build\": \"docker build -t az-finance-ai .\",\n14:     \"docker:run\": \"docker run -p 4000:4000 --env-file .env az-finance-ai\"\n15:   },\n16:   \"dependencies\": {\n17:     \"cors\": \"^2.8.5\",\n18:     \"csv-parser\": \"^3.2.1\",\n19:     \"dotenv\": \"^16.4.0\",\n20:     \"express\": \"^4.21.0\",\n21:     \"express-validator\": \"^7.2.1\",\n22:     \"helmet\": \"^8.1.0\",\n23:     \"multer\": \"^2.1.1\",\n24:     \"openai\": \"^4.70.0\",\n25:     \"pdf-parse\": \"^2.4.5\",\n26:     \"uuid\": \"^11.1.0\",\n27:     \"xlsx\": \"^0.18.5\"\n28:   },\n29:   \"engines\": {\n30:     \"node\": \">=18.0.0\"\n31:   }\n32: }\n33: "
-            }
-          ],
-          "timestamp": 1781339183785
-        },
-        {
-          "id": "mqc3cuydqdj2fq",
-          "role": "tool",
-          "content": "File: /Users/macbookair/Documents/GitHub/az-finance-ai/package.json\nTotal lines: 33\nShowing lines 1 to 33:\n\n1: {\n2:   \"name\": \"az-finance-ai\",\n3:   \"version\": \"0.5.0\",\n4:   \"private\": true,\n5:   \"description\": \"Azərbaycan Vergi və Maliyyə AI Konsaltinq Platforması - Multi-Agent System\",\n6:   \"scripts\": {\n7:     \"start\": \"NODE_ENV=production node src/index.js\",\n8:     \"dev\": \"NODE_ENV=development node src/index.js\",\n9:     \"chat\": \"node src/cli.js\",\n10:     \"web\": \"open http://localhost:4000 && node src/index.js\",\n11:     \"test\": \"node --test src/**/*.test.js\",\n12:     \"lint\": \"echo 'TODO: eslint setup'\",\n13:     \"docker:build\": \"docker build -t az-finance-ai .\",\n14:     \"docker:run\": \"docker run -p 4000:4000 --env-file .env az-finance-ai\"\n15:   },\n16:   \"dependencies\": {\n17:     \"cors\": \"^2.8.5\",\n18:     \"csv-parser\": \"^3.2.1\",\n19:     \"dotenv\": \"^16.4.0\",\n20:     \"express\": \"^4.21.0\",\n21:     \"express-validator\": \"^7.2.1\",\n22:     \"helmet\": \"^8.1.0\",\n23:     \"multer\": \"^2.1.1\",\n24:     \"openai\": \"^4.70.0\",\n25:     \"pdf-parse\": \"^2.4.5\",\n26:     \"uuid\": \"^11.1.0\",\n27:     \"xlsx\": \"^0.18.5\"\n28:   },\n29:   \"engines\": {\n30:     \"node\": \">=18.0.0\"\n31:   }\n32: }\n33: ",
-          "tool_call_id": "toolcall_text_2_0_1781339183784",
-          "timestamp": 1781339183797
-        },
-        {
-          "id": "mqc3d42sqrusgx",
-          "role": "assistant",
-          "content": "",
-          "timestamp": 1781339195620
-        },
-        {
-          "id": "mqc3mugjyowh8v",
+          "id": "mqqfo230w19lh6",
           "role": "user",
-          "content": "/Users/macbookair/Documents/GitHub/az-finance-ai qovlugun icini oxu",
+          "content": "salam",
           "attachments": [],
-          "timestamp": 1781339649715
+          "timestamp": 1782206388108
         },
         {
-          "id": "mqc3nopy9i5i9t",
+          "id": "mqqfobpa5lkzv0",
           "role": "assistant",
-          "content": "",
-          "timestamp": 1781339688934
-        },
-        {
-          "id": "mqc3ok3etoc53j",
-          "role": "user",
-          "content": "/Users/macbookair/Documents/GitHub/az-finance-ai qovlugun icini oxu\n\n\n\n\n\n\n\n",
-          "attachments": [],
-          "timestamp": 1781339729594
-        },
-        {
-          "id": "mqc3p13qjrxta7",
-          "role": "assistant",
-          "content": "",
-          "tool_calls": [
-            {
-              "id": "toolcall_text_1_0_1781339751636",
-              "type": "function",
-              "function": {
-                "name": "list_directory",
-                "arguments": "{\"path\":\"/Users/macbookair/Documents/GitHub/az-finance-ai\"}"
-              },
-              "status": "done",
-              "result": ".DS_Store\n.dockerignore\n.env\n.env.example\n[DIR] .github\n.gitignore\n[DIR] .kiro\n.nvmrc\n[DIR] .vscode\nDockerfile\nREADME.md\n[DIR] data\n[DIR] docs\n[DIR] node_modules\npackage-lock.json\npackage.json\n[DIR] public\n[DIR] src"
-            }
-          ],
-          "timestamp": 1781339751638
-        },
-        {
-          "id": "mqc3p13z5jo3cu",
-          "role": "tool",
-          "content": ".DS_Store\n.dockerignore\n.env\n.env.example\n[DIR] .github\n.gitignore\n[DIR] .kiro\n.nvmrc\n[DIR] .vscode\nDockerfile\nREADME.md\n[DIR] data\n[DIR] docs\n[DIR] node_modules\npackage-lock.json\npackage.json\n[DIR] public\n[DIR] src",
-          "tool_call_id": "toolcall_text_1_0_1781339751636",
-          "timestamp": 1781339751647
-        },
-        {
-          "id": "mqc3p437i2cent",
-          "role": "assistant",
-          "content": "```json\n{\n  \"response\": \"Layihəyə baxış edildi. İndi hansı fayla baxmak istəyirsiniz? Və ya kod audit etmək istəyirsiniz?\"\n}\n```",
-          "timestamp": 1781339755507
-        },
-        {
-          "id": "mqc3u20ujo6sfu",
-          "role": "user",
-          "content": "/Users/macbookair/Documents/GitHub/az-finance-ai qovlugun icini oxu\n\n\n\n",
-          "attachments": [],
-          "timestamp": 1781339986110
-        },
-        {
-          "id": "mqc3u5gfvkbw5k",
-          "role": "assistant",
-          "content": "",
-          "tool_calls": [
-            {
-              "id": "toolcall_text_1_0_1781339990557",
-              "type": "function",
-              "function": {
-                "name": "list_directory",
-                "arguments": "{\"path\":\"/Users/macbookair/Documents/GitHub/az-finance-ai\"}"
-              },
-              "status": "done",
-              "result": ".DS_Store\n.dockerignore\n.env\n.env.example\n[DIR] .github\n.gitignore\n[DIR] .kiro\n.nvmrc\n[DIR] .vscode\nDockerfile\nREADME.md\n[DIR] data\n[DIR] docs\n[DIR] node_modules\npackage-lock.json\npackage.json\n[DIR] public\n[DIR] src"
-            }
-          ],
-          "timestamp": 1781339990559
-        },
-        {
-          "id": "mqc3u5gqhiqwed",
-          "role": "tool",
-          "content": ".DS_Store\n.dockerignore\n.env\n.env.example\n[DIR] .github\n.gitignore\n[DIR] .kiro\n.nvmrc\n[DIR] .vscode\nDockerfile\nREADME.md\n[DIR] data\n[DIR] docs\n[DIR] node_modules\npackage-lock.json\npackage.json\n[DIR] public\n[DIR] src",
-          "tool_call_id": "toolcall_text_1_0_1781339990557",
-          "timestamp": 1781339990570
-        },
-        {
-          "id": "mqc3u94th50j34",
-          "role": "assistant",
-          "content": "```json\n{\n  \"response\": \"Layihəyə baxış edildi. İndi hansı fayla baxmak istəyirsiniz? Və ya kod audit etmək istəyirsiniz?\"\n}\n```",
-          "timestamp": 1781339995325
-        },
-        {
-          "id": "mqc4z4xvxbhdfb",
-          "role": "user",
-          "content": "salam bugun hava necedir?",
-          "attachments": [],
-          "timestamp": 1781341902787
-        },
-        {
-          "id": "mqc4zr3g5qay90",
-          "role": "assistant",
-          "content": "Üzgünüm, ama mən bir kodlaşdırma agentim və hava səhviyələrini yoxlamaq üçün yetəriçli alətlərim yoxdur. Hava səhviyələrinin yoxlanması üçün bir hava səhviyələrini yoxlamaq üçün yetəriçli bir API istifadə etməliyim. Bununla birlikdə, mən hava səhviyələrinin nəticəsini daxil etmək və ya onları yoxlamaq üçün yetəriçli alətlərim yoxdur.",
-          "timestamp": 1781341931500
-        },
-        {
-          "id": "mqc51e9deg0i8v",
-          "role": "user",
-          "content": "salam necesen?",
-          "attachments": [],
-          "timestamp": 1781342008177
-        },
-        {
-          "id": "mqc52d8s0auxj6",
-          "role": "assistant",
-          "content": "",
-          "timestamp": 1781342053517
-        },
-        {
-          "id": "mqcc8qi7vop34l",
-          "role": "user",
-          "content": "salam necesen",
-          "attachments": [],
-          "timestamp": 1781354107951
-        },
-        {
-          "id": "mqcc9owuxkngio",
-          "role": "assistant",
-          "content": "",
-          "timestamp": 1781354152543
-        },
-        {
-          "id": "mqcf91hmopba89",
-          "role": "user",
-          "content": "Gemma 4 12B",
-          "attachments": [],
-          "timestamp": 1781359161034
-        },
-        {
-          "id": "mqcf9ok89vfguo",
-          "role": "assistant",
-          "content": "Üzgünüm, ama mən bir kodlaşdırma agentim və hava səhviyələrini yoxlamaq üçün yetəriçli alətlərim yoxdur. Hava səhviyələrinin yoxlanması üçün bir hava səhviyələrini yoxlamaq üçün yetəriçli bir API istifadə etməliyim. Bununla birlikdə, mən hava səhviyələrinin nəticəsini daxil etmək və ya onları yoxlamaq üçün yetəriçli alətlərim yoxdur.",
-          "timestamp": 1781359190936
-        },
-        {
-          "id": "mqcgcrx07dzg2k",
-          "role": "user",
-          "content": "salam necesen?",
-          "attachments": [],
-          "timestamp": 1781361014868
-        },
-        {
-          "id": "mqcgdnmz27uzzn",
-          "role": "assistant",
-          "content": "",
-          "timestamp": 1781361055980
-        },
-        {
-          "id": "mqeu2x559nh7zi",
-          "role": "user",
-          "content": "Bugun ne proqramlayaq?",
-          "attachments": [],
-          "timestamp": 1781505002057
-        },
-        {
-          "id": "mqeu3sijqp4lga",
-          "role": "assistant",
-          "content": "",
-          "timestamp": 1781505042716
-        },
-        {
-          "id": "mqeu4mkmt3dqtx",
-          "role": "user",
-          "content": "salam bugun ne kodlayaq?",
-          "attachments": [],
-          "timestamp": 1781505081670
-        },
-        {
-          "id": "mqeu4s1mssh3sm",
-          "role": "assistant",
-          "content": "",
-          "timestamp": 1781505088762
-        },
-        {
-          "id": "mqeu52p845lkhx",
-          "role": "user",
-          "content": "salam bugun ne kodlayaq?",
-          "attachments": [],
-          "timestamp": 1781505102572
-        },
-        {
-          "id": "mqeu5lnsl3zfqv",
-          "role": "assistant",
-          "content": "Salam! Bugun kodlama ilə ilgili hansı bir şeyi etmək istəyirsiniz? Örneğin, yeni bir proqram yazmaq, var olan bir proqramı yoxlamaq və ya dəyişiklik etmək, və s.",
-          "timestamp": 1781505127144
+          "content": "Salam! Mən sizin avtonom kodlaşdırma agentinizəm. Hazıram layihənizi analiz etmək, kod audit etmək və ya istədiyiniz dəyişiklikləri etmək üçün. Zəhmət olmasa, hansı əməliyyatı yerinə yetirim?",
+          "timestamp": 1782206400574
         }
       ],
+<<<<<<< Updated upstream
       "created_at": "2026-06-13T08:22:53.270Z",
 <<<<<<< HEAD
       "updated_at": "2026-06-15T06:32:07.149Z"
+=======
+      "created_at": "2026-06-23T07:49:45.803Z",
+      "updated_at": "2026-06-23T09:20:00.577Z"
+>>>>>>> Stashed changes
     },
     {
-      "id": "1dac1a43-8ab4-4eb8-aefc-bb3eeb7f8649",
-      "project_id": "faf8105a-673b-42f3-9067-62dbd96e719f",
+      "id": "df0e265c-eac5-4013-8c05-1ab5defffb28",
+      "project_id": "be4a2308-1e63-4f31-9243-1c90e127d03d",
       "user_id": 9999,
+<<<<<<< Updated upstream
       "title": "Emergent App clone",
       "messages": [
         {
@@ -455,6 +239,12 @@
       "created_at": "2026-06-13T15:41:50.914Z",
       "updated_at": "2026-06-13T15:41:50.914Z"
 >>>>>>> 8919a561965f43eec39724994b7ea4073a5b2646
+=======
+      "title": "ironwaves-pos-platform",
+      "messages": [],
+      "created_at": "2026-06-23T09:20:15.202Z",
+      "updated_at": "2026-06-23T09:20:15.202Z"
+>>>>>>> Stashed changes
     }
   ],
   "projectMemories": {},
