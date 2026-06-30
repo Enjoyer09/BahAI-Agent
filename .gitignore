@@ -35,6 +35,9 @@ frontend/.npm-cache/
 frontend/dist/
 sandbox/
 sandbox/local_db.json
+backend/debug_messages.json
+backend/debug_*.json
+*.db-journal
 .env.*
 *.env
 credentials.json
