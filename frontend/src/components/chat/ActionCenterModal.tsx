@@ -80,10 +80,12 @@ export default function ActionCenterModal({ interactions, history = [], onResolv
     return expiresAt ? expiresAt - Date.now() < 60000 : false;
   });
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
       <div
-        className="w-full max-w-2xl rounded-lg p-5 max-h-[85vh] overflow-y-auto premium-scroll"
+        className="w-full max-w-2xl rounded-lg p-4 sm:p-5 max-h-[85vh] overflow-y-auto premium-scroll"
         style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
       >
         <div className="flex items-center justify-between gap-3 mb-4">
@@ -100,6 +102,7 @@ export default function ActionCenterModal({ interactions, history = [], onResolv
           )}
         </div>
 
+        {!isMobile && (
         <div className="space-y-2 mb-5">
           {Object.entries(grouped).map(([runKey, items]) => (
             <div key={runKey} className="rounded-lg px-3 py-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
@@ -112,6 +115,7 @@ export default function ActionCenterModal({ interactions, history = [], onResolv
             </div>
           ))}
         </div>
+        )}
 
         {checkpoint && (
           <div className={approvals.length > 0 ? 'mb-5 pb-5' : ''} style={approvals.length > 0 ? { borderBottom: '1px solid var(--border)' } : undefined}>
@@ -124,7 +128,7 @@ export default function ActionCenterModal({ interactions, history = [], onResolv
             <div className="text-[11px] mb-4" style={{ color: 'var(--fg-muted)' }}>
               {formatMetaLine(checkpoint)}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={() => onResolveCheckpoint('cancel')}
                 className="flex-1 px-4 py-3 rounded-lg text-sm font-medium"
@@ -228,7 +232,7 @@ export default function ActionCenterModal({ interactions, history = [], onResolv
                       })()}
                     </pre>
                   </details>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <button
                       onClick={() => onApprove(approval.approvalId, 'reject')}
                       className="flex-1 px-4 py-3 text-sm rounded-lg transition-colors font-medium"

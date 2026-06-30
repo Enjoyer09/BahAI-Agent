@@ -188,7 +188,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
   const selectedModel = MODELS.find(m => m.id === model);
 
   return (
-    <div className={isMobile ? 'px-3 pb-3 pt-1 safe-bottom' : 'px-4 pb-4 pt-2'}>
+    <div className={isMobile ? 'px-2 pb-2 pt-1 safe-bottom' : 'px-4 pb-4 pt-2'}>
       <div className="max-w-3xl mx-auto">
         {/* Model selector + Safe Mode toggle — desktop only */}
         {onModelChange && model && !isMobile && (
@@ -260,7 +260,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
           style={{
             background: 'var(--bg-surface-alt)',
             border: '1px solid var(--border)',
-            padding: isMobile ? '10px 12px' : '12px 14px',
+            padding: isMobile ? '8px 10px' : '12px 14px',
           }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
@@ -271,13 +271,13 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             className="rounded-full transition-colors shrink-0 flex items-center justify-center"
             style={{
               color: 'var(--fg-muted)',
-              width: '44px',
-              height: '44px',
+              width: isMobile ? '40px' : '44px',
+              height: isMobile ? '40px' : '44px',
             }}
             title="Fayl əlavə et"
             aria-label="Attach file"
           >
-            <Plus size={20} />
+            <Plus size={isMobile ? 18 : 20} />
           </button>
           <input
             type="file"
@@ -299,18 +299,18 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
             }}
             placeholder={blockedByActionCenter ? 'Əvvəl Action Center-də login və ya təsdiq addımını tamamlayın...' : 'bahAI-ya yazın...'}
-            className="flex-1 bg-transparent border-none outline-none resize-none min-h-[24px] leading-relaxed px-2"
+            className="flex-1 bg-transparent border-none outline-none resize-none min-h-[24px] leading-relaxed px-1.5"
             style={{
               color: 'var(--fg-main)',
               fontSize: isMobile ? '16px' : '14px', // 16px prevents iOS zoom
-              maxHeight: isMobile ? '120px' : '200px',
+              maxHeight: isMobile ? '96px' : '200px',
             }}
             disabled={blockedByActionCenter}
             aria-label="Message input"
           />
 
           {/* Action buttons (Mic + Send/Stop) — right */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             {/* Pulsing style */}
             <style>{`
               @keyframes pulse-purple {
@@ -334,8 +334,8 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
               style={{
                 color: isListening ? '#a855f7' : 'var(--fg-muted)',
                 background: isListening ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
-                width: '40px',
-                height: '40px',
+                width: isMobile ? '36px' : '40px',
+                height: isMobile ? '36px' : '40px',
                 border: isListening ? '1px solid rgba(168, 85, 247, 0.3)' : 'none',
                 boxShadow: isListening ? '0 0 15px rgba(168, 85, 247, 0.4)' : 'none',
                 animation: isListening ? 'pulse-purple 1.5s infinite' : 'none',
@@ -343,7 +343,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
               title={isListening ? "Səsli daxiletməni dayandır" : "Səslə danış"}
               aria-label="Toggle voice input"
             >
-              {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+              {isListening ? <MicOff size={isMobile ? 16 : 18} /> : <Mic size={isMobile ? 16 : 18} />}
             </button>
 
             {loading ? (
@@ -354,12 +354,12 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                 style={{
                   background: 'rgba(239, 68, 68, 0.1)',
                   color: '#ef4444',
-                  width: '40px',
-                  height: '40px',
+                  width: isMobile ? '36px' : '40px',
+                  height: isMobile ? '36px' : '40px',
                 }}
                 aria-label="Stop generation"
               >
-                <Square size={16} fill="currentColor" />
+                <Square size={isMobile ? 14 : 16} fill="currentColor" />
               </button>
             ) : (
               <button
@@ -371,12 +371,12 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                   background: canSend ? 'var(--color-accent)' : 'transparent',
                   color: canSend ? 'white' : 'var(--fg-muted)',
                   cursor: canSend ? 'pointer' : 'default',
-                  width: '40px',
-                  height: '40px',
+                  width: isMobile ? '36px' : '40px',
+                  height: isMobile ? '36px' : '40px',
                 }}
                 aria-label="Send message"
               >
-                <Send size={16} />
+                <Send size={isMobile ? 14 : 16} />
               </button>
             )}
           </div>
@@ -415,7 +415,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
         )}
 
         {/* Disclaimer */}
-        <div className="text-center mt-2">
+        <div className={isMobile ? 'text-center mt-1 px-1' : 'text-center mt-2'}>
           <span className="text-xs" style={{ color: 'var(--fg-muted)' }}>
             bahAI səhv edə bilər. Vacib məlumatları yoxlayın.
           </span>

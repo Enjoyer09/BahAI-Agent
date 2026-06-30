@@ -266,7 +266,7 @@ function AppContent() {
 
         {/* Mobile top bar */}
         {isMobile && (
-          <div className="flex items-center justify-between px-3 py-2 shrink-0 safe-top"
+          <div className="flex items-center justify-between px-3 py-2 shrink-0 safe-top gap-2"
                style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
             <button
               onClick={() => setSidebarOpen(true)}
@@ -276,19 +276,34 @@ function AppContent() {
             >
               <Menu size={20} />
             </button>
-            <span className="text-sm font-medium truncate mx-2" style={{ color: 'var(--fg-main)' }}>
-              bahAI
-            </span>
-            <button
-              onClick={() => {
-                if (chat.activeProject) chat.createConversation(chat.activeProject.id);
-              }}
-              className="p-2.5 rounded-lg transition-colors"
-              style={{ color: 'var(--fg-main)' }}
-              aria-label="New chat"
-            >
-              <SquarePen size={20} />
-            </button>
+            <div className="min-w-0 flex-1 text-center px-1">
+              <div className="text-sm font-medium truncate" style={{ color: 'var(--fg-main)' }}>
+                {chat.activeProject?.name || 'bahAI'}
+              </div>
+              <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
+                {selectedWorkflow?.name || settings.workflow}
+              </div>
+            </div>
+            <div className="flex items-center shrink-0">
+              <button
+                onClick={() => setShowOps(true)}
+                className="p-2.5 rounded-lg transition-colors"
+                style={{ color: showOps ? 'var(--color-accent)' : 'var(--fg-main)' }}
+                aria-label="Open ops"
+              >
+                <Settings size={18} />
+              </button>
+              <button
+                onClick={() => {
+                  if (chat.activeProject) chat.createConversation(chat.activeProject.id);
+                }}
+                className="p-2.5 rounded-lg transition-colors"
+                style={{ color: 'var(--fg-main)' }}
+                aria-label="New chat"
+              >
+                <SquarePen size={20} />
+              </button>
+            </div>
           </div>
         )}
 
@@ -296,27 +311,27 @@ function AppContent() {
           className="px-3 sm:px-4 py-2 shrink-0"
           style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}
         >
-          <div className="max-w-3xl mx-auto flex flex-wrap items-center gap-2">
+          <div className={isMobile ? 'max-w-3xl mx-auto flex items-center gap-2 overflow-x-auto premium-scroll whitespace-nowrap pb-1' : 'max-w-3xl mx-auto flex flex-wrap items-center gap-2'}>
             <span
-              className="text-[11px] px-2.5 py-1 rounded-md"
+              className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
               style={{ background: 'var(--bg-hover)', color: 'var(--fg-main)', border: '1px solid var(--border)' }}
             >
               {selectedModel?.name || settings.model}
             </span>
             <span
-              className="text-[11px] px-2.5 py-1 rounded-md"
+              className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
               style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
             >
               {settings.orchestrationMode ? `Workflow: ${selectedWorkflow?.name || settings.workflow}` : 'Workflow off'}
             </span>
             <span
-              className="text-[11px] px-2.5 py-1 rounded-md"
+              className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
               style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
             >
               Browser: {browserModeLabel}
             </span>
             <span
-              className="text-[11px] px-2.5 py-1 rounded-md"
+              className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
               style={{
                 background: chat.safeMode ? 'rgba(245, 158, 11, 0.12)' : 'rgba(34, 197, 94, 0.12)',
                 color: chat.safeMode ? '#fbbf24' : '#86efac',
@@ -327,7 +342,7 @@ function AppContent() {
             </span>
             {chat.activeProject && (
               <span
-                className="text-[11px] px-2.5 py-1 rounded-md truncate max-w-full"
+                className="text-[11px] px-2.5 py-1 rounded-md truncate max-w-[180px] shrink-0"
                 style={{ background: 'var(--bg-hover)', color: 'var(--fg-muted)', border: '1px solid var(--border)' }}
                 title={chat.activeProject.path}
               >
@@ -466,13 +481,21 @@ function AppContent() {
       {/* TERMINAL */}
       {showTerminal && (
         <div
-          className="shrink-0 overflow-hidden animate-in"
+          className={isMobile ? 'fixed inset-x-0 bottom-0 z-30 flex flex-col animate-in safe-bottom' : 'shrink-0 overflow-hidden animate-in'}
           style={{
-            height: isMobile ? '140px' : '200px',
+            height: isMobile ? '42vh' : '200px',
             background: 'var(--bg-surface)',
             borderTop: '1px solid var(--border)',
           }}
         >
+          {isMobile && (
+            <div className="flex items-center justify-between h-11 px-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+              <span className="text-sm font-medium" style={{ color: 'var(--fg-secondary)' }}>Terminal</span>
+              <button onClick={() => setShowTerminal(false)} className="p-2 rounded" style={{ color: 'var(--fg-muted)' }}>
+                <X size={18} />
+              </button>
+            </div>
+          )}
           <ErrorBoundary>
             <Suspense fallback={<LazyFallback />}>
               <Terminal
