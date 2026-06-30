@@ -9,10 +9,17 @@ const bcrypt = require('bcryptjs');
 const db = require('./db');
 
 const crypto = require('crypto');
-const JWT_SECRET = process.env.JWT_SECRET || 'bahai_secret_key_99';
 
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET production mühitində mütləq təyin olunmalıdır.');
+}
+
+// SEC-FIX: Avoid hardcoded fallback secret. If JWT_SECRET is not set (dev),
+// generate a random one per process start so tokens become invalid on restart
+// instead of being forgeable with a known constant.
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(48).toString('hex');
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️ JWT_SECRET təyin olunmayıb. Müvəqqəti random secret istifadə olunur — bütün tokenlər restart-da etibarsız olacaq.');
 }
 
 // Generate consistent user ID from email for local mode
@@ -24,7 +31,7 @@ function localUserId(email) {
 // SEC-1: Login with Role
 async function login(req, res) {
   const { email, password } = req.body;
-  const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+  const isLocalMode = isLocalModeEnabled();
 
   // In local mode, auto-authenticate with any credentials
   if (isLocalMode) {
@@ -62,7 +69,7 @@ async function login(req, res) {
 async function register(req, res) {
   const { email, password, name, fullName } = req.body;
   const displayName = name || fullName || email?.split('@')[0];
-  const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+  const isLocalMode = isLocalModeEnabled();
 
   // In local mode, auto-register without database
   if (isLocalMode) {
@@ -101,9 +108,16 @@ async function register(req, res) {
   }
 }
 
+// SEC-FIX: LOCAL_MODE must be opt-in via env. Previously this also triggered
+// whenever DATABASE_URL was missing, which on a cloud host would silently
+// turn the deployment into an unauthenticated admin server.
+function isLocalModeEnabled() {
+  return process.env.LOCAL_MODE === 'true';
+}
+
 // SEC-3: Middleware to verify Token & Role
 function verifyToken(req, res, next) {
-  const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+  const isLocalMode = isLocalModeEnabled();
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -111,12 +125,10 @@ function verifyToken(req, res, next) {
   if (token) {
     jwt.verify(token, JWT_SECRET, (err, decoded) => {
       if (err) {
-        // Token invalid — in local mode fallback to admin, in online mode reject
-        if (isLocalMode) {
-          req.user = { id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' };
-          return next();
-        }
-        return res.status(403).json({ error: 'Sessiya vaxtı bitib' });
+        // SEC-FIX: invalid/expired token must NOT silently grant admin in local
+        // mode — that was a token-forgery bypass. Reject explicitly so the
+        // client clears it and re-authenticates.
+        return res.status(403).json({ error: 'Sessiya vaxtı bitib və ya etibarsızdır' });
       }
       req.user = decoded;
       
@@ -130,7 +142,8 @@ function verifyToken(req, res, next) {
     return;
   }
 
-  // No token — in local mode auto-login as admin, in online mode reject
+  // No token — in LOCAL_MODE auto-login as a local admin (single-user dev
+  // machine). On a real cloud deployment LOCAL_MODE must NOT be enabled.
   if (isLocalMode) {
     req.user = { id: 9999, email: 'admin@bahai.local', name: 'bahAI Developer', role: 'admin' };
     return next();
@@ -142,20 +155,22 @@ function verifyToken(req, res, next) {
 // SEC-4: Get current user (/me)
 async function getMe(req, res) {
   // If user info is already in the token (local mode), return it directly
-  if (!db.hasDatabase() || (process.env.LOCAL_MODE === 'true')) {
+  if (!db.hasDatabase() || isLocalModeEnabled()) {
     return res.json({ user: { id: req.user.id, email: req.user.email, name: req.user.name || req.user.email?.split('@')[0], role: req.user.role || 'user' } });
   }
   
   try {
     const result = await db.query('SELECT id, email, name, role FROM users WHERE id = $1', [req.user.id]);
     if (result.rows.length === 0) {
-      // User not in DB but has valid token — return token info
-      return res.json({ user: { id: req.user.id, email: req.user.email, name: req.user.name || req.user.email?.split('@')[0], role: req.user.role || 'user' } });
+      // SEC-FIX: User no longer exists in DB — do not trust the token's role
+      // claim (could be a leftover admin token after user was deleted/demoted).
+      return res.status(401).json({ error: 'İstifadəçi tapılmadı' });
     }
     res.json({ user: result.rows[0] });
   } catch (e) {
-    // DB error — fallback to token info
-    res.json({ user: { id: req.user.id, email: req.user.email, name: req.user.name || req.user.email?.split('@')[0], role: req.user.role || 'user' } });
+    // DB error — fallback to token info but force role='user' to avoid privilege
+    // escalation if the DB is temporarily unavailable.
+    res.json({ user: { id: req.user.id, email: req.user.email, name: req.user.name || req.user.email?.split('@')[0], role: 'user' } });
   }
 }
 
@@ -227,7 +242,13 @@ function getAuthConfig(req, res) {
 
 // Desktop OAuth callback page - redirects token back to Electron via custom protocol
 router.get('/desktop-callback', (req, res) => {
-  const { token, user } = req.query;
+  // SEC-FIX: encodeURIComponent already escapes most things, but values
+  // arriving on the query string must be sanitized before embedding in HTML.
+  const escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+  const token = encodeURIComponent(escapeHtml(req.query.token || ''));
+  const user = encodeURIComponent(escapeHtml(req.query.user || ''));
   res.send(`<!DOCTYPE html>
 <html>
 <head><title>bahAI - Giriş uğurlu</title>
@@ -244,7 +265,7 @@ router.get('/desktop-callback', (req, res) => {
     <p>bahAI tətbiqinə qayıdırsınız...</p>
   </div>
   <script>
-    window.location.href = 'bahai://auth/callback?token=${encodeURIComponent(token || '')}&user=${encodeURIComponent(user || '')}';
+    window.location.href = 'bahai://auth/callback?token=${token}&user=${user}';
     setTimeout(function() { window.close(); }, 3000);
   </script>
 </body>
@@ -358,23 +379,28 @@ router.get('/google-callback', async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    // Return HTML that sends token back to opener window
+    // SEC-FIX: Token and user data must be HTML-/JS-safe. Use JSON.stringify
+    // + replace `</` to neutralise `</script>` breakouts, and base64-encode
+    // user blob so any quote/script-tag inside the Google name cannot break
+    // out of the JSON literal. postMessage target stays '*' since the popup
+    // origin is unknown; consumer (AuthModal) already validates message shape.
+    const safeJsonScript = (obj) =>
+      JSON.stringify(obj).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+    const payload = safeJsonScript({ token: jwtToken, user, credential: idToken });
     res.send(`<!DOCTYPE html>
 <html><head><title>bahAI Login</title></head>
 <body>
 <script>
-  if (window.opener) {
-    window.opener.postMessage({
-      type: 'google-oauth-credential',
-      credential: '${idToken}',
-      token: '${jwtToken}',
-      user: ${JSON.stringify(user)}
-    }, '*');
-    setTimeout(function() { window.close(); }, 1000);
-  } else {
-    // Fallback: redirect with token
-    window.location.href = 'bahai://auth/callback?token=${encodeURIComponent(jwtToken)}';
-  }
+  (function(){
+    var data = ${payload};
+    data.type = 'google-oauth-credential';
+    if (window.opener) {
+      window.opener.postMessage(data, '*');
+      setTimeout(function() { window.close(); }, 1000);
+    } else {
+      window.location.href = 'bahai://auth/callback?token=' + encodeURIComponent(data.token);
+    }
+  })();
 </script>
 <p style="font-family:sans-serif;text-align:center;margin-top:40vh;color:#666;">Giriş uğurlu! Pəncərə bağlanır...</p>
 </body></html>`);
@@ -384,9 +410,23 @@ router.get('/google-callback', async (req, res) => {
   }
 });
 
+// SEC-FIX: production-grade auth rate limiter using `express-rate-limit`.
+// 5 attempts / 15 min / IP for /login and /register to mitigate brute-force.
+// Swap the store for redis on multi-instance deploys.
+const rateLimit = require('express-rate-limit');
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çox cəhd olundu. 15 dəqiqə sonra yenidən cəhd edin.' },
+  // Count only failed attempts so a user who logs in correctly isn't blocked.
+  skipSuccessfulRequests: true
+});
+
 // Define Router Paths
-router.post('/login', login);
-router.post('/register', register);
+router.post('/login', authRateLimit, login);
+router.post('/register', authRateLimit, register);
 router.post('/google-login', googleLogin);
 router.get('/config', getAuthConfig);
 router.get('/me', verifyToken, getMe);

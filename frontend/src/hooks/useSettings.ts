@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import type { Settings } from '../lib/types';
-import { DEFAULT_BASE_URL } from '../lib/constants';
+import { DEFAULT_BASE_URL, DEFAULT_SETTINGS } from '../lib/constants';
 
 function loadSetting(key: string, fallback: string): string {
   try {
@@ -17,7 +17,10 @@ function loadSetting(key: string, fallback: string): string {
 export function useSettings() {
   const [apiKey, setApiKey] = useState(() => loadSetting('apiKey', ''));
   const [baseUrl, setBaseUrl] = useState(() => loadSetting('baseUrl', DEFAULT_BASE_URL));
-  const [model, setModel] = useState(() => loadSetting('model', 'deepseek-v4-flash-free'));
+  // FUNC-FIX: default model now uses DEFAULT_SETTINGS so it matches an actual
+  // entry in MODELS. Previously hard-coded `'deepseek-v4-flash-free'` (no
+  // slash, no colon) and the dropdown never highlighted the current model.
+  const [model, setModel] = useState(() => loadSetting('model', DEFAULT_SETTINGS.model));
   const [projectDir, setProjectDir] = useState(() => loadSetting('projectDir', ''));
   const [performanceMode, setPerformanceMode] = useState(() => {
     return localStorage.getItem('performanceMode') === 'true';

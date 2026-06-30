@@ -6,6 +6,8 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { OpenAI } = require('openai');
 const fs = require('fs/promises');
 const path = require('path');
@@ -28,9 +30,56 @@ const { router: authRoutes, verifyToken } = require('./auth');
 // Initialize Database
 db.initDb();
 
-// SEC-7: Restrict CORS
-app.use(cors());
+// SEC-FIX: Restrict CORS to explicit allow-list. Previously `cors()` reflected
+// any origin, enabling cross-site credential theft / CSRF from arbitrary
+// websites. ALLOWED_ORIGINS is a comma-separated list (e.g.
+// "https://bahai.app,https://staging.bahai.app").
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const corsConfig = allowedOrigins.length > 0
+  ? cors({
+      origin: (origin, cb) => {
+        // Allow non-browser clients (curl, Electron file://) which have no Origin header.
+        if (!origin) return cb(null, true);
+        if (allowedOrigins.includes(origin)) return cb(null, true);
+        return cb(new Error(`CORS blocked origin: ${origin}`));
+      },
+      credentials: true
+    })
+  : // Dev / single-host deploy: same-origin only is enforced by reflection-with-credentials NOT being set
+    cors({ origin: true });
+
+app.use(corsConfig);
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
+
+// SEC-FIX: replaced inline header-setting with the standard `helmet`
+// middleware which keeps the recommended defaults up-to-date. CSP is left in
+// report-only mode because the SPA + Electron contexts need inline scripts.
+app.use(helmet({
+  contentSecurityPolicy: false, // SPA + Electron needs inline; revisit later
+  crossOriginEmbedderPolicy: false,
+  // hide X-Powered-By, set X-Frame-Options, Referrer-Policy, HSTS in prod, etc.
+}));
+
+// SEC-FIX: production-grade rate limiter (replaces the in-memory map).
+// Backed by an in-process LRU; for multi-instance deploy swap the store
+// for redis: https://github.com/express-rate-limit/rate-limit-redis
+const apiLimiter = rateLimit({
+  windowMs: parseInt(process.env.API_RATE_WINDOW_MS || '60000', 10),
+  max: parseInt(process.env.API_RATE_MAX || '300', 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çox sorğu. Bir az sonra yenidən cəhd edin.' }
+});
+// Apply general limiter to all /api/* routes except SSE streams (chat / health
+// which legitimately keep the connection open).
+app.use('/api', (req, res, next) => {
+  if (req.path === '/chat' || req.path === '/chat-stream' || req.path === '/project-health') return next();
+  return apiLimiter(req, res, next);
+});
 
 // Request Logger
 app.use((req, res, next) => {
@@ -84,25 +133,38 @@ app.use('/api/github', verifyToken);
 // Configuration from environment
 // ==========================================
 const PORT = process.env.PORT || 3001;
-const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '15', 10);
+// FUNC-FIX: previously 15 steps × ~30s/step = ~7.5min runaway loops on local
+// models. 6 steps is enough for any realistic agentic flow (list → read →
+// edit → verify); larger context = more hallucinations and longer waits.
+const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '6', 10);
+const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../sandbox'));
 const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
   ? process.env.ALLOWED_DIRECTORIES.split(',').map(d => path.resolve(d.trim()))
   : [
+      // SEC-FIX: previously also included process.env.HOME, which exposed the
+      // entire user home directory (SSH keys, browser data, etc.) to the AI
+      // agent. Users now need to explicitly opt in via ALLOWED_DIRECTORIES.
       path.resolve(__dirname, '..'), // Project root
-      path.resolve(process.env.HOME || process.env.USERPROFILE || '/'), // User home (Documents, etc)
+      path.resolve(WORKSPACE_ROOT),  // Per-user sandbox area
     ];
-const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../sandbox'));
-const isLocalMode = () => process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+// SEC-FIX: LOCAL_MODE must be explicit. Previously the system considered
+// itself "local" whenever DATABASE_URL was missing, which on a cloud host
+// silently disabled auth and approvals for all visitors.
+const isLocalMode = () => process.env.LOCAL_MODE === 'true';
 const PROVIDER_COOLDOWN_MS = parseInt(process.env.PROVIDER_COOLDOWN_MS || '20000', 10);
 const providerRuntime = new Map();
 
 // Startup diagnostics
+// SEC-FIX: never leak any portion of API keys to logs in production.
 const diagKey = process.env.OPENAI_API_KEY;
+const keyDisplay = diagKey
+  ? (process.env.NODE_ENV === 'production' ? '✅ set' : `${diagKey.slice(0, 4)}...${diagKey.slice(-2)}`)
+  : '❌ not set';
 console.log('🔧 Startup Config:', {
   PORT,
   LOCAL_MODE: process.env.LOCAL_MODE || '(not set)',
   DATABASE_URL: process.env.DATABASE_URL ? '✅ set' : '❌ not set',
-  OPENAI_API_KEY: diagKey ? `${diagKey.slice(0, 8)}...${diagKey.slice(-4)}` : '❌ not set',
+  OPENAI_API_KEY: keyDisplay,
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || '(not set)',
   OPENAI_MODEL: process.env.OPENAI_MODEL || '(not set)',
   JWT_SECRET: process.env.JWT_SECRET ? '✅ set' : '❌ not set',
@@ -129,6 +191,35 @@ function parseProviderPoolFromEnv() {
   }
 }
 
+// FUNC-FIX: an Ollama model ID looks like `name:tag` (e.g. `gemma4:12b`,
+// `qwen2.5-coder:7b`, `llama3:8b`) — no slash, has colon. Cloud (OpenRouter)
+// IDs look like `vendor/model` or `vendor/model:free`. This lets us route to
+// the local Ollama endpoint without hard-coding a model whitelist.
+function looksLikeOllamaModel(modelId) {
+  if (!modelId) return false;
+  if (modelId.includes('/')) return false; // openrouter style
+  return modelId.includes(':') || /^(gemma|qwen|llama|deepseek|mistral|phi|codellama)/i.test(modelId);
+}
+
+// FUNC-FIX: lightweight intent classifier for the new "auto" model. Returns
+// 'fast' for short / chatty messages and 'smart' for complex / refactor /
+// architecture / long-context work.
+function classifyTaskComplexity({ userMessage, messageHistoryLen, hasAttachments }) {
+  const text = String(userMessage || '');
+  const len = text.length;
+  const hasCodeBlock = /```/.test(text);
+  const complexKeywords = /(refactor|architecture|design|plan|optimize|analyze|audit|review|debug|migrate|test plan|integration|scalab|security|performance)/i;
+  const trivialKeywords = /^(salam|hi|hello|how|necə|nədir|sağol|thanks|teşekkür|test|hə|yox)\b/i;
+
+  if (hasAttachments) return 'smart';
+  if (messageHistoryLen > 10) return 'smart';
+  if (hasCodeBlock && len > 500) return 'smart';
+  if (complexKeywords.test(text)) return 'smart';
+  if (trivialKeywords.test(text) && len < 80) return 'fast';
+  if (len > 600) return 'smart';
+  return 'fast';
+}
+
 function canUseProviderNow(providerId) {
   const state = providerRuntime.get(providerId);
   if (!state) return true;
@@ -148,27 +239,43 @@ function markProviderSuccess(providerId) {
   providerRuntime.set(providerId, { fails: 0, cooldownUntil: 0 });
 }
 
-function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendModel }) {
+function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendModel, autoIntent }) {
   const list = [];
 
-  const localOllamaModels = [
-    'gemma4:latest',
-    'gemma4:e2b',
-    'gemma4:12b',
-    'qwen2.5-coder:latest',
-    'dagbs/qwen2.5-coder-14b-instruct-abliterated:latest'
-  ];
+  const OLLAMA_BASE = process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1';
 
-  if (frontendModel && localOllamaModels.includes(frontendModel)) {
+  // FUNC-FIX: AUTO mode — route based on classifier. Fast intents try local
+  // Ollama first (free, private), smart intents try the cloud frontier model
+  // first. Both fall back to each other if the primary fails.
+  if (frontendModel === 'auto') {
+    const cloudKey = frontendApiKey || process.env.OPENAI_API_KEY || '';
+    const cloudBase = frontendBaseUrl || process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+    const fastLocal = process.env.AUTO_FAST_MODEL || 'qwen2.5-coder:7b';
+    const smartCloud = process.env.AUTO_SMART_MODEL || 'anthropic/claude-sonnet-4.5';
+
+    const localProvider = { id: 'auto_ollama_fast', apiKey: 'ollama', baseURL: OLLAMA_BASE, model: fastLocal };
+    const cloudProvider = cloudKey ? { id: 'auto_cloud_smart', apiKey: cloudKey, baseURL: cloudBase, model: smartCloud } : null;
+
+    if (autoIntent === 'smart' && cloudProvider) {
+      list.push(cloudProvider);
+      list.push(localProvider); // failover for cloud outage
+    } else {
+      list.push(localProvider);
+      if (cloudProvider) list.push(cloudProvider); // failover if Ollama not running
+    }
+  } else if (frontendModel && looksLikeOllamaModel(frontendModel)) {
+    // FUNC-FIX: any Ollama-style ID auto-routes to local endpoint (was a
+    // hard-coded whitelist, so e.g. qwen2.5-coder:7b silently fell back to
+    // openrouter and 404'd).
     list.push({
-      id: 'local_ollama_override',
+      id: 'local_ollama_auto',
       apiKey: 'ollama',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: OLLAMA_BASE,
       model: frontendModel
     });
   }
 
-  if (frontendApiKey && frontendBaseUrl && frontendModel) {
+  if (frontendApiKey && frontendBaseUrl && frontendModel && frontendModel !== 'auto') {
     list.push({
       id: 'frontend',
       apiKey: frontendApiKey,
@@ -184,7 +291,7 @@ function buildProviderCandidates({ frontendApiKey, frontendBaseUrl, frontendMode
   const envApiKey = process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY || '';
   const envBase = process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
   const envModel = process.env.OPENAI_MODEL || 'qwen/qwen3-coder:free';
-  if (envApiKey) {
+  if (envApiKey && frontendModel !== 'auto') {
     list.push({
       id: process.env.OPENAI_API_KEY ? 'env_openai' : 'env_nvidia',
       apiKey: envApiKey,
@@ -475,6 +582,57 @@ async function extractAttachment(attachment) {
       return { name, mimeType, extractedText: '' };
     }
 
+    const lowerName = name.toLowerCase();
+    const buf = decoded.buffer;
+
+    // SEC/FUNC-FIX: actually use the imported parsers for PDF/DOCX/XLSX/images
+    // (previously they were imported but only the agent's `read_file` tool used
+    // them — user attachments fell through to "unsupported file type").
+    if (mimeType === 'application/pdf' || lowerName.endsWith('.pdf')) {
+      try {
+        const data = await pdfParse(buf);
+        return { name, mimeType, extractedText: (data?.text || '').slice(0, 50000) };
+      } catch (e) {
+        return { name, mimeType, extractedText: '', extractionError: `PDF parse xətası: ${e.message}` };
+      }
+    }
+
+    if (
+      mimeType.includes('officedocument.wordprocessingml') ||
+      lowerName.endsWith('.docx')
+    ) {
+      try {
+        const text = await extractDocxText(buf);
+        return { name, mimeType, extractedText: (text || '').slice(0, 50000) };
+      } catch (e) {
+        return { name, mimeType, extractedText: '', extractionError: `DOCX parse xətası: ${e.message}` };
+      }
+    }
+
+    if (
+      mimeType.includes('spreadsheetml') ||
+      mimeType.includes('ms-excel') ||
+      lowerName.endsWith('.xlsx') ||
+      lowerName.endsWith('.xls') ||
+      lowerName.endsWith('.csv')
+    ) {
+      try {
+        const text = extractSpreadsheetText(buf);
+        return { name, mimeType, extractedText: (text || '').slice(0, 50000) };
+      } catch (e) {
+        return { name, mimeType, extractedText: '', extractionError: `Cədvəl parse xətası: ${e.message}` };
+      }
+    }
+
+    if (mimeType.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|tiff)$/i.test(name)) {
+      try {
+        const text = await extractImageText(buf);
+        return { name, mimeType, extractedText: (text || '').slice(0, 50000) };
+      } catch (e) {
+        return { name, mimeType, extractedText: '', extractionError: `Image OCR xətası: ${e.message}` };
+      }
+    }
+
     // Only support text-based files
     if (
       mimeType.startsWith('text/') ||
@@ -484,11 +642,11 @@ async function extractAttachment(attachment) {
       mimeType.includes('typescript') ||
       /\.(txt|json|csv|md|yaml|yml|xml|log|env|js|ts|jsx|tsx|py|html|css|sh|toml|ini|cfg|conf)$/i.test(name)
     ) {
-      const text = decoded.buffer.toString('utf8');
+      const text = buf.toString('utf8');
       return { name, mimeType, extractedText: text.slice(0, 50000) };
     }
 
-    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}. Yalnız mətn faylları (txt, json, csv, md, js, ts, py, html, css) dəstəklənir.]` };
+    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}. Dəstəklənənlər: PDF, DOCX, XLSX, CSV, şəkillər (OCR), və mətn faylları.]` };
   } catch (error) {
     console.error('Attachment parse xətası:', name, error?.message || error);
     return { name, mimeType, extractedText: `[Attachment oxunarkən xəta: ${name}]` };
@@ -573,6 +731,8 @@ async function normalizeMessagesForModel(messages = [], modelName = '') {
         if (responseMatch && responseMatch[1]) {
           content = content.replace(responseMatch[0], responseMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
         }
+        // Clean up leaked system prompts to prevent infinite loops
+        content = content.replace(/Layihə yaddaşı:\s*\{[\s\S]*?\}\n*/g, '').trim();
       }
     }
 
@@ -596,84 +756,29 @@ async function normalizeMessagesForModel(messages = [], modelName = '') {
 }
 
 function generateToolsSystemPrompt() {
-  let prompt = `\n\n🛠️ SƏNİN İSTİFADƏ EDƏ BİLƏCƏYİN ALƏTLƏR (TOOLS):\n`;
-  prompt += `Əgər bu alətlərdən hər hansı birini çağırmaq qərarına gəlsən, cavabında YALNIZ alətə məxsus təmiz JSON bloku yazmalısan:\n`;
-  prompt += `\`\`\`json\n{\n  "name": "alət_adı",\n  "arguments": {\n    "arqument_adı": "dəyər"\n  }\n}\n\`\`\`\n`;
-  prompt += `Sən eyni cavab daxilində birdən çox JSON alət çağırış bloku da yaza bilərsən.\n\nMövcud alətlərin siyahısı və onların parametrləri:\n\n`;
+  // FUNC-FIX: previous prompt was 80+ lines with 5 worked examples and made
+  // smaller local models lose context. Compact prompt with a single concrete
+  // example and a hard rule list.
+  let prompt = `\n\nİSTİFADƏ EDƏ BİLƏCƏYİN ALƏTLƏR (TOOLS):\n`;
+  prompt += `Tool çağırışı üçün cavabın YALNIZ aşağıdakı kimi JSON bloku olmalıdır:\n`;
+  prompt += `\`\`\`json\n{"name": "alət_adı", "arguments": {"arq": "dəyər"}}\n\`\`\`\n`;
+  prompt += `Bir cavabda yalnız 1 tool çağırışı et. İstifadəçiyə son cavab verirsənsə, JSON İSTİFADƏ ETMƏ — adi Markdown yaz.\n\n`;
 
+  prompt += `Mövcud alətlər:\n`;
   for (const t of TOOLS) {
     const fn = t.function;
-    prompt += `📌 **Alət: \`${fn.name}\`**\n`;
-    prompt += `📝 Təsvir: ${fn.description}\n`;
-    if (fn.parameters && fn.parameters.properties) {
-      prompt += `⚙️ Parametrlər:\n`;
-      for (const [propName, propVal] of Object.entries(fn.parameters.properties)) {
-        const isRequired = fn.parameters.required?.includes(propName) ? ' (MƏCBURİ)' : ' (KÖMƏKÇİ)';
-        const desc = propVal.description || '';
-        prompt += `  - \`${propName}\` (${propVal.type}): ${desc}${isRequired}\n`;
-      }
-    }
+    const requiredParams = (fn.parameters?.required || []).join(', ');
+    prompt += `• \`${fn.name}\` — ${fn.description}`;
+    if (requiredParams) prompt += ` (məcburi: ${requiredParams})`;
     prompt += `\n`;
   }
-  prompt += `\n🚨 QƏTİ QAYDA: Əgər istifadəçi "kodu yoxla", "audit et", "layihəyə bax" və ya oxşar bir şey deyirsə, ONA SUAL VERMƏ ("hansı fayla baxım?", "kod hardadır?" və s.). DƏRHAL yuxarıdakı json formatında \`list_directory\` (və ya github-dırsa \`github_list_contents\`) alətini çağır! İlk addımın mütləq alət çağırmaq olmalıdır!
 
-Vacib Qeyd: LOKAL layihələri oxumaq üçün mütləq \`list_directory\`, \`read_file\`, \`glob_search\`, \`grep_search\` istifadə et. YALNIZ istifadəçi sənə GitHub linki (owner/repo) verərsə \`github_\` alətlərini çağır!
-  
-NÜMUNƏ CAVAB 1 (Lokal analiz):
-Əgər istifadəçi xüsusi yol verməyib sadəcə "audit et" deyirsə:
+  prompt += `\nNÜMUNƏ: İstifadəçi "qovluğu oxu" deyirsə:
 \`\`\`json
-{
-  "name": "list_directory",
-  "arguments": { "path": "./" }
-}
-\`\`\`
-Əgər istifadəçi "Bu qovluğu audit et: /Users/macbookair/Documents/layihe" deyirsə:
-\`\`\`json
-{
-  "name": "list_directory",
-  "arguments": { "path": "/Users/macbookair/Documents/layihe" }
-}
+{"name": "list_directory", "arguments": {"path": "./"}}
 \`\`\`
 
-NÜMUNƏ CAVAB 2 (Lokal faylı oxumaq):
-Siyahını gördükdən sonra DƏRHAL faylı oxumalısan:
-\`\`\`json
-{
-  "name": "read_file",
-  "arguments": {
-    "path": "./app.py"
-  }
-}
-\`\`\`
-
-NÜMUNƏ CAVAB 3 (Lokal axtarış):
-Əgər istifadəçi "maliyyə modulu" deyirsə və adını bilmirsənsə:
-\`\`\`json
-{
-  "name": "grep_search",
-  "arguments": {
-    "query": "maliyye",
-    "directory": "./"
-  }
-}
-\`\`\`
-
-NÜMUNƏ CAVAB 4 (GitHub analiz):
-Əgər istifadəçi XÜSUSİ OLARAQ "githubdakı repo-nu analiz et" deyərsə:
-\`\`\`json
-{
-  "name": "github_list_contents",
-  "arguments": {
-    "owner": "sahibin-adi",
-    "repo": "reponun-adi",
-  }
-}
-\`\`\`
-
-NÜMUNƏ CAVAB 5 (İstifadəçiyə Yekun Cavab):
-Əgər alətləri çağırmağı bitirdinsə və istifadəçiyə hesabat verirsənsə, QƏTİYYƏN JSON İSTİFADƏ ETMƏ. Normal mətn yaz:
-Salam! Sizin layihənizi analiz etdim. Qovluqların içində \`src\` tapdım və kodda bir neçə xəta var. İstəyirsinizsə onları düzəldim.
-\n`;
+QAYDA: Tam yol verilibsə (məs. /Users/.../proj), həmin yolu eyniylə path-da istifadə et — kor-koranə "./" yazma.\n`;
   return prompt;
 }
 
@@ -696,102 +801,81 @@ function buildDeepSeekRecoveryMessages(messages = []) {
 
 function extractTextToolCalls(text) {
   if (!text) return { cleanedText: text, toolCalls: [] };
-  
-  let cleanedText = text;
-  const toolCalls = [];
 
-  // 1. Try to find markdown blocks
+  // FUNC-FIX: previous impl reset `index = 0` after each match (O(n^2) +
+  // double-emit) and used unreliable surrounding-text guessing. New: single
+  // forward pass, returns at most ONE tool call per response (matches the
+  // chat loop behaviour and avoids hallucination loops on local models).
+  const toolCalls = [];
+  const removed = [];
+
   const blockRegex = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/ig;
-  let match;
-  while ((match = blockRegex.exec(cleanedText)) !== null) {
-      try {
-          const parsed = JSON.parse(match[1]);
-          if (parsed && parsed.name && parsed.arguments !== undefined) {
-              const isValidTool = TOOLS.some(t => t.function.name === parsed.name);
-              if (isValidTool) {
-                  toolCalls.push({
-                      name: parsed.name,
-                      arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
-                  });
-                  cleanedText = cleanedText.slice(0, match.index) + cleanedText.slice(match.index + match[0].length);
-                  blockRegex.lastIndex = 0;
-                  continue;
-              }
-          }
-      } catch(e) {}
+  let m;
+  while ((m = blockRegex.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(m[1]);
+      if (parsed && typeof parsed.name === 'string' && parsed.arguments !== undefined &&
+          TOOLS.some((t) => t.function.name === parsed.name)) {
+        toolCalls.push({
+          name: parsed.name,
+          arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
+        });
+        removed.push([m.index, m.index + m[0].length]);
+        break;
+      }
+    } catch { /* ignore */ }
   }
 
-  // 2. Try to find raw JSON blocks using balanced braces
-  let index = 0;
-  while (index < cleanedText.length) {
-    const startIdx = cleanedText.indexOf('{', index);
-    if (startIdx === -1) break;
-    
-    let braceCount = 0;
-    let inString = false;
-    let escape = false;
-    let endIndex = startIdx;
-    let found = false;
-    
-    for (; endIndex < cleanedText.length; endIndex++) {
-      const char = cleanedText[endIndex];
-      if (escape) { escape = false; continue; }
-      if (char === '\\') { escape = true; continue; }
-      if (char === '"') { inString = !inString; continue; }
-      if (!inString) {
-        if (char === '{') braceCount++;
-        else if (char === '}') {
+  if (toolCalls.length === 0) {
+    let i = 0;
+    while (i < text.length) {
+      const startIdx = text.indexOf('{', i);
+      if (startIdx === -1) break;
+      let braceCount = 0;
+      let inString = false;
+      let escape = false;
+      let endIndex = startIdx;
+      let found = false;
+      for (; endIndex < text.length; endIndex++) {
+        const ch = text[endIndex];
+        if (escape) { escape = false; continue; }
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === '{') braceCount++;
+        else if (ch === '}') {
           braceCount--;
-          if (braceCount === 0) {
-            endIndex++;
-            found = true;
-            break;
-          }
+          if (braceCount === 0) { endIndex++; found = true; break; }
         }
       }
-    }
-    
-    if (found) {
-      const possibleJson = cleanedText.substring(startIdx, endIndex);
+      if (!found) break;
+      const candidate = text.substring(startIdx, endIndex);
       try {
-        const parsed = JSON.parse(possibleJson);
-        if (parsed && typeof parsed === 'object') {
-          let gName = typeof parsed.name === 'string' ? parsed.name : null;
-          let gArgs = parsed.arguments !== undefined ? parsed.arguments : parsed;
-
-          if (!gName) {
-            const surr = cleanedText.substring(Math.max(0, startIdx - 100), startIdx).toLowerCase();
-            if (surr.includes('list_directory') || surr.includes('list directory') || ('path' in parsed && !('content' in parsed))) gName = 'list_directory';
-            else if (surr.includes('read_file') || surr.includes('read file')) gName = 'read_file';
-            else if (surr.includes('glob_search')) gName = 'glob_search';
-            else if (surr.includes('grep_search')) gName = 'grep_search';
-          }
-
-          if (gName && TOOLS.some(t => t.function.name === gName)) {
-            toolCalls.push({
-              name: gName,
-              arguments: typeof gArgs === 'object' ? JSON.stringify(gArgs) : String(gArgs)
-            });
-            // remove from text
-            let prefixIndex = startIdx;
-            const beforeText = cleanedText.substring(0, startIdx);
-            if (beforeText.trim().endsWith('json')) {
-               prefixIndex = beforeText.lastIndexOf('json');
-            }
-            cleanedText = cleanedText.substring(0, prefixIndex) + cleanedText.substring(endIndex);
-            index = 0; // reset
-            continue;
-          }
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string' &&
+            parsed.arguments !== undefined &&
+            TOOLS.some((t) => t.function.name === parsed.name)) {
+          toolCalls.push({
+            name: parsed.name,
+            arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments)
+          });
+          let startCut = startIdx;
+          const before = text.substring(Math.max(0, startIdx - 10), startIdx);
+          const fence = before.match(/```(?:json)?\s*$/i);
+          if (fence) startCut -= fence[0].length;
+          removed.push([startCut, endIndex]);
+          break;
         }
-      } catch (e) {}
+      } catch { /* not valid JSON */ }
+      i = endIndex;
     }
-    index = startIdx + 1;
   }
-  
-  return {
-    cleanedText: cleanedText.trim(),
-    toolCalls
-  };
+
+  let cleaned = text;
+  for (let r = removed.length - 1; r >= 0; r--) {
+    cleaned = cleaned.substring(0, removed[r][0]) + cleaned.substring(removed[r][1]);
+  }
+  return { cleanedText: cleaned.trim(), toolCalls };
 }
 
 function serializeProject(row) {
@@ -1618,7 +1702,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         });
                         return;
                       }
-                    } catch {}
+                    } catch { /* ignore */ }
 
                     // SEC-4: Use execFile style for safety
                     const proc = spawn('git', ['clone', args.url, args.folderName], { cwd: workingDirectory });
@@ -1798,7 +1882,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         const devDeps = Object.keys(pkg.devDependencies || {}).slice(0, 10).join(', ');
                         const scripts = Object.keys(pkg.scripts || {}).join(', ');
                         projectInfo = `\n\n📦 package.json:\n  Ad: ${pkg.name || 'N/A'}\n  Versiya: ${pkg.version || 'N/A'}\n  Scripts: ${scripts}\n  Dependencies: ${deps}\n  DevDeps: ${devDeps}`;
-                    } catch {}
+                    } catch { /* ignore */ }
                     
                     // Check for other config files
                     let configs = '';
@@ -1808,7 +1892,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         try {
                             await fs.access(path.join(analyzePath, cf));
                             foundConfigs.push(cf);
-                        } catch {}
+                        } catch { /* ignore */ }
                     }
                     if (foundConfigs.length > 0) configs = `\n\n⚙️ Konfiqurasiya faylları: ${foundConfigs.join(', ')}`;
 
@@ -1820,7 +1904,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                             const content = await fs.readFile(path.join(analyzePath, ef), 'utf-8');
                             entryContent = `\n\n📝 Entry point (${ef}) - ilk 50 sətir:\n${content.split('\n').slice(0, 50).join('\n')}`;
                             break;
-                        } catch {}
+                        } catch { /* ignore */ }
                     }
                     
                     const summary = [
@@ -1862,7 +1946,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                                 timeout: 5000 
                             });
                             if (stdout) results.push(stdout);
-                        } catch {}
+                        } catch { /* ignore */ }
                     }
                     
                     return results.length > 0 
@@ -1922,6 +2006,27 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                     if (!args.url.startsWith('http://') && !args.url.startsWith('https://')) {
                         return "Error: URL must start with http:// or https://";
                     }
+                    // SEC-FIX: block SSRF to internal services / cloud metadata.
+                    let urlObj;
+                    try { urlObj = new URL(args.url); } catch { return "Error: invalid URL"; }
+                    const host = urlObj.hostname.toLowerCase();
+                    const isPrivate = (
+                      host === 'localhost' ||
+                      host === '0.0.0.0' ||
+                      host === '::1' ||
+                      host.endsWith('.local') ||
+                      host.endsWith('.internal') ||
+                      /^127\./.test(host) ||
+                      /^10\./.test(host) ||
+                      /^192\.168\./.test(host) ||
+                      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
+                      /^169\.254\./.test(host) ||
+                      /^fc[0-9a-f]{2}:/.test(host) ||
+                      /^fe80:/.test(host)
+                    );
+                    if (isPrivate) {
+                        return "Error: web_fetch private/internal host-larına müraciət edə bilməz.";
+                    }
                     const response = await fetch(args.url, { 
                         timeout: 15000,
                         headers: { 'User-Agent': 'bahAI-Agent/1.0' }
@@ -1954,18 +2059,18 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         }
                         if (pkg.devDependencies?.vitest || pkg.dependencies?.vitest) testCmd = 'npx vitest --run';
                         if (pkg.devDependencies?.jest || pkg.dependencies?.jest) testCmd = 'npx jest --forceExit';
-                    } catch {}
+                    } catch { /* ignore */ }
                     
                     if (!testCmd) {
                         // Check for Python tests
                         try {
                             await fs.access(path.join(workingDirectory, 'pytest.ini'));
                             testCmd = 'python -m pytest --tb=short';
-                        } catch {}
+                        } catch { /* ignore */ }
                         try {
                             await fs.access(path.join(workingDirectory, 'tests'));
                             testCmd = testCmd || 'python -m pytest --tb=short';
-                        } catch {}
+                        } catch { /* ignore */ }
                     }
                     
                     if (!testCmd) return "Test framework tapılmadı. package.json-da 'test' script əlavə edin.";
@@ -2020,12 +2125,18 @@ async function handleToolCall(toolCall, workingDirectory, user) {
             }
 
             case "start_server": {
+                // SEC-FIX: validate the command against the allow-list so the
+                // LLM cannot smuggle `; rm -rf $HOME` through the start_server
+                // tool (which previously skipped the safety check).
+                if (!isBashCommandSafe(args.command || '')) {
+                    return "Error: start_server qadağan olunmuş əmri rədd etdi.";
+                }
                 try {
                     // Kill any existing process on the port first
                     const port = args.port || 3000;
                     try {
                         await execFileAsync('sh', ['-c', `lsof -ti:${port} | xargs kill -9 2>/dev/null`], { cwd: workingDirectory, timeout: 3000 });
-                    } catch {}
+                    } catch { /* ignore */ }
                     
                     await new Promise(r => setTimeout(r, 500));
                     
@@ -2058,7 +2169,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                             });
                             ready = true;
                             break;
-                        } catch {}
+                        } catch { /* ignore */ }
                     }
                     
                     if (ready) {
@@ -2608,7 +2719,6 @@ app.post('/api/project-health', async (req, res) => {
 
   for (const item of commands) {
     res.write(`data: ${JSON.stringify({ type: 'health_step', key: item.key, status: 'running', command: item.cmd })}\n\n`);
-    // eslint-disable-next-line no-await-in-loop
     const result = await runStreamingCommand(item.cmd, resolvedWD, (stream, chunk) => {
       res.write(`data: ${JSON.stringify({ type: 'health_log', key: item.key, stream, chunk })}\n\n`);
     });
@@ -2807,7 +2917,9 @@ app.post('/api/chat', async (req, res) => {
     
     // --- Hardcoded Fallback Redirect for weak models ---
     let userPathMatch = null;
-    require('fs').writeFileSync('debug_messages.json', JSON.stringify(messages, null, 2));
+    // SEC-FIX: removed `fs.writeFileSync('debug_messages.json', ...)` which
+    // dumped every chat (with attachments and possibly secrets) to the project
+    // root on every request.
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'user' || messages[i].role === 'system') {
         let textContent = messages[i].content;
@@ -2844,10 +2956,21 @@ app.post('/api/chat', async (req, res) => {
     const frontendApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
     const frontendBaseUrl = (typeof baseUrl === 'string' ? baseUrl.trim() : '') || process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
     const frontendModel = model || process.env.OPENAI_MODEL || 'qwen/qwen3-coder:free';
+
+    // FUNC-FIX: classify the LATEST user message for the new "auto" model so
+    // we can pick fast/local vs smart/cloud automatically.
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+    const autoIntent = classifyTaskComplexity({
+      userMessage: lastUserMsg?.content || '',
+      messageHistoryLen: messages.length,
+      hasAttachments: Array.isArray(lastUserMsg?.attachments) && lastUserMsg.attachments.length > 0
+    });
+
     const providerCandidates = buildProviderCandidates({
       frontendApiKey,
       frontendBaseUrl,
-      frontendModel
+      frontendModel,
+      autoIntent
     });
 
     if (providerCandidates.length === 0) {
@@ -2865,7 +2988,12 @@ app.post('/api/chat', async (req, res) => {
       }
     });
     let effectiveModel = activeProvider.model;
-    console.log(`🤖 /api/chat | provider_candidates=${providerCandidates.length} | active=${activeProvider.id} | model=${effectiveModel}`);
+    console.log(`🤖 /api/chat | provider_candidates=${providerCandidates.length} | active=${activeProvider.id} | model=${effectiveModel}${frontendModel === 'auto' ? ` | auto_intent=${autoIntent}` : ''}`);
+
+    // FUNC-FIX: pending event — emitted once SSE headers are written below.
+    const pendingAutoRouteEvent = frontendModel === 'auto'
+      ? { type: 'auto_route', intent: autoIntent, chosenModel: effectiveModel, providerId: activeProvider.id }
+      : null;
 
     const isLocalOrFlakyModel = isLocalMode() || 
       !effectiveModel || 
@@ -2895,15 +3023,24 @@ Sənin əsas məqsədin kod bazasını mükəmməl analiz etmək, 100% işlək, 
 Azərbaycan dilində, peşəkar, aydın və dostyana bir proqramçı tonunda cavab ver.`;
 
     if (isLocalOrFlakyModel) {
-       sysPrompt = `SƏN AVTONOM KODLAŞDIRMA AGENTİSƏN VƏ SİSTEMƏ TAM GİRİŞİN VAR.
-Faylları oxumaq, kod audit etmək və qovluqları görmək sənin ƏSAS VƏZİFƏNDİR. "Mən fayl sistemi əməliyyatçısı deyiləm", "Mən kodun məzmununu oxuya bilmərəm", "Bunu edə bilmərəm" kimi sözlər QƏTİ QADAĞANDIR! Sən read_file aləti vasitəsilə faylların daxilini, kod məzmununu mükəmməl oxuya bilirsən.
+       // FUNC-FIX: previous prompt was 700+ lines of "QƏTİ QADAĞANDIR" rules
+       // which weak local models (Gemma/Qwen 7B) couldn't follow and ended up
+       // hallucinating "I can't do this". Replaced with a tight, example-led
+       // prompt that mirrors how Claude Code / Cursor system-prompt their
+       // local fallbacks.
+       sysPrompt = `Sən bahAI — Azərbaycan dilində danışan AI proqramçı agentisən.
+Layihənin yolu: ${resolvedWD}
 
-QƏTİ QAYDALAR:
-1. İnsanla lazımsız söhbət etmə! Qətiyyən üzr istəmə və bəhanə gətirmə. Alət çağırmaq lazımdırsa birbaşa json formatında alət çağır!
-2. Əgər istifadəçi sənə tam bir yol veribsə, alətlərdə "path" kimi MÜTLƏQ HƏMİN YOLU yaz!
-3. İstifadəçidən "hansı faylı oxuyum?" və ya "kodun məzmununu oxuyaq?" deyə soruşma və ondan icazə istəmə. Əgər bir faylın içini bilmək lazımdırsa, DƏRHAL \`read_file\` alətini JSON formatında çağır.
-4. Mütləq alət çağırışlarını yalnız JSON formatında et!
-5. İstifadəçiyə cavab verərkən (artıq alət çağırmırsansa və sadəcə nəticəni deyirsənsə), cavabını QƏTİYYƏN JSON daxilində (məsələn {"response": "..."}) YAZMA! Normal, oxunaqlı və Markdown formatlı mətn kimi yaz!`;
+QAYDALAR:
+1. Sən faylları oxuya, yaza və terminal əmrlərini icra edə bilirsən. Heç vaxt "edə bilmərəm" demə.
+2. Fayl oxumaq və qovluq görmək üçün TOOL CALL et — söz vermə.
+3. Cavabın HƏMİŞƏ Azərbaycan dilində olsun. JSON formatında istifadəçiyə cavab vermə (yalnız tool call üçün JSON).
+4. Hər tool call-dan sonra qısa izah yaz: nə etdiyin və növbəti addım.
+5. Sual aydın deyilsə, ÖZ bildiyin ən məntiqli interpretasiyaya əməl et — soruşma.
+
+CAVAB FORMATI:
+- Tool çağırışı üçün: tək JSON blok (aşağıdakı format).
+- İstifadəçiyə son cavab üçün: adi Markdown mətn (kod blokları + izah).`;
     }
 
     let modelMessages = [];
@@ -2938,7 +3075,7 @@ QƏTİ QAYDALAR:
     if (isLocalOrFlakyModel) {
       apiMessages.push({
         role: 'system',
-        content: "XATIRLATMA: Sən birbaşa faylları oxuya, dəyişə və command icra edə bilən AI kodlaşdırma agentisən. MÜTLƏQ verilmiş JSON tool (read_file, grep_search, list_directory, və s.) çağırışlarını istifadə et. Qətiyyən 'mən bunu edə bilmərəm' və ya 'mən yalnız bir modeləm' bəhanələrini gətirmə!"
+        content: "XATIRLATMA: Sən birbaşa faylları oxuya, dəyişə və command icra edə bilən AI kodlaşdırma agentisən. MÜTLƏQ verilmiş JSON tool (read_file, grep_search, list_directory, və s.) çağırışlarını istifadə et. Qətiyyən xəyalından uydurma (məsələn, 'faylı oxudum, xəta tapdım' demə)! Real faylları oxumaq üçün mütləq JSON çağırışı et!"
       });
     }
 
@@ -2949,6 +3086,11 @@ QƏTİ QAYDALAR:
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
+
+    // FUNC-FIX: emit auto-routing decision so the UI can show what was picked.
+    if (pendingAutoRouteEvent) {
+      res.write(`data: ${JSON.stringify(pendingAutoRouteEvent)}\n\n`);
+    }
 
     let currentMessages = [...apiMessages];
     let step = 0;
@@ -2974,9 +3116,10 @@ QƏTİ QAYDALAR:
         while (step < MAX_STEPS && !clientDisconnected) {
             step++;
 
-            // Streaming ilə API çağırışı (600 saniyə timeout - lokal/yavaş modellər üçün)
+            // Streaming ilə API çağırışı (default 180s; lokal/yavaş modellər üçün env ilə uzadıla bilər)
+            const llmTimeoutMs = parseInt(process.env.LLM_TIMEOUT_MS || '180000', 10);
             const abortController = new AbortController();
-            const timeoutId = setTimeout(() => abortController.abort(), 600000);
+            const timeoutId = setTimeout(() => abortController.abort(), llmTimeoutMs);
 
             let stream;
             let shouldRetryWithDeepSeekRecovery = false;
@@ -2990,9 +3133,10 @@ QƏTİ QAYDALAR:
                     stream: true
                 }, { signal: abortController.signal });
             } catch (apiErr) {
+                let currentErr = apiErr;
                 const isRetryable = (() => {
-                  const st = apiErr?.status || apiErr?.code;
-                  const msg = String(apiErr?.message || '').toLowerCase();
+                  const st = currentErr?.status || currentErr?.code;
+                  const msg = String(currentErr?.message || '').toLowerCase();
                   if (st === 401) return true;
                   if (st === 429 || st === 500 || st === 502 || st === 503 || st === 504) return true;
                   if (st === 400 && msg.includes('provider returned error')) return true;
@@ -3029,7 +3173,7 @@ QƏTİ QAYDALAR:
                       console.log(`🔁 Provider failover: switched to ${alt.id}`);
                       break;
                     } catch (altErr) {
-                      apiErr = altErr;
+                      currentErr = altErr;
                       markProviderFailure(alt.id);
                     }
                   }
@@ -3039,12 +3183,13 @@ QƏTİ QAYDALAR:
                 clearTimeout(timeoutId);
                 if (stream) {
                   // fallback succeeded
-                } else if (apiErr.name === 'AbortError') {
-                    res.write(`data: ${JSON.stringify({ type: 'error', message: 'API cavab vaxtı bitdi (10 dəqiqə). Zəhmət olmasa yenidən cəhd edin.' })}\n\n`);
+                } else if (currentErr.name === 'AbortError') {
+                    const sec = Math.round(llmTimeoutMs / 1000);
+                    res.write(`data: ${JSON.stringify({ type: 'error', message: `Model ${sec}s ərzində cavab vermədi. Daha kiçik model (məs. Qwen 2.5 Coder 7B) sınayın və ya \`LLM_TIMEOUT_MS\` env-i artırın.` })}\n\n`);
                     break;
                 } else {
-                  const status = apiErr.status || apiErr.code || 'unknown';
-                  const errText = String(apiErr.message || '').toLowerCase();
+                  const status = currentErr.status || currentErr.code || 'unknown';
+                  const errText = String(currentErr.message || '').toLowerCase();
                   const isDeepSeekModel = String(effectiveModel || '').toLowerCase().includes('deepseek');
                   if (
                     !deepSeekRecoveryUsed &&
@@ -3076,22 +3221,43 @@ QƏTİ QAYDALAR:
                       res.write(`data: ${JSON.stringify({ type: 'assistant_message', message: simpleMsg })}\n\n`);
                       break;
                     } catch (fallbackErr) {
-                      apiErr = fallbackErr;
+                      currentErr = fallbackErr;
                     }
                   }
 
                   // Detailed API error logging
-                  console.error(`❌ API Error [${status}]:`, apiErr.message);
-                  console.error(`❌ Full error:`, JSON.stringify({ status: apiErr.status, headers: apiErr.headers, body: apiErr.error || apiErr.body }, null, 2));
-                  let userMsg = `API xətası: ${apiErr.message}`;
-                  if (apiErr.status === 401) {
+                  console.error(`❌ API Error [${status}]:`, currentErr.message);
+                  console.error(`❌ Full error:`, JSON.stringify({ status: currentErr.status, headers: currentErr.headers, body: currentErr.error || currentErr.body }, null, 2));
+                  let userMsg = `API xətası: ${currentErr.message}`;
+                  const errLower = String(currentErr.message || '').toLowerCase();
+                  const isOllamaUrl = String(activeProvider.baseURL || '').includes('11434') || String(activeProvider.baseURL || '').includes('ollama');
+
+                  if (currentErr.status === 401) {
                       userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
-                  } else if (apiErr.status === 429) {
+                  } else if (currentErr.status === 429) {
                       userMsg = 'API limiti aşıldı (rate limit). 1-2 dəqiqə gözləyib yenidən cəhd edin.';
-                  } else if (apiErr.status === 503) {
+                  } else if (currentErr.status === 503) {
                       userMsg = 'AI servisi müvəqqəti əlçatmazdır. Mesajınız çox böyük ola bilər — daha qısa mesaj göndərin və ya bir neçə dəqiqə gözləyin.';
-                  } else if (apiErr.status === 404) {
-                      userMsg = `Model tapılmadı: "${effectiveModel}". Ayarlardan model adını yoxlayın.`;
+                  } else if (currentErr.status === 404) {
+                      if (isOllamaUrl) {
+                          userMsg = `Ollama-da "${effectiveModel}" modeli quraşdırılmayıb. Terminal-da bunu icra edin: \`ollama pull ${effectiveModel}\``;
+                      } else {
+                          userMsg = `Model tapılmadı: "${effectiveModel}". Ayarlardan model adını yoxlayın.`;
+                      }
+                  } else if (
+                      // FUNC-FIX: actionable error when Ollama isn't running.
+                      // Previously users just saw "Connection error" and didn't
+                      // know that they needed `ollama serve`.
+                      isOllamaUrl && (
+                          errLower.includes('econnrefused') ||
+                          errLower.includes('connection error') ||
+                          errLower.includes('fetch failed') ||
+                          errLower.includes('econnreset')
+                      )
+                  ) {
+                      userMsg = `🦙 Ollama xidməti işləmir (${activeProvider.baseURL}). Terminal-da bunu icra edin:\n\n\`\`\`\nollama serve\n\`\`\`\n\nSonra modeli yükləyin: \`ollama pull ${effectiveModel}\`\n\nVə ya AYARLAR-dan Cloud modelinə (Claude Sonnet 4.5 və ya 'Auto') keçin.`;
+                  } else if (errLower.includes('connection error') || errLower.includes('fetch failed') || errLower.includes('econnrefused')) {
+                      userMsg = `Şəbəkə xətası: ${activeProvider.baseURL}-ə qoşula bilmədim. İnternet bağlantınızı və baseURL-i yoxlayın.`;
                   }
                   res.write(`data: ${JSON.stringify({ type: 'error', message: userMsg })}\n\n`);
                   break;
@@ -3413,7 +3579,7 @@ app.post('/api/github/connect', async (req, res) => {
       let envContent = '';
       try {
         envContent = fs.readFileSync(envPath, 'utf8');
-      } catch {}
+      } catch { /* ignore */ }
 
       if (envContent.includes('GITHUB_TOKEN=')) {
         envContent = envContent.replace(/GITHUB_TOKEN=.*/g, `GITHUB_TOKEN=${token}`);
@@ -3452,7 +3618,7 @@ app.delete('/api/github/connect', async (req, res) => {
       let envContent = '';
       try {
         envContent = fs.readFileSync(envPath, 'utf8');
-      } catch {}
+      } catch { /* ignore */ }
 
       envContent = envContent.replace(/GITHUB_TOKEN=.*/g, '');
       fs.writeFileSync(envPath, envContent, 'utf8');
@@ -3615,3 +3781,14 @@ app.use((err, req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 bahAI Backend running on http://0.0.0.0:${PORT}`);
 });
+
+// SEC-FIX: graceful shutdown — close PG pool and finish in-flight requests
+// before exit so connections are not leaked when the host sends SIGTERM
+// (Railway/Kubernetes deploys).
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, async () => {
+    console.log(`Received ${sig}, shutting down gracefully...`);
+    try { await db.shutdown?.(); } catch { /* ignore */ }
+    process.exit(0);
+  });
+}

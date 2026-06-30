@@ -7,21 +7,35 @@ export const API_BASE_URL = import.meta.env.MODE === 'production'
 export const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 
 export const MODELS: ModelOption[] = [
-  { id: 'nvidia/nemotron-3-super-120b-a12b:free', name: 'Nemotron 3 Super', provider: 'bahAI' },
-  { id: 'qwen/qwen3-coder:free', name: 'Qwen3 Coder', provider: 'bahAI' },
-  { id: 'deepseek/deepseek-v4-flash:free', name: 'DeepSeek V4 Flash', provider: 'bahAI' },
-  { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B', provider: 'bahAI' },
-  { id: 'qwen2.5-coder:latest', name: 'Qwen 2.5 Coder 7B', provider: 'Ollama (Lokal)' },
-  { id: 'dagbs/qwen2.5-coder-14b-instruct-abliterated:latest', name: 'Qwen 2.5 Coder 14B', provider: 'Ollama (Lokal)' },
+  // FUNC-FIX: Auto — smart router. Picks local Qwen 7B for short/simple
+  // queries and cloud Claude Sonnet 4.5 for refactor/architecture / long
+  // context. Set OPENAI_API_KEY in Settings for cloud failover.
+  { id: 'auto', name: '✨ Auto (Smart Router)', provider: 'Hibrid' },
+  // cloud-tier frontier models for "production quality" mode. Users
+  // provide an OpenRouter key in Settings; baseUrl defaults to openrouter.ai.
+  { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5 ⭐', provider: 'Cloud (Frontier)' },
+  { id: 'openai/gpt-5.2', name: 'GPT-5.2 ⭐', provider: 'Cloud (Frontier)' },
+  { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash ⚡', provider: 'Cloud (Sürətli)' },
+  { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5 ⚡', provider: 'Cloud (Sürətli)' },
+  // Free tier (OpenRouter free models — slower & rate-limited but no key cost)
+  { id: 'qwen/qwen3-coder:free', name: 'Qwen3 Coder (Pulsuz)', provider: 'OpenRouter Free' },
+  { id: 'deepseek/deepseek-v4-flash:free', name: 'DeepSeek V4 Flash (Pulsuz)', provider: 'OpenRouter Free' },
+  { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B (Pulsuz)', provider: 'OpenRouter Free' },
+  // Local Ollama — for offline use; slower but private
+  { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B (Tövsiyə)', provider: 'Ollama (Lokal)' },
+  { id: 'qwen2.5-coder:14b', name: 'Qwen 2.5 Coder 14B', provider: 'Ollama (Lokal)' },
   { id: 'gemma4:latest', name: 'Gemma 4 9B', provider: 'Ollama (Lokal)' },
   { id: 'gemma4:e2b', name: 'Gemma 4 7B', provider: 'Ollama (Lokal)' },
-  { id: 'gemma4:12b', name: 'Gemma 4 12B', provider: 'Ollama (Lokal)' },
+  { id: 'gemma4:12b', name: 'Gemma 4 12B (Ləng)', provider: 'Ollama (Lokal)' },
+  { id: 'llama3:8b', name: 'Llama 3 8B', provider: 'Ollama (Lokal)' },
 ];
 
 export const DEFAULT_SETTINGS = {
   apiKey: '',
   baseUrl: 'https://openrouter.ai/api/v1',
-  model: 'nvidia/nemotron-3-super-120b-a12b:free',
+  // FUNC-FIX: default to Auto — fastest path for most users; falls back to
+  // local Ollama if no cloud key is set.
+  model: 'auto',
   projectDir: '',
   performanceMode: false
 };

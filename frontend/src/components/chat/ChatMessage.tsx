@@ -112,6 +112,26 @@ export default function ChatMessage({ message, pendingApprovals, onApprove }: Pr
 
   if (message.role === 'tool') return null;
 
+  // FUNC-FIX: 'system' role is used for in-chat infrastructure notes such as
+  // the Auto router's choice. Render as a small inline pill so it doesn't
+  // dominate the conversation.
+  if (message.role === 'system') {
+    return (
+      <div className="flex items-center justify-center my-2" data-testid={`system-note-${message.id}`}>
+        <div
+          className="text-xs px-3 py-1 rounded-full"
+          style={{
+            background: 'var(--bg-hover)',
+            color: 'var(--fg-secondary)',
+            border: '1px solid var(--border-subtle)'
+          }}
+        >
+          <span dangerouslySetInnerHTML={{ __html: String(message.content || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') }} />
+        </div>
+      </div>
+    );
+  }
+
   const hasRunningTools = message.tool_calls?.some(tc => tc.status === 'running');
   const hasTools = message.tool_calls && message.tool_calls.length > 0;
 

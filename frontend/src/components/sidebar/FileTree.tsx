@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Folder, File, ChevronRight, ChevronDown } from 'lucide-react';
 import { fetchFileTree } from '../../lib/api';
 import { Spinner } from '../common/UI';
@@ -8,6 +8,9 @@ interface FileNode {
   path: string;
   type: 'file' | 'directory';
   children?: FileNode[];
+  // FUNC-FIX: loading state per directory so lazy expansion has a spinner.
+  loading?: boolean;
+  loaded?: boolean;
 }
 
 interface Props {
@@ -30,7 +33,36 @@ export default function FileTree({ projectPath, onFileSelect, selectedPath }: Pr
       .finally(() => setLoading(false));
   }, [projectPath]);
 
-  const toggle = (path: string) => setExpanded(prev => ({ ...prev, [path]: !prev[path] }));
+  // FUNC-FIX: previously toggle() only flipped expansion state, but the
+  // children were never fetched, so every folder appeared empty. Now we
+  // lazy-load on first expansion.
+  const loadChildren = useCallback(async (nodePath: string) => {
+    const setNodeAt = (list: FileNode[], target: string, updater: (n: FileNode) => FileNode): FileNode[] => {
+      return list.map((n) => {
+        if (n.path === target) return updater(n);
+        if (n.children && n.children.length > 0) return { ...n, children: setNodeAt(n.children, target, updater) };
+        return n;
+      });
+    };
+
+    setNodes((prev) => setNodeAt(prev, nodePath, (n) => ({ ...n, loading: true })));
+    try {
+      const data = await fetchFileTree(nodePath, projectPath);
+      const children = Array.isArray(data) ? (data as FileNode[]) : [];
+      setNodes((prev) => setNodeAt(prev, nodePath, (n) => ({ ...n, children, loading: false, loaded: true })));
+    } catch {
+      setNodes((prev) => setNodeAt(prev, nodePath, (n) => ({ ...n, children: [], loading: false, loaded: true })));
+    }
+  }, [projectPath]);
+
+  const toggle = useCallback((node: FileNode) => {
+    setExpanded((prev) => {
+      const next = { ...prev, [node.path]: !prev[node.path] };
+      // On first expansion (not yet loaded), fetch children.
+      if (!prev[node.path] && !node.loaded) loadChildren(node.path);
+      return next;
+    });
+  }, [loadChildren]);
 
   const renderNode = (node: FileNode, depth = 0) => {
     if (!node) return null;
@@ -40,7 +72,7 @@ export default function FileTree({ projectPath, onFileSelect, selectedPath }: Pr
     return (
       <div key={node.path}>
         <button
-          onClick={() => node.type === 'directory' ? toggle(node.path) : onFileSelect?.(node.path)}
+          onClick={() => node.type === 'directory' ? toggle(node) : onFileSelect?.(node.path)}
           className="w-full flex items-center gap-1.5 py-1 text-left transition-colors"
           style={{
             paddingLeft: `${depth * 12 + 8}px`,
@@ -51,6 +83,7 @@ export default function FileTree({ projectPath, onFileSelect, selectedPath }: Pr
           onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-hover)'; }}
           onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
           aria-expanded={node.type === 'directory' ? isExpanded : undefined}
+          data-testid={`file-tree-node-${node.path}`}
         >
           {node.type === 'directory' ? (
             <>
@@ -66,6 +99,7 @@ export default function FileTree({ projectPath, onFileSelect, selectedPath }: Pr
             </>
           )}
           <span className="text-xs truncate flex-1">{node.name}</span>
+          {node.loading && <Spinner size={10} />}
         </button>
 
         {node.type === 'directory' && isExpanded && node.children && (
@@ -80,13 +114,13 @@ export default function FileTree({ projectPath, onFileSelect, selectedPath }: Pr
   if (!projectPath) {
     return (
       <div className="flex-1 flex items-center justify-center p-4">
-        <span className="text-xs" style={{ color: 'var(--fg-muted)' }}>No project selected</span>
+        <span className="text-xs" style={{ color: 'var(--fg-muted)' }}>Layihə seçilməyib</span>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto premium-scroll py-1">
+    <div className="flex-1 overflow-y-auto premium-scroll py-1" data-testid="file-tree">
       {loading && nodes.length === 0 ? (
         <div className="flex items-center justify-center p-4">
           <Spinner size={16} />

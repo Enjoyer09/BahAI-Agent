@@ -135,19 +135,21 @@ async function initDb() {
         );
         console.log(`✅ Admin yaradıldı: ${adminEmail}`);
       }
-    } else if (process.env.NODE_ENV !== 'production') {
-      const adminEmail = 'admin@bahai.az';
-      const adminExists = await client.query('SELECT * FROM users WHERE email = $1', [adminEmail]);
-      const hashedPw = await bcrypt.hash('Admin123!', 10);
+    } else if (process.env.LOCAL_MODE === 'true') {
+      // SEC-FIX: Only seed a default admin in explicit LOCAL_MODE (single-user
+      // dev machine). Previously `NODE_ENV !== 'production'` was the gate,
+      // which on hosts that don't set NODE_ENV created an admin with a public
+      // password in the cloud database.
+      const localAdminEmail = 'admin@bahai.az';
+      const localAdminPassword = process.env.LOCAL_ADMIN_PASSWORD || 'Admin123!';
+      const hashedPw = await bcrypt.hash(localAdminPassword, 10);
       await client.query(
         `INSERT INTO users (email, password, name, role)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (email) DO NOTHING`,
-        [adminEmail, hashedPw, 'Local Administrator', 'admin']
+        [localAdminEmail, hashedPw, 'Local Administrator', 'admin']
       );
-      if (adminExists.rows.length === 0) {
-        console.log('✅ Local admin yaradıldı: admin@bahai.az / Admin123!');
-      }
+      console.log(`✅ Local admin hazırdır: ${localAdminEmail}`);
     } else {
       console.warn('⚠️ Production admin yaradılmadı. ADMIN_EMAIL və ADMIN_PASSWORD env-lərini təyin edin.');
     }
@@ -167,5 +169,11 @@ module.exports = {
   },
   initDb,
   pool,
-  hasDatabase
+  hasDatabase,
+  // SEC-FIX: graceful shutdown so PG connections do not leak on SIGTERM.
+  shutdown: async () => {
+    if (pool) {
+      try { await pool.end(); } catch { /* ignore */ }
+    }
+  }
 };

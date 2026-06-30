@@ -48,13 +48,19 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   const [serverBacked, setServerBacked] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
-  const [safeMode, setSafeMode] = useState(true);
+  // FUNC-FIX: Safe Mode default off — for a personal coding agent the constant
+  // approval prompts were the #1 friction point. Power users can still flip
+  // it on from ChatInput (now exposed) or OpsPanel.
+  const [safeMode, setSafeMode] = useState(() => localStorage.getItem('safeMode') === '1');
+  useEffect(() => { localStorage.setItem('safeMode', safeMode ? '1' : '0'); }, [safeMode]);
   const [taskPlan, setTaskPlan] = useState<string[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<Array<{ approvalId: string; tool: string; args: string }>>([]);
   const [projectMemory, setProjectMemory] = useState<Record<string, unknown>>({});
 
   // Ref to track current active conversation (avoids stale closure in sendMessage)
   const activeConvIdRef = useRef<string | null>(null);
+  // FUNC-FIX: throttle ref for streaming delta updates (see below).
+  const streamThrottleRef = useRef<number>(0);
   useEffect(() => {
     activeConvIdRef.current = activeConvId;
   }, [activeConvId]);
@@ -335,6 +341,22 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
             setTaskPlan(Array.isArray(event.items) ? event.items : []);
             return;
           }
+          // FUNC-FIX: surface the Auto router's decision as a small system
+          // message at the top of the assistant turn ("Auto → ...").
+          if (event.type === 'auto_route') {
+            const isCloud = event.providerId?.includes('cloud') || /\//.test(event.chosenModel || '');
+            const icon = isCloud ? '☁️' : '🦙';
+            const tier = event.intent === 'smart' ? 'Mürəkkəb iş' : 'Sürətli sual';
+            const note: Message = {
+              id: generateId(),
+              role: 'system',
+              content: `${icon} Auto → **${event.chosenModel}** (${tier})`,
+              timestamp: Date.now()
+            } as Message;
+            currentMsgs = [...currentMsgs, note];
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+            return;
+          }
           if (event.type === 'error') {
             const errMsg: Message = { id: generateId(), role: 'assistant', content: `❌ Xəta: ${event.message}`, timestamp: Date.now() };
             currentMsgs = [...currentMsgs, errMsg];
@@ -363,7 +385,16 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
               };
               currentMsgs = [...currentMsgs, streamMsg];
             }
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
+            // FUNC-FIX: throttle re-renders to ~30fps. Previously every single
+            // token triggered a full setConversations -> sidebar+list rerender,
+            // which made the UI feel sluggish on local models. Sufficient
+            // for human-visible smoothness.
+            const now = Date.now();
+            if (!streamThrottleRef.current || now - streamThrottleRef.current > 33) {
+              streamThrottleRef.current = now;
+              const snapshot = currentMsgs;
+              setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: snapshot, updatedAt: now } : c));
+            }
             return;
           }
           if (event.type === 'assistant_message') {
