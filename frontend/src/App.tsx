@@ -504,7 +504,7 @@ function AppContent() {
       ) : (
         <button
           onClick={() => setShowElevenLabsHelp(true)}
-          className="fixed bottom-6 right-6 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 z-40 group shadow-lg cursor-pointer hover:scale-110 active:scale-95"
+          className="hidden sm:flex fixed bottom-6 right-6 w-12 h-12 rounded-full items-center justify-center transition-all duration-300 z-40 group shadow-lg cursor-pointer hover:scale-110 active:scale-95"
           style={{
             background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
             border: '1px solid rgba(255, 255, 255, 0.15)',
