@@ -2342,7 +2342,11 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                     const title = await session.page.title().catch(() => '');
                     return `Browser opened: ${args.url}${title ? `\nTitle: ${title}` : ''}${session.openedVia ? `\nOpened via: ${session.openedVia}` : ''}${session.cdpAttached && session.cdpUrl ? `\nAttached CDP: ${session.cdpUrl}` : ''}${session.visible ? '\nVisible: true' : ''}${session.slowMo ? `\nSlowMo: ${session.slowMo}ms` : ''}${session.browserChannel ? `\nBrowser channel: ${session.browserChannel}` : ''}${session.executablePath ? `\nExecutable: ${session.executablePath}` : ''}${session.persistent ? `\nPersistent profile: ${session.userDataDir}` : ''}${session.launchWarning ? `\nWarning: ${session.launchWarning}` : ''}`;
                 } catch (e) {
-                    return `Browser open error: ${e.message}`;
+                    const code = e?.browserLaunchCode ? `\nCode: ${e.browserLaunchCode}` : '';
+                    const cdp = e?.cdpUrl ? `\nCDP: ${e.cdpUrl}` : '';
+                    const exe = e?.chromePath || e?.executablePath ? `\nExecutable: ${e.chromePath || e.executablePath}` : '';
+                    const profile = e?.profileDir || e?.userDataDir ? `\nProfile: ${e.profileDir || e.userDataDir}` : '';
+                    return `Browser open error: ${e.message}${code}${cdp}${exe}${profile}`;
                 }
             }
 

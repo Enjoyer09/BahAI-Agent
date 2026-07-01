@@ -213,6 +213,8 @@ export default function AuthModal({ isOpen, onClose }: Props) {
                 setPassword('demo123');
                 setError(null);
               }}
+              data-testid="auth-demo-fill"
+              aria-label="Demo girişini doldur"
               className="w-full py-2.5 rounded-lg text-sm font-medium transition-all"
               style={{
                 background: 'var(--bg-hover)',
@@ -275,6 +277,8 @@ export default function AuthModal({ isOpen, onClose }: Props) {
           <button
             type="submit"
             disabled={loading}
+            data-testid={isLogin ? 'auth-login-submit' : 'auth-register-submit'}
+            aria-label={isLogin ? 'E-poçt ilə daxil ol' : 'Qeydiyyatdan keç'}
             className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
             style={{
               background: 'var(--color-accent)',
@@ -292,6 +296,8 @@ export default function AuthModal({ isOpen, onClose }: Props) {
         <div className="mt-5 text-center">
           <button
             onClick={() => { setIsLogin(!isLogin); setError(null); }}
+            data-testid="auth-mode-toggle"
+            aria-label={isLogin ? 'Qeydiyyata keç' : 'Login-ə keç'}
             className="text-sm"
             style={{ color: 'var(--fg-muted)' }}
           >

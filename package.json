@@ -11,6 +11,7 @@
     "start": "node backend/index.js",
     "local": "node bin/cli.js",
     "smoke:gui": "node scripts/gui-smoke.js",
+    "smoke:prod": "node scripts/prod-smoke.js",
     "chrome:debug": "bash scripts/start-debug-chrome.sh",
     "start:gui": "bash scripts/start-bahai-gui.sh",
     "launch:gui": "bash scripts/launch-bahai-gui.sh",

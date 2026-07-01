@@ -5,6 +5,13 @@ const path = require('path');
 const net = require('net');
 const { spawn } = require('child_process');
 
+function createBrowserLaunchError(code, message, extra = {}) {
+  const error = new Error(message);
+  error.browserLaunchCode = code;
+  Object.assign(error, extra);
+  return error;
+}
+
 const DEFAULT_CHROME_PATHS = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
@@ -48,7 +55,9 @@ async function ensureDebugChrome(cdpUrl, userDataDir) {
 
   const chromePath = findInstalledChromePath();
   if (!chromePath) {
-    throw new Error('No installed Chrome found for CDP mode');
+    throw createBrowserLaunchError('chrome_missing', 'No installed Chrome found for CDP mode', {
+      cdpUrl
+    });
   }
 
   const parsed = new URL(cdpUrl);
@@ -87,12 +96,20 @@ async function ensureDebugChrome(cdpUrl, userDataDir) {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
-  throw new Error(`Chrome CDP did not become reachable at ${cdpUrl}`);
+  throw createBrowserLaunchError('cdp_unreachable', `Chrome CDP did not become reachable at ${cdpUrl}`, {
+    cdpUrl,
+    chromePath,
+    profileDir: realProfileDir
+  });
 }
 
 async function getChromium() {
   if (!chromiumImportPromise) {
-    chromiumImportPromise = import('playwright').then((mod) => mod.chromium);
+    chromiumImportPromise = import('playwright')
+      .then((mod) => mod.chromium)
+      .catch((error) => {
+        throw createBrowserLaunchError('playwright_missing', `Playwright import failed: ${error.message}`);
+      });
   }
   return chromiumImportPromise;
 }
@@ -265,7 +282,17 @@ async function getSession(sessionId = 'default', options = {}) {
         openedVia = 'persistent_temp_profile';
       }
     } else if (!browserChannel && !executablePath) {
-      throw error;
+      throw createBrowserLaunchError(
+        error.browserLaunchCode || 'browser_launch_failed',
+        error.message,
+        {
+          cdpUrl,
+          browserChannel,
+          executablePath,
+          persistent,
+          userDataDir
+        }
+      );
     } else {
       launchWarning = `Requested browser unavailable, fell back to bundled Chromium: ${error.message}`;
       const fallbackOptions = {
@@ -351,5 +378,6 @@ module.exports = {
   closeAllSessions,
   findInstalledChromePath,
   listInstalledBrowsers,
-  isCdpContextManagementError
+  isCdpContextManagementError,
+  createBrowserLaunchError
 };

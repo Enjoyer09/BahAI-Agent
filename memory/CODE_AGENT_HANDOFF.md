@@ -115,15 +115,20 @@ GUI grounding provider was made safer and more production-usable.
   - Settings panel has a `GUI Browser` section with system scan, browser mode, browser path, and CDP URL.
   - Chat requests now pass `guiBrowserMode`, `guiBrowserPath`, and `guiBrowserCdpUrl`.
   - Wix/example GUI flows use the selected browser mode instead of hardcoded Chrome launch args.
+- Added live production smoke coverage:
+  - `scripts/prod-smoke.js` performs prod health + auth + basic chat UI smoke against Railway.
+  - `npm run smoke:prod`
+  - `npm run smoke:prod -- --checkpoint` also verifies GUI login checkpoint creation + resume SSE path.
+  - Uses `auth-demo-fill` and `auth-login-submit` test ids in the auth modal.
+  - Saves a full-page screenshot into `/artifacts`.
 
 ## Next Best Coding Step
 
-Add real auto-ground provider smoke testing:
+Expand smoke coverage to interaction-heavy live flows:
 
-- Add an optional `--provider` mode to `scripts/gui-smoke.js`.
-- Use configured API key/base URL/model to let `resolveGroundedAction` propose the action.
-- Assert low-confidence actions are held and high-confidence safe actions execute.
-- Keep default smoke test provider-free so CI/local checks remain stable.
+- Add post-login Action Center / checkpoint smoke.
+- Add GUI resume smoke around `login oldum` flow.
+- Add a provider-backed optional smoke path after the deterministic checks remain stable.
 
 ## Known Risk Areas
 
