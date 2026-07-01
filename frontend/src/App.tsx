@@ -179,6 +179,7 @@ function AppContent() {
             chat={chat}
             themeCtx={themeCtx}
             settingsCtx={settings}
+            isMobile={false}
           />
         </aside>
       )}
@@ -203,6 +204,7 @@ function AppContent() {
               chat={chat}
               themeCtx={themeCtx}
               settingsCtx={settings}
+              isMobile
             />
           </aside>
         </>

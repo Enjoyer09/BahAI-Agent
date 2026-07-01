@@ -51,6 +51,7 @@ interface Props {
   chat: ChatState;
   themeCtx: ThemeCtx;
   settingsCtx: ReturnTypeUseSettings;
+  isMobile?: boolean;
 }
 
 function groupByDate(conversations: Conversation[]): { label: string; items: Conversation[] }[] {
@@ -80,7 +81,7 @@ function groupByDate(conversations: Conversation[]): { label: string; items: Con
     .map(([label, items]) => ({ label, items }));
 }
 
-export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx }: Props) {
+export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobile = false }: Props) {
   const { signOut, user } = useAuth();
   const { setProjectDir } = settingsCtx;
   const toast = useToast();
@@ -277,7 +278,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx }: Props
     <>
       <div className="flex flex-col h-full overflow-hidden">
         {/* Top: New chat + Close */}
-        <div className="px-3 pb-2 shrink-0 flex items-center justify-between" style={{ paddingTop: '50px' }}>
+        <div className="px-3 pb-2 shrink-0 flex items-center justify-between" style={{ paddingTop: isMobile ? '18px' : '50px' }}>
           <button
             onClick={handleNewChat}
             className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
@@ -302,6 +303,22 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx }: Props
             <PanelLeftClose size={18} />
           </button>
         </div>
+
+        {isMobile && (
+          <div className="px-3 pb-2 shrink-0">
+            <div
+              className="rounded-xl px-3 py-2.5"
+              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
+            >
+              <div className="text-[11px] font-semibold mb-1" style={{ color: 'var(--fg-main)' }}>
+                {chat.activeProject?.name || 'bahAI'}
+              </div>
+              <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
+                {chat.activeProject?.path || 'Layihə seçilməyib'}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="px-3 pb-2 shrink-0">
           <button
@@ -342,16 +359,16 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx }: Props
         </div>
 
         {/* Add project button */}
-        <div className="px-3 pb-1 shrink-0 relative">
+        <div className="px-3 pb-2 shrink-0 relative">
           <button
             ref={addBtnRef}
             onClick={(e) => { e.stopPropagation(); setShowAddMenu(!showAddMenu); }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors"
-            style={{ color: 'var(--fg-muted)' }}
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-colors"
+            style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <PlusCircle size={14} /> Layihə əlavə et
+            <PlusCircle size={16} /> Layihə əlavə et
           </button>
 
           {showAddMenu && (
@@ -431,7 +448,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx }: Props
                         </div>
                       </div>
                     </button>
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2 mobile-visible" style={{ opacity: 1 }}>
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 mobile-visible" style={{ opacity: isMobile ? 1 : undefined }}>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conv.id); }}
                         className="p-2 rounded transition-colors"
@@ -472,16 +489,36 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx }: Props
           )}
 
           {/* Theme toggle */}
-          <button
-            onClick={() => themeCtx.setTheme(themeCtx.resolved === 'dark' ? 'light' : 'dark')}
-            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
-            style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            {themeCtx.resolved === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            {themeCtx.resolved === 'dark' ? 'İşıqlı rejim' : 'Qaranlıq rejim'}
-          </button>
+          {isMobile ? (
+            <div className="grid grid-cols-2 gap-2 mb-1">
+              <button
+                onClick={() => themeCtx.setTheme(themeCtx.resolved === 'dark' ? 'light' : 'dark')}
+                className="flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-sm transition-colors"
+                style={{ color: 'var(--fg-secondary)', background: 'var(--bg-hover)', minHeight: '44px' }}
+              >
+                {themeCtx.resolved === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                {themeCtx.resolved === 'dark' ? 'İşıqlı' : 'Qaranlıq'}
+              </button>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-sm transition-colors"
+                style={{ color: 'var(--fg-secondary)', background: 'var(--bg-hover)', minHeight: '44px' }}
+              >
+                <Settings size={16} /> Parametrlər
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => themeCtx.setTheme(themeCtx.resolved === 'dark' ? 'light' : 'dark')}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
+              style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              {themeCtx.resolved === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              {themeCtx.resolved === 'dark' ? 'İşıqlı rejim' : 'Qaranlıq rejim'}
+            </button>
+          )}
 
           {user && user.role === 'admin' && !window.navigator.userAgent.includes('Electron') && (
             <button
@@ -495,15 +532,17 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx }: Props
             </button>
           )}
 
-          <button
-            onClick={() => setShowSettings(true)}
-            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
-            style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            <Settings size={16} /> Parametrlər
-          </button>
+          {!isMobile && (
+            <button
+              onClick={() => setShowSettings(true)}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
+              style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <Settings size={16} /> Parametrlər
+            </button>
+          )}
 
           <button
             onClick={signOut}
@@ -609,7 +648,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx }: Props
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowSettings(false)}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
           <div
-            className="relative w-full max-w-md rounded-2xl p-6 animate-scale-in max-h-[85vh] flex flex-col"
+            className={`relative w-full ${isMobile ? 'max-w-none self-end rounded-t-2xl rounded-b-none p-4 max-h-[88vh]' : 'max-w-md rounded-2xl p-6 max-h-[85vh]'} animate-scale-in flex flex-col`}
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
             onClick={(e) => e.stopPropagation()}
           >
