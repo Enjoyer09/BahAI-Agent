@@ -147,7 +147,7 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
 
   return (
     <div className="group animate-in" style={{ animationDelay: '50ms' }}>
-      <div className="flex items-start gap-3 sm:gap-4">
+      <div className="flex items-start gap-2.5 sm:gap-4">
         {/* Avatar — circular */}
         <div
           className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
@@ -184,10 +184,10 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
           )}
 
           {/* Message content — plain text */}
-          <div className="leading-relaxed break-words relative">
+          <div className="leading-relaxed break-words">
             {/* Attachments */}
             {message.attachments && message.attachments.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
+              <div className="flex flex-wrap gap-2 mb-2.5 sm:mb-3">
                 {message.attachments.map((at, i) => (
                   <div
                     key={i}
@@ -210,22 +210,9 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
             )}
 
             {/* Content */}
-            <div className="prose prose-sm max-w-none" style={{ color: 'var(--fg-main)' }}>
+            <div className="prose prose-sm max-w-none min-w-0" style={{ color: 'var(--fg-main)' }}>
               <MarkdownRenderer content={message.content || ''} />
             </div>
-
-            {/* Copy button — always visible on mobile */}
-            <button
-              onClick={copyToClipboard}
-              className="absolute top-0 right-0 p-2 rounded-md transition-opacity mobile-visible"
-              style={{
-                color: 'var(--fg-muted)',
-                opacity: 1,
-              }}
-              aria-label="Copy message"
-            >
-              {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-            </button>
           </div>
 
           {/* Tool calls */}
@@ -233,7 +220,7 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
             <div className="mt-2">
               <button
                 onClick={() => setShowTools(!showTools)}
-                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-colors w-full sm:w-auto justify-between sm:justify-start"
                 style={{
                   color: 'var(--fg-muted)',
                   background: showTools ? 'var(--bg-hover)' : 'transparent',
@@ -264,17 +251,26 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
 
           {/* Message actions — always visible on mobile */}
           {isBot && !hasRunningTools && (
-            <div className="flex items-center gap-1 mt-2 mobile-visible" style={{ opacity: 1 }}>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-1 mobile-visible" style={{ opacity: 1 }}>
+              <button
+                onClick={copyToClipboard}
+                className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-md transition-colors sm:p-2"
+                style={{ color: 'var(--fg-muted)', minHeight: '40px' }}
+                aria-label="Copy message"
+              >
+                {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                <span className="text-[11px] sm:hidden">{copied ? 'Kopyalandı' : 'Kopyala'}</span>
+              </button>
               <button
                 className="p-2 rounded-md transition-colors"
-                style={{ color: 'var(--fg-muted)', minHeight: '44px', minWidth: '44px' }}
+                style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Good response"
               >
                 <ThumbsUp size={14} />
               </button>
               <button
                 className="p-2 rounded-md transition-colors"
-                style={{ color: 'var(--fg-muted)', minHeight: '44px', minWidth: '44px' }}
+                style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Bad response"
               >
                 <ThumbsDown size={14} />
@@ -284,8 +280,8 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
                 className="p-2 rounded-md transition-colors flex items-center justify-center"
                 style={{
                   color: isPlaying ? 'var(--color-accent)' : 'var(--fg-muted)',
-                  minHeight: '44px',
-                  minWidth: '44px',
+                  minHeight: '40px',
+                  minWidth: '40px',
                   background: isPlaying ? 'var(--color-accent-muted)' : 'transparent'
                 }}
                 title={isPlaying ? "Səsi dayandır" : "Səsləndir (ElevenLabs / Səsli Dialoq)"}
@@ -295,7 +291,7 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
               </button>
               <button
                 className="p-2 rounded-md transition-colors"
-                style={{ color: 'var(--fg-muted)', minHeight: '44px', minWidth: '44px' }}
+                style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Regenerate"
               >
                 <RotateCcw size={14} />

@@ -143,36 +143,44 @@ export default function ToolCallCard({ toolName, args, result, status = 'done', 
       {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors"
+        className="w-full px-3 py-2 text-left transition-colors"
         style={{ color: 'var(--fg-secondary)' }}
         aria-expanded={expanded}
       >
-        <div style={{ color: statusColor }}>
-          {status === 'running' ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : status === 'error' ? (
-            <X size={14} />
-          ) : (
-            <Check size={14} />
-          )}
-        </div>
-        <Icon size={13} style={{ color: 'var(--fg-muted)' }} />
-        <span className="text-xs font-medium flex-1 truncate" style={{ color: 'var(--fg-main)' }}>
-          {label}
-        </span>
-        {summary && (
-          <span className="text-[11px] font-mono truncate max-w-[200px]" style={{ color: 'var(--fg-muted)' }}>
-            {summary}
-          </span>
-        )}
-        {duration !== undefined && duration > 0 && (
-          <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--fg-muted)' }}>
-            <Clock size={10} />
-            {duration < 1000 ? `${duration}ms` : `${(duration / 1000).toFixed(1)}s`}
-          </span>
-        )}
-        <div style={{ color: 'var(--fg-muted)' }}>
-          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <div className="flex items-start gap-2">
+          <div className="pt-0.5 shrink-0" style={{ color: statusColor }}>
+            {status === 'running' ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : status === 'error' ? (
+              <X size={14} />
+            ) : (
+              <Check size={14} />
+            )}
+          </div>
+          <Icon size={13} className="mt-0.5 shrink-0" style={{ color: 'var(--fg-muted)' }} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-2">
+              <span className="text-xs font-medium flex-1 truncate" style={{ color: 'var(--fg-main)' }}>
+                {label}
+              </span>
+              <div className="shrink-0 pt-0.5" style={{ color: 'var(--fg-muted)' }}>
+                {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              </div>
+            </div>
+            <div className="mt-1 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+              {summary && (
+                <span className="text-[11px] font-mono break-all sm:truncate sm:max-w-[240px]" style={{ color: 'var(--fg-muted)' }}>
+                  {summary}
+                </span>
+              )}
+              {duration !== undefined && duration > 0 && (
+                <span className="text-[10px] inline-flex items-center gap-0.5" style={{ color: 'var(--fg-muted)' }}>
+                  <Clock size={10} />
+                  {duration < 1000 ? `${duration}ms` : `${(duration / 1000).toFixed(1)}s`}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </button>
 
@@ -185,7 +193,7 @@ export default function ToolCallCard({ toolName, args, result, status = 'done', 
               Arguments
             </div>
             <pre
-              className="text-[11px] font-mono rounded-md p-2 overflow-auto max-h-40"
+              className="text-[10px] sm:text-[11px] font-mono rounded-md p-2 overflow-auto max-h-40 whitespace-pre-wrap break-words"
               style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)' }}
             >
               {(() => {
@@ -232,7 +240,7 @@ export default function ToolCallCard({ toolName, args, result, status = 'done', 
                       <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--fg-muted)' }}>
                         Action
                       </div>
-                      <div className="text-[11px] font-mono break-words" style={{ color: 'var(--fg-secondary)' }}>
+                      <div className="text-[10px] sm:text-[11px] font-mono break-words" style={{ color: 'var(--fg-secondary)' }}>
                         {formatAction(guiResult.action)}
                       </div>
                       {guiResult.action?.confidence !== undefined && (
@@ -245,7 +253,7 @@ export default function ToolCallCard({ toolName, args, result, status = 'done', 
                       <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--fg-muted)' }}>
                         Reason
                       </div>
-                      <div className="text-[11px]" style={{ color: 'var(--fg-secondary)' }}>
+                      <div className="text-[10px] sm:text-[11px] break-words" style={{ color: 'var(--fg-secondary)' }}>
                         {guiResult.assessment?.reason || guiResult.reflection?.nextRecommendation || 'No reason returned'}
                       </div>
                     </div>
@@ -256,11 +264,11 @@ export default function ToolCallCard({ toolName, args, result, status = 'done', 
                       <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--fg-muted)' }}>
                         Observation
                       </div>
-                      <div className="text-[11px] truncate" style={{ color: 'var(--fg-secondary)' }}>
+                      <div className="text-[11px] break-words sm:truncate" style={{ color: 'var(--fg-secondary)' }}>
                         {guiResult.observation?.title || 'Untitled'}
                       </div>
                       {guiResult.observation?.url && (
-                        <div className="text-[10px] truncate font-mono mt-0.5" style={{ color: 'var(--fg-muted)' }}>
+                        <div className="text-[10px] break-all sm:truncate font-mono mt-0.5" style={{ color: 'var(--fg-muted)' }}>
                           {guiResult.observation.url}
                         </div>
                       )}
@@ -293,7 +301,7 @@ export default function ToolCallCard({ toolName, args, result, status = 'done', 
                 </div>
               )}
               <pre
-                className="text-[11px] font-mono rounded-md p-2 overflow-auto max-h-48"
+                className="text-[10px] sm:text-[11px] font-mono rounded-md p-2 overflow-auto max-h-48 whitespace-pre-wrap break-words"
                 style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)' }}
               >
                 {result.length > 3000 ? result.slice(0, 3000) + '\n... (truncated)' : result}

@@ -17,7 +17,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
     },
     table({ children }) {
       return (
-        <div className="overflow-x-auto my-3 rounded-lg" style={{ border: '1px solid var(--border)' }}>
+        <div className="overflow-x-auto my-2.5 sm:my-3 rounded-lg" style={{ border: '1px solid var(--border)' }}>
           <table className="w-full text-sm">{children}</table>
         </div>
       );
@@ -32,19 +32,19 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
       return <td className="px-2 sm:px-4 py-2 sm:py-2.5" style={{ color: 'var(--fg-main)', borderTop: '1px solid var(--border-subtle)' }}>{children}</td>;
     },
     h1({ children }) {
-      return <h1 className="text-xl font-bold mt-6 mb-3" style={{ color: 'var(--fg-main)' }}>{children}</h1>;
+      return <h1 className="text-lg sm:text-xl font-bold mt-5 sm:mt-6 mb-2.5 sm:mb-3" style={{ color: 'var(--fg-main)' }}>{children}</h1>;
     },
     h2({ children }) {
-      return <h2 className="text-lg font-semibold mt-5 mb-2" style={{ color: 'var(--fg-main)' }}>{children}</h2>;
+      return <h2 className="text-base sm:text-lg font-semibold mt-4 sm:mt-5 mb-2" style={{ color: 'var(--fg-main)' }}>{children}</h2>;
     },
     h3({ children }) {
-      return <h3 className="text-base font-semibold mt-4 mb-2" style={{ color: 'var(--fg-main)' }}>{children}</h3>;
+      return <h3 className="text-sm sm:text-base font-semibold mt-3.5 sm:mt-4 mb-1.5 sm:mb-2" style={{ color: 'var(--fg-main)' }}>{children}</h3>;
     },
     ul({ children }) {
-      return <ul className="list-disc list-inside space-y-1 my-2 ml-1" style={{ color: 'var(--fg-main)' }}>{children}</ul>;
+      return <ul className="list-disc list-inside space-y-1 my-2 ml-0.5 sm:ml-1" style={{ color: 'var(--fg-main)' }}>{children}</ul>;
     },
     ol({ children }) {
-      return <ol className="list-decimal list-inside space-y-1 my-2 ml-1" style={{ color: 'var(--fg-main)' }}>{children}</ol>;
+      return <ol className="list-decimal list-inside space-y-1 my-2 ml-0.5 sm:ml-1" style={{ color: 'var(--fg-main)' }}>{children}</ol>;
     },
     li({ children }) {
       return <li className="leading-relaxed" style={{ color: 'var(--fg-main)' }}>{children}</li>;
@@ -73,7 +73,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
       );
     },
     p({ children }) {
-      return <p className="my-2 leading-relaxed" style={{ color: 'var(--fg-main)' }}>{children}</p>;
+      return <p className="my-1.5 sm:my-2 leading-relaxed" style={{ color: 'var(--fg-main)' }}>{children}</p>;
     },
     hr() {
       return <hr className="my-4" style={{ borderColor: 'var(--border-subtle)' }} />;
@@ -87,7 +87,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   };
 
   return (
-    <div className="markdown-content text-[14px] sm:text-[15px] leading-relaxed">
+    <div className="markdown-content text-[13px] sm:text-[15px] leading-relaxed">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{content}</ReactMarkdown>
     </div>
   );

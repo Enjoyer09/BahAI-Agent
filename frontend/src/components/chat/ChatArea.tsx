@@ -30,7 +30,7 @@ export default function ChatArea({ messages, loading, onSend, workingDirectory }
 
   if (messages.length === 0 && !loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-20 sm:pb-32">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pb-16 sm:pb-32">
         {/* Logo */}
         <div
           className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mb-5 sm:mb-6"
@@ -40,12 +40,12 @@ export default function ChatArea({ messages, loading, onSend, workingDirectory }
         </div>
 
         {/* Heading */}
-        <h2 className="text-xl sm:text-2xl font-semibold mb-6 sm:mb-8 text-center" style={{ color: 'var(--fg-main)' }}>
+        <h2 className="text-lg sm:text-2xl font-semibold mb-5 sm:mb-8 text-center" style={{ color: 'var(--fg-main)' }}>
           Necə kömək edə bilərəm?
         </h2>
 
         {/* Suggestion cards */}
-        <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-2 sm:gap-3 max-w-2xl w-full">
+        <div className="grid grid-cols-1 sm:flex sm:flex-row sm:flex-wrap justify-center gap-2 sm:gap-3 max-w-2xl w-full">
           {[
             { label: 'React app yarat', prompt: 'Create a new React app with TypeScript and Tailwind CSS' },
             { label: 'Səhv düzəlt', prompt: 'Help me fix a bug in my code' },
@@ -55,7 +55,7 @@ export default function ChatArea({ messages, loading, onSend, workingDirectory }
             <button
               key={item.label}
               onClick={() => onSend(item.prompt)}
-              className="px-4 py-3 sm:py-2.5 rounded-xl text-sm transition-all text-center sm:text-left"
+              className="px-4 py-3 sm:py-2.5 rounded-xl text-sm transition-all text-left"
               style={{
                 border: '1px solid var(--border)',
                 color: 'var(--fg-secondary)',
@@ -79,7 +79,7 @@ export default function ChatArea({ messages, loading, onSend, workingDirectory }
       className="flex-1 overflow-y-auto premium-scroll"
       style={{ scrollBehavior: 'smooth' }}
     >
-      <div className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
+      <div className="max-w-3xl mx-auto px-3 sm:px-4 py-3 sm:py-6 space-y-3.5 sm:space-y-6">
         {messages.map((msg, i) => (
           <ChatMessage
             key={msg.id || i}
