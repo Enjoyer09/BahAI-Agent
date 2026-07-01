@@ -15,6 +15,9 @@ Hazır workflow-lar:
 - `gui`
   - browser / GUI observation, action, checkpoint və resume axını
   - visible browser və human checkpoint davranışı burada prioritetdir
+- `seo_gui`
+  - SEO strategist + GUI operator hibrid axını
+  - platform SEO settings, dashboard navigation, safe observe/report workflow
 - `thorough`
   - daha dərin planning + review + validation
 - `review-only`
@@ -38,6 +41,15 @@ GUI workflow üçün minimum contract:
 - login checkpoint varsa run açıq qalıb STOP vəziyyətində ilişməməlidir
 - `login oldum` resume ayrıca SSE axını ilə davam etməlidir
 - yüksək riskli action-lar üçün human gate saxlanmalıdır
+
+## SEO GUI contract
+
+`seo_gui` workflow üçün minimum contract:
+
+- SEO specialist əvvəlcə findings/opportunities və safe next step məntiqi qurmalıdır
+- GUI operator yalnız observe/safe navigate etməlidir
+- publish/save/delete/billing action-ları human approval olmadan edilməməlidir
+- Wix/oxşar dashboard-da SEO settings tapılmasa, bunu failure yox, observation gap kimi report etməlidir
 
 ## Review contract
 

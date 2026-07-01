@@ -17,6 +17,15 @@ const ORCHESTRATION_WORKFLOWS = {
     agents: ['Solo Agent'],
     plan: ['Ekrana bax, hərəkət et, nəticəni yoxla']
   },
+  seo_gui: {
+    mode: 'orchestrated',
+    agents: ['Marketing SEO Specialist', 'GUI Operator', 'Reviewer'],
+    plan: [
+      'SEO specialist audit və intent planını qurur',
+      'GUI operator paneli və ya saytı müşahidə edir',
+      'Reviewer risk, publish/save təhlükəsi və boşluqları yoxlayır'
+    ]
+  },
   thorough: {
     mode: 'orchestrated',
     agents: ['Architect', 'Builder', 'Security', 'QA'],

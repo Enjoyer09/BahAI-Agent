@@ -8,6 +8,7 @@ function classifyUserIntent(text = '') {
   const wantsInfra = /(deploy|docker|railway|vercel|env|ci|cd|logs|monitoring|kubernetes|k8s|nginx|devops)/i.test(normalized);
   const wantsBrowser = /(ui|frontend|page|screen|click|browser|playwright|screenshot)/i.test(normalized);
   const wantsGuiAgent = /(gui|computer use|desktop agent|use computer|mouse|keyboard|window|app automation|computer agent)/i.test(normalized);
+  const wantsSeo = /(seo|marketing seo|technical seo|meta description|title tag|serp|keyword|keywords|search console|ga4|google analytics|google search console|wix seo|on-page seo)/i.test(normalized);
   const wantsStrategy = /(roadmap|compare|fərq|necə edək|hansı addım|which step|strategy|architecture)/i.test(normalized);
 
   return {
@@ -19,6 +20,7 @@ function classifyUserIntent(text = '') {
     wantsInfra,
     wantsBrowser,
     wantsGuiAgent,
+    wantsSeo,
     wantsStrategy
   };
 }
@@ -43,6 +45,19 @@ function decideManagerRoute({ latestUserText = '', orchestrationMode = false, wo
       maxSteps: 4,
       reason: 'Orchestration söndürülüb',
       tokenDiscipline: buildBudget({ maxSteps: 4, agentCount: 1, allowTools: true, preferDirect: true })
+    };
+  }
+
+  if (workflow === 'seo_gui' || (intent.wantsSeo && (intent.wantsGuiAgent || intent.wantsBrowser))) {
+    return {
+      mode: 'delegated',
+      primaryAgent: 'Marketing SEO Specialist',
+      secondaryAgents: ['GUI Operator', 'Reviewer'],
+      workflow: 'seo_gui',
+      useTools: true,
+      maxSteps: 5,
+      reason: 'SEO + GUI sorğusu üçün strategy + observation + safe execution axını lazımdır',
+      tokenDiscipline: buildBudget({ maxSteps: 5, agentCount: 3, allowTools: true, preferDirect: false })
     };
   }
 
