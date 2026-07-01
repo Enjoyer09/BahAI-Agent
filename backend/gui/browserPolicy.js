@@ -6,13 +6,34 @@ function normalizeGuiBrowserMode(mode = '') {
   return 'cdp';
 }
 
+function shouldPreferCdp({
+  installedBrowsers = [],
+  cdpUrl = '',
+  runtimePlatform = process.platform
+} = {}) {
+  const hasCdpUrl = Boolean(String(cdpUrl || '').trim());
+  if (!hasCdpUrl) return false;
+
+  const hasInstalledChrome = installedBrowsers.some((item) => item?.installed && item?.supportsCdp);
+  if (hasInstalledChrome) return true;
+
+  // On remote Linux containers, a loopback CDP URL often exists in config but
+  // there is no real desktop Chrome to attach to. Prefer bundled there.
+  if (runtimePlatform === 'linux') {
+    return false;
+  }
+
+  return true;
+}
+
 function resolveGuiBrowserPolicy({
   guiBrowserMode = 'cdp',
   guiBrowserPath = '',
   guiBrowserCdpUrl = '',
   defaultCdpUrl = 'http://127.0.0.1:9222',
   fallbackChromePath = '',
-  installedBrowsers = []
+  installedBrowsers = [],
+  runtimePlatform = process.platform
 } = {}) {
   const normalizedMode = normalizeGuiBrowserMode(guiBrowserMode);
   const preferredInstalledBrowser = installedBrowsers.find((item) => item.installed && item.recommended)
@@ -20,6 +41,11 @@ function resolveGuiBrowserPolicy({
   const resolvedBrowserPath = String(guiBrowserPath || fallbackChromePath || preferredInstalledBrowser?.path || '').trim();
   const resolvedCdpUrl = String(guiBrowserCdpUrl || defaultCdpUrl || '').trim();
   const hasInstalledChrome = Boolean(resolvedBrowserPath);
+  const allowCdp = shouldPreferCdp({
+    installedBrowsers,
+    cdpUrl: resolvedCdpUrl,
+    runtimePlatform
+  });
 
   if (normalizedMode === 'persistent') {
     return {
@@ -41,7 +67,7 @@ function resolveGuiBrowserPolicy({
     };
   }
 
-  if (resolvedCdpUrl) {
+  if (allowCdp) {
     return {
       mode: 'cdp',
       browserPath: resolvedBrowserPath,
@@ -71,5 +97,6 @@ function getRecommendedGuiBrowserMode({ installedBrowsers = [], cdpUrl = '' } = 
 module.exports = {
   normalizeGuiBrowserMode,
   resolveGuiBrowserPolicy,
-  getRecommendedGuiBrowserMode
+  getRecommendedGuiBrowserMode,
+  shouldPreferCdp
 };

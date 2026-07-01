@@ -6,7 +6,7 @@ const {
   isGuiLoginResumeRequest,
   buildGuiBrowserOpenArgs
 } = require('../gui/requests');
-const { resolveGuiBrowserPolicy, getRecommendedGuiBrowserMode } = require('../gui/browserPolicy');
+const { resolveGuiBrowserPolicy, getRecommendedGuiBrowserMode, shouldPreferCdp } = require('../gui/browserPolicy');
 
 describe('GUI request classifiers', () => {
   it('detects wix login checkpoint requests', () => {
@@ -71,7 +71,7 @@ describe('browser policy', () => {
   it('recommends cdp when cdp url exists', () => {
     expect(
       getRecommendedGuiBrowserMode({
-        installedBrowsers: [],
+        installedBrowsers: [{ id: 'chrome', installed: true, recommended: true, supportsCdp: true, path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' }],
         cdpUrl: 'http://127.0.0.1:9222'
       })
     ).toBe('cdp');
@@ -92,6 +92,27 @@ describe('browser policy', () => {
       guiBrowserPath: '',
       fallbackChromePath: '',
       installedBrowsers: []
+    });
+
+    expect(policy.mode).toBe('bundled');
+  });
+
+  it('does not prefer cdp on linux without an installed chrome target', () => {
+    expect(
+      shouldPreferCdp({
+        installedBrowsers: [],
+        cdpUrl: 'http://127.0.0.1:9222',
+        runtimePlatform: 'linux'
+      })
+    ).toBe(false);
+  });
+
+  it('falls back to bundled on linux when cdp is configured but chrome is unavailable', () => {
+    const policy = resolveGuiBrowserPolicy({
+      guiBrowserMode: 'cdp',
+      guiBrowserCdpUrl: 'http://127.0.0.1:9222',
+      installedBrowsers: [],
+      runtimePlatform: 'linux'
     });
 
     expect(policy.mode).toBe('bundled');
