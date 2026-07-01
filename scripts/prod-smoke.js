@@ -17,6 +17,16 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function extractBrowserFailureDetails(sseText) {
+  const normalized = String(sseText || '');
+  const code = normalized.match(/Code:\s*([a-z0-9_:-]+)/i)?.[1] || '';
+  const cdp = normalized.match(/CDP:\s*(.+)/i)?.[1]?.trim() || '';
+  const executable = normalized.match(/Executable:\s*(.+)/i)?.[1]?.trim() || '';
+  const profile = normalized.match(/Profile:\s*(.+)/i)?.[1]?.trim() || '';
+  const message = normalized.match(/Browser open error:\s*(.+)/i)?.[1]?.trim() || '';
+  return { code, cdp, executable, profile, message };
+}
+
 async function loginIfNeeded(page) {
   const dialog = page.getByRole('dialog', { name: 'Xoş gəlmisiniz' });
   const hasDialog = await dialog.count();
@@ -183,7 +193,13 @@ async function main() {
         await resumeCheckpoint(token, checkpoint.id);
         console.log('Checkpoint resume ok');
       } else {
+        const failure = extractBrowserFailureDetails(checkpointText);
         console.log('Checkpoint flow browser launch failure qaytardı; resume skip edildi.');
+        if (failure.code) console.log(`Browser failure code: ${failure.code}`);
+        if (failure.message) console.log(`Browser failure message: ${failure.message}`);
+        if (failure.cdp) console.log(`Browser failure CDP: ${failure.cdp}`);
+        if (failure.executable) console.log(`Browser failure executable: ${failure.executable}`);
+        if (failure.profile) console.log(`Browser failure profile: ${failure.profile}`);
       }
     }
 
