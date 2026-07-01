@@ -196,3 +196,50 @@ export function mergeApprovalDecisionIntoMemory(
     approvalHistory: [...history, entry].slice(-10)
   };
 }
+
+export function buildEvidenceSummary(memory: Record<string, unknown>) {
+  const lastValidation = (memory.lastValidation || null) as { status?: string; summary?: string } | null;
+  const lastBrowserArtifact = (memory.lastBrowserArtifact || null) as RuntimeArtifact | null;
+  const lastGuiArtifact = (memory.lastGuiArtifact || null) as RuntimeArtifact | null;
+  const lastTerminalArtifact = (memory.lastTerminalArtifact || null) as RuntimeArtifact | null;
+
+  const items = [
+    {
+      label: 'Validation',
+      status: lastValidation?.status || 'missing',
+      summary: lastValidation?.summary || 'Validation evidence yoxdur'
+    },
+    {
+      label: 'Browser',
+      status: lastBrowserArtifact?.status || 'missing',
+      summary: lastBrowserArtifact?.summary || 'Browser evidence yoxdur'
+    },
+    {
+      label: 'GUI',
+      status: lastGuiArtifact?.status || 'missing',
+      summary: lastGuiArtifact?.summary || lastGuiArtifact?.assessment?.reason || 'GUI evidence yoxdur'
+    },
+    {
+      label: 'Terminal',
+      status: lastTerminalArtifact?.status || 'missing',
+      summary: lastTerminalArtifact?.summary || lastTerminalArtifact?.output || 'Terminal evidence yoxdur'
+    }
+  ];
+
+  const passedCount = items.filter((item) => item.status === 'passed' || item.status === 'info').length;
+  const failedCount = items.filter((item) => item.status === 'failed').length;
+  const missingCount = items.filter((item) => item.status === 'missing').length;
+
+  return {
+    items,
+    headline: `Evidence: ${passedCount} ok | ${failedCount} failed | ${missingCount} missing`,
+    updatedAt: Date.now()
+  };
+}
+
+export function mergeEvidenceSummaryIntoMemory(memory: Record<string, unknown>) {
+  return {
+    ...memory,
+    evidenceSummary: buildEvidenceSummary(memory)
+  };
+}

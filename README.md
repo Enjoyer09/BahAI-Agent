@@ -17,6 +17,8 @@ BahAI desktop-first AI coding agent-dir. Layihə təkcə chat assistant deyil, h
   Desktop shell, local backend bootstrap, OAuth callback bridge
 - `scripts/`
   local startup, GUI smoke, browser debug yardımcı skriptləri
+- `docs/ai/harness/`
+  orchestration, workflow və evidence contract sənədləri
 - `memory/`
   handoff və audit kontekst faylları
 
@@ -59,6 +61,18 @@ GUI smoke:
 
 ```bash
 npm run smoke:gui
+```
+
+Prod smoke:
+
+```bash
+npm run smoke:prod -- --checkpoint
+```
+
+Harness contract check:
+
+```bash
+npm run check:harness
 ```
 
 ## Vacib qeydlər

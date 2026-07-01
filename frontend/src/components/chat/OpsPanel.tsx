@@ -19,6 +19,10 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
   const lastTerminalArtifact = (projectMemory?.lastTerminalArtifact || null) as RuntimeArtifact | null;
   const lastValidation = (projectMemory?.lastValidation || null) as { status?: string; summary?: string } | null;
   const lastApprovalDecision = (projectMemory?.lastApprovalDecision || null) as { decision?: string; title?: string; riskLevel?: string } | null;
+  const evidenceSummary = (projectMemory?.evidenceSummary || null) as {
+    headline?: string;
+    items?: Array<{ label: string; status: string; summary: string }>;
+  } | null;
   return (
     <div className="h-full flex flex-col overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
       {/* Header */}
@@ -208,6 +212,46 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
             </div>
           </div>
         )}
+
+        {evidenceSummary?.items?.length ? (
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <CheckCircle2 size={13} style={{ color: 'var(--fg-muted)' }} />
+              <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--fg-muted)' }}>
+                Evidence Summary
+              </span>
+            </div>
+            <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+              <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+                {evidenceSummary.headline || 'Evidence summary'}
+              </div>
+              {evidenceSummary.items.map((item, idx) => (
+                <div key={`${item.label}-${idx}`} className="rounded-md p-2" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="text-[11px] font-medium" style={{ color: 'var(--fg-main)' }}>
+                      {item.label}
+                    </div>
+                    <div
+                      className="text-[10px]"
+                      style={{
+                        color: item.status === 'failed'
+                          ? 'var(--color-warning)'
+                          : item.status === 'missing'
+                            ? 'var(--fg-muted)'
+                            : 'var(--color-success)'
+                      }}
+                    >
+                      {item.status}
+                    </div>
+                  </div>
+                  <div className="text-xs" style={{ color: 'var(--fg-secondary)' }}>
+                    {String(item.summary || '').slice(0, 160)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* Task Plan */}
         <div>

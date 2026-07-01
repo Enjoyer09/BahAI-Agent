@@ -37,7 +37,8 @@ import {
   mergeRuntimeArtifactIntoMemory,
   buildValidationSnapshot,
   mergeValidationIntoMemory,
-  mergeApprovalDecisionIntoMemory
+  mergeApprovalDecisionIntoMemory,
+  mergeEvidenceSummaryIntoMemory
 } from '../lib/chatRuntime';
 
 function generateId(): string {
@@ -689,7 +690,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
                 event.result
               );
               if (runtimeArtifact) {
-                const mergedMemory = mergeRuntimeArtifactIntoMemory(projectMemory, runtimeArtifact);
+                const mergedMemory = mergeEvidenceSummaryIntoMemory(
+                  mergeRuntimeArtifactIntoMemory(projectMemory, runtimeArtifact)
+                );
                 setProjectMemory(mergedMemory);
                 if (serverBacked) {
                   saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
@@ -699,7 +702,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
             if (runningTool?.function?.name === 'run_tests' && typeof event.result === 'string' && activeProject?.id) {
               const validation = buildValidationSnapshot(event.result);
               if (validation) {
-                const mergedMemory = mergeValidationIntoMemory(projectMemory, validation);
+                const mergedMemory = mergeEvidenceSummaryIntoMemory(
+                  mergeValidationIntoMemory(projectMemory, validation)
+                );
                 setProjectMemory(mergedMemory);
                 if (serverBacked) {
                   saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
@@ -765,7 +770,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     await submitApproval(approvalId, decision);
     const targetApproval = pendingApprovals.find(item => item.approvalId === approvalId);
     if (targetApproval && activeProject?.id) {
-      const mergedMemory = mergeApprovalDecisionIntoMemory(projectMemory, targetApproval, decision);
+      const mergedMemory = mergeEvidenceSummaryIntoMemory(
+        mergeApprovalDecisionIntoMemory(projectMemory, targetApproval, decision)
+      );
       setProjectMemory(mergedMemory);
       if (serverBacked) {
         saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
