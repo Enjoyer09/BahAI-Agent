@@ -44,9 +44,11 @@ function main() {
   mustExist('docs/ai/harness/README.md');
   mustExist('docs/ai/harness/commands.md');
   mustExist('docs/ai/harness/evidence.md');
+  mustExist('docs/ai/harness/workflow-capabilities.md');
 
   mustContain('package.json', ['smoke:gui', 'smoke:prod']);
   mustContain('backend/gui/browserPolicy.js', ['resolveGuiBrowserPolicy', 'getRecommendedGuiBrowserMode']);
+  mustContain('backend/orchestrator/workflowCapabilities.js', ['WORKFLOW_CAPABILITIES', 'getWorkflowCapabilities']);
   mustContain('memory/CODE_AGENT_HANDOFF.md', ['scripts/prod-smoke.js']);
 
   if (process.exitCode) {
