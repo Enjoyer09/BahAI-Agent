@@ -23,6 +23,7 @@ const {
   isGuiObserveSelfTestRequest,
   isGuiLoginCheckpointRequest,
   isGuiLoginResumeRequest,
+  isSeoGuiCheckpointRequest,
   buildGuiBrowserOpenArgs
 } = require('./gui/requests');
 const { getRecommendedGuiBrowserMode } = require('./gui/browserPolicy');
@@ -290,9 +291,16 @@ function mapMessagesToResponsesInput(messages = []) {
   for (const message of messages) {
     if (!message || !message.role) continue;
     if (message.role === 'tool') {
+      const callId = String(message.tool_call_id || '').trim();
+      if (!callId) {
+        // Responses HTTP requires function_call_output.call_id. Frontend or
+        // fallback tool parsing can occasionally produce orphan tool messages;
+        // skip them instead of sending an invalid continuation payload.
+        continue;
+      }
       input.push({
         type: 'function_call_output',
-        call_id: message.tool_call_id || '',
+        call_id: callId,
         output: String(message.content || '')
       });
       continue;
@@ -300,9 +308,11 @@ function mapMessagesToResponsesInput(messages = []) {
 
     if (message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
       for (const toolCall of message.tool_calls) {
+        const callId = String(toolCall.id || toolCall.call_id || '').trim();
+        if (!callId) continue;
         input.push({
           type: 'function_call',
-          call_id: toolCall.id,
+          call_id: callId,
           name: toolCall.function?.name || '',
           arguments: toolCall.function?.arguments || '{}'
         });
@@ -3575,7 +3585,8 @@ app.post('/api/chat', async (req, res) => {
       return;
     }
 
-    if (earlyOrchestration.workflow === 'gui' && isGuiLoginCheckpointRequest(latestUserText)) {
+    if ((earlyOrchestration.workflow === 'gui' && isGuiLoginCheckpointRequest(latestUserText)) ||
+        (earlyOrchestration.workflow === 'seo_gui' && isSeoGuiCheckpointRequest(latestUserText, effectiveWorkflow))) {
       const runManager = createRunManager(earlyOrchestration, crypto.randomUUID());
       await handleGuiLoginCheckpoint({
         res,
@@ -3588,7 +3599,7 @@ app.post('/api/chat', async (req, res) => {
         normalizeUserFacingError,
         browserOpenArgs: buildGuiBrowserOpenArgs({
           url: 'https://www.wix.com',
-          sessionId: 'gui-wix-live',
+          sessionId: earlyOrchestration.workflow === 'seo_gui' ? 'seo-gui-wix-live' : 'gui-wix-live',
           guiBrowserMode,
           guiBrowserPath,
           guiBrowserCdpUrl,

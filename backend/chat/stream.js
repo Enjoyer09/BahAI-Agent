@@ -37,7 +37,7 @@ async function collectStreamOutput({
       if (chunk.type === 'response.output_item.added' && chunk.item?.type === 'function_call') {
         const idx = chunk.output_index ?? accumulatedToolCalls.length;
         accumulatedToolCalls[idx] = {
-          id: chunk.item.call_id || '',
+          id: chunk.item.call_id || chunk.item.id || '',
           type: 'function',
           function: {
             name: chunk.item.name || '',

@@ -16,6 +16,15 @@ function isGuiLoginCheckpointRequest(text = '') {
   );
 }
 
+function isSeoGuiCheckpointRequest(text = '', workflow = '') {
+  const value = String(text || '').toLowerCase();
+  return (
+    workflow === 'seo_gui' ||
+    (/(seo|meta|title|sitemap|robots|search console|marketing)/i.test(value) &&
+      /(gui|browser|visible|wix|dashboard|settings|workflow:\s*seo_gui)/i.test(value))
+  );
+}
+
 function isGuiLoginResumeRequest(text = '') {
   const value = String(text || '').toLowerCase();
   return (
@@ -73,5 +82,6 @@ module.exports = {
   isGuiObserveSelfTestRequest,
   isGuiLoginCheckpointRequest,
   isGuiLoginResumeRequest,
+  isSeoGuiCheckpointRequest,
   buildGuiBrowserOpenArgs
 };

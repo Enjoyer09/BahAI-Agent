@@ -54,6 +54,7 @@ export const WORKFLOW_OPTIONS = [
   { id: 'quick', name: 'Quick', description: 'Tək implementer agent, sürətli icra' },
   { id: 'default', name: 'Default', description: 'Planner -> Builder -> Reviewer' },
   { id: 'gui', name: 'GUI Agent', description: 'Browser GUI observe -> action -> reflection loop' },
+  { id: 'seo_gui', name: 'SEO GUI', description: 'SEO strategist + GUI operator + reviewer' },
   { id: 'thorough', name: 'Thorough', description: 'Architect -> Builder -> Security -> QA' },
   { id: 'review-only', name: 'Review Only', description: 'Mövcud kodu audit və risk analizi' },
 ];

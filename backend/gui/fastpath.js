@@ -45,7 +45,12 @@ async function handleGuiLoginResume({
   emitOrchestrationPrelude(res, orchestration, runManager, runId);
 
   const sessionId = checkpoint?.sessionId || 'gui-wix-live';
-  const goal = String(latestUserText || '').trim() || 'Observe the Wix dashboard after login and identify the next safe step toward SEO settings. Do not save or publish anything.';
+  const isSeoGui = orchestration?.workflow === 'seo_gui' || checkpoint?.workflow === 'seo_gui';
+  const goal = String(latestUserText || '').trim() || (
+    isSeoGui
+      ? 'Observe the Wix dashboard after login, identify SEO/Marketing settings, and report the next safe SEO audit step. Do not save or publish anything.'
+      : 'Observe the Wix dashboard after login and identify the next safe step toward SEO settings. Do not save or publish anything.'
+  );
 
   const toolCall = {
     id: `call_${crypto.randomUUID()}`,
@@ -65,7 +70,9 @@ async function handleGuiLoginResume({
     message: {
       id: crypto.randomUUID(),
       role: 'assistant',
-      content: 'Login sonrası Wix pəncərəsini yalnız müşahidə edirəm. Heç nə publish/save edilməyəcək.',
+      content: isSeoGui
+        ? 'Login sonrası Wix pəncərəsini SEO audit üçün yalnız müşahidə edirəm. Heç nə publish/save edilməyəcək.'
+        : 'Login sonrası Wix pəncərəsini yalnız müşahidə edirəm. Heç nə publish/save edilməyəcək.',
       tool_calls: [toolCall]
     }
   });
@@ -77,7 +84,9 @@ async function handleGuiLoginResume({
     message: {
       id: crypto.randomUUID(),
       role: 'assistant',
-      content: 'Növbəti təhlükəsiz addım: Wix dashboard-da sayt kartını və ya sol menyunu vizual yoxla, SEO/Marketing bölməsinə keçid olub-olmadığını təsdiqlə. Hələ heç nə klikləməyi, save və publish etməyi tövsiyə etmirəm; əvvəl screenshot/observation əsasında konkret selector və səhifə vəziyyətini dəqiqləşdirmək lazımdır.'
+      content: isSeoGui
+        ? 'Növbəti təhlükəsiz SEO addımı: Wix dashboard-da sol menyuda SEO, Marketing və ya Settings bölməsinin görünüb-görünmədiyini təsdiqlə. Hələ heç nə save/publish etmə; əvvəl observation əsasında SEO audit üçün düzgün giriş nöqtəsini müəyyənləşdirmək lazımdır.'
+        : 'Növbəti təhlükəsiz addım: Wix dashboard-da sayt kartını və ya sol menyunu vizual yoxla, SEO/Marketing bölməsinə keçid olub-olmadığını təsdiqlə. Hələ heç nə klikləməyi, save və publish etməyi tövsiyə etmirəm; əvvəl screenshot/observation əsasında konkret selector və səhifə vəziyyətini dəqiqləşdirmək lazımdır.'
     }
   });
   res.write('data: [DONE]\n\n');
@@ -131,6 +140,16 @@ async function handleGuiLoginCheckpoint({
   initSse(res);
   emitOrchestrationPrelude(res, orchestration, runManager, runId);
 
+  const isSeoGui = orchestration?.workflow === 'seo_gui';
+  const sessionId = isSeoGui ? 'seo-gui-wix-live' : 'gui-wix-live';
+  const checkpointTitle = isSeoGui ? 'Wix SEO login checkpoint' : 'Wix login checkpoint';
+  const checkpointMessage = isSeoGui
+    ? 'Açılan Chrome pəncərəsində Wix hesabına daxil olun. Login bitəndə “Login oldum” düyməsini basın; sonra SEO audit müşahidəsi davam edəcək.'
+    : 'Açılan Chrome pəncərəsində Wix hesabına daxil olun. Login bitəndə “Login oldum” düyməsini basın.';
+  const resumePrompt = isSeoGui
+    ? 'login oldum. İndi yalnız observe et, Wix dashboard-da SEO və ya Marketing bölməsinə gedən növbəti təhlükəsiz addımı de və SEO audit üçün ilkin findings çıxar. Heç nə publish etmə, heç nə save etmə. Workflow: seo_gui.'
+    : 'login oldum. İndi yalnız observe et və Wix dashboard-da SEO settings-ə getmək üçün növbəti təhlükəsiz addımı de. Heç nə publish etmə, heç nə save etmə. Workflow: gui.';
+
   const toolCall = {
     id: `call_${crypto.randomUUID()}`,
     type: 'function',
@@ -145,7 +164,9 @@ async function handleGuiLoginCheckpoint({
     message: {
       id: crypto.randomUUID(),
       role: 'assistant',
-      content: 'Visible Chrome açılır və wix.com yüklənir. Login üçün insan checkpoint-i göstəriləcək; agent gözləmə rejimində açıq qalmayacaq.',
+      content: isSeoGui
+        ? 'Visible Chrome açılır və wix.com yüklənir. SEO audit üçün login checkpoint-i göstəriləcək; agent gözləmə rejimində açıq qalmayacaq.'
+        : 'Visible Chrome açılır və wix.com yüklənir. Login üçün insan checkpoint-i göstəriləcək; agent gözləmə rejimində açıq qalmayacaq.',
       tool_calls: [toolCall]
     }
   });
@@ -177,11 +198,11 @@ async function handleGuiLoginCheckpoint({
   createCheckpoint(checkpointId, {
     userId: reqUser?.id,
     kind: 'login',
-    workflow: 'gui',
-    sessionId: 'gui-wix-live',
-    title: 'Wix login checkpoint',
-    message: 'Açılan Chrome pəncərəsində Wix hesabına daxil olun. Login bitəndə “Login oldum” düyməsini basın.',
-    resumePrompt: 'login oldum. İndi yalnız observe et və Wix dashboard-da SEO settings-ə getmək üçün növbəti təhlükəsiz addımı de. Heç nə publish etmə, heç nə save etmə. Workflow: gui.',
+    workflow: isSeoGui ? 'seo_gui' : 'gui',
+    sessionId,
+    title: checkpointTitle,
+    message: checkpointMessage,
+    resumePrompt,
     cancelPrompt: 'hələ login olmamışam, gözləyək.',
     resumeLabel: 'Login oldum',
     cancelLabel: 'Hələ yox',
@@ -196,15 +217,15 @@ async function handleGuiLoginCheckpoint({
     checkpoint: {
       id: checkpointId,
       kind: 'login',
-      workflow: 'gui',
-      sessionId: 'gui-wix-live',
+      workflow: isSeoGui ? 'seo_gui' : 'gui',
+      sessionId,
       conversationId,
       runId,
       phaseRole: runManager?.currentPhase?.()?.role || 'Planner',
       expiresAt,
-      title: 'Wix login checkpoint',
-      message: 'Açılan Chrome pəncərəsində Wix hesabına daxil olun. Login bitəndə “Login oldum” düyməsini basın.',
-      resumePrompt: 'login oldum. İndi yalnız observe et və Wix dashboard-da SEO settings-ə getmək üçün növbəti təhlükəsiz addımı de. Heç nə publish etmə, heç nə save etmə. Workflow: gui.',
+      title: checkpointTitle,
+      message: checkpointMessage,
+      resumePrompt,
       cancelPrompt: 'hələ login olmamışam, gözləyək.',
       resumeLabel: 'Login oldum',
       cancelLabel: 'Hələ yox'
