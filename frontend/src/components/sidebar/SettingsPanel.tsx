@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
-import { Code2, Zap, Search, Globe, Key, ShieldAlert, Workflow, MonitorCog } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Code2, Zap, Search, Globe, Key, ShieldAlert, Workflow, MonitorCog, CheckCircle2, AlertTriangle, CircleOff } from 'lucide-react';
 import { MODELS, WORKFLOW_OPTIONS } from '../../lib/constants';
-import { getInstalledBrowsers } from '../../lib/api';
+import { getGuiCapabilities, getInstalledBrowsers } from '../../lib/api';
+import type { GuiCapabilityStatus } from '../../lib/types';
 import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
 
 interface Props {
@@ -25,6 +26,8 @@ export default function SettingsPanel({ settingsCtx }: Props) {
   const [query, setQuery] = useState('');
   const [browsers, setBrowsers] = useState<Array<{ id: string; name: string; path: string; installed: boolean; supportsCdp: boolean; recommended?: boolean }>>([]);
   const [browserScanError, setBrowserScanError] = useState('');
+  const [guiCapabilities, setGuiCapabilities] = useState<GuiCapabilityStatus | null>(null);
+  const [guiCapabilityError, setGuiCapabilityError] = useState('');
   const [isCustomMode, setIsCustomMode] = useState(() => {
     return baseUrl && !baseUrl.includes('openrouter.ai');
   });
@@ -48,6 +51,31 @@ export default function SettingsPanel({ settingsCtx }: Props) {
   const selected = MODELS.find(m => m.id === model);
   const activeWorkflow = WORKFLOW_OPTIONS.find((item) => item.id === workflow);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadGuiCapabilities = async () => {
+      try {
+        setGuiCapabilityError('');
+        const status = await getGuiCapabilities({
+          mode: guiBrowserMode,
+          browserPath: guiBrowserPath,
+          cdpUrl: guiBrowserCdpUrl
+        });
+        if (!cancelled) {
+          setGuiCapabilities(status);
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setGuiCapabilityError(error?.message || 'GUI capability status alınmadı');
+        }
+      }
+    };
+    loadGuiCapabilities();
+    return () => {
+      cancelled = true;
+    };
+  }, [guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl]);
+
   const scanBrowsers = async () => {
     setBrowserScanError('');
     try {
@@ -67,6 +95,15 @@ export default function SettingsPanel({ settingsCtx }: Props) {
       setBrowserScanError(error?.message || 'Browser scan alınmadı');
     }
   };
+
+  const statusTone = guiCapabilities?.summary.status || 'missing';
+  const statusMeta = statusTone === 'ok'
+    ? { icon: CheckCircle2, color: 'var(--color-success, #22c55e)', label: 'Hazır' }
+    : statusTone === 'degraded'
+      ? { icon: AlertTriangle, color: 'var(--color-warning, #f59e0b)', label: 'Degraded' }
+      : { icon: CircleOff, color: 'var(--fg-muted)', label: 'Missing' };
+  const StatusIcon = statusMeta.icon;
+  const installedBrowserCount = guiCapabilities?.browser.installedBrowsers.filter((item) => item.installed).length || 0;
 
   const handlePreset = (type: 'ollama' | 'lmstudio' | 'openrouter' | 'freemodel') => {
     if (type === 'ollama') {
@@ -125,6 +162,59 @@ export default function SettingsPanel({ settingsCtx }: Props) {
           <div>Browser: <span style={{ color: 'var(--fg-main)' }}>{guiBrowserMode}</span></div>
           <div>Endpoint: <span style={{ color: 'var(--fg-main)' }}>{baseUrl}</span></div>
         </div>
+      </div>
+
+      <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <MonitorCog size={14} style={{ color: 'var(--fg-muted)' }} />
+            <span className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+              GUI Capability Status
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[10px]" style={{ color: statusMeta.color }}>
+            <StatusIcon size={12} />
+            <span>{statusMeta.label}</span>
+          </div>
+        </div>
+
+        {guiCapabilityError ? (
+          <div className="text-[11px]" style={{ color: 'var(--color-warning, #f59e0b)' }}>
+            {guiCapabilityError}
+          </div>
+        ) : guiCapabilities ? (
+          <>
+            <div className="text-[11px] space-y-1" style={{ color: 'var(--fg-secondary)' }}>
+              <div>Platforma: <span style={{ color: 'var(--fg-main)' }}>{guiCapabilities.runtime.platform}</span></div>
+              <div>Browser mode: <span style={{ color: 'var(--fg-main)' }}>{guiCapabilities.browser.resolvedMode}</span></div>
+              <div>Playwright: <span style={{ color: 'var(--fg-main)' }}>{guiCapabilities.browser.playwrightInstalled ? 'ok' : 'missing'}</span></div>
+              <div>Screen agent: <span style={{ color: 'var(--fg-main)' }}>{guiCapabilities.screenAgent.available ? 'ok' : 'missing'}</span></div>
+              <div>Tapılan browser: <span style={{ color: 'var(--fg-main)' }}>{installedBrowserCount}</span></div>
+            </div>
+
+            {!!guiCapabilities.warnings.length && (
+              <div className="flex flex-wrap gap-1.5">
+                {guiCapabilities.warnings.slice(0, 6).map((warning, idx) => (
+                  <span
+                    key={`${warning}-${idx}`}
+                    className="px-2 py-1 rounded-md text-[10px] font-mono"
+                    style={{ background: 'var(--bg-main)', color: 'var(--fg-muted)', border: '1px solid var(--border)' }}
+                  >
+                    {warning}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+              Tövsiyə: {guiCapabilities.summary.recommendedWorkflow} workflow, {guiCapabilities.summary.recommendedBrowserMode} browser mode
+            </div>
+          </>
+        ) : (
+          <div className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>
+            GUI status yüklənir...
+          </div>
+        )}
       </div>
 
       {/* Provider Selector Tab */}

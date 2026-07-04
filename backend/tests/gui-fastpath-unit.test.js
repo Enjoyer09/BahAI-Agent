@@ -66,4 +66,30 @@ describe('GUI fastpath unit', () => {
     const parsed = JSON.parse(toolCall.function.arguments);
     expect(parsed.sessionId).toBe('gui-wix-live-custom');
   });
+
+  it('surfaces capability-aware browser guidance when launch fails', async () => {
+    const res = createFakeRes();
+    const handleToolCall = vi.fn(async () => (
+      'Browser open error: No installed Chrome found for CDP mode\nCode: chrome_missing\nCDP: http://127.0.0.1:9222'
+    ));
+
+    await handleGuiLoginCheckpoint({
+      res,
+      orchestration: { workflow: 'gui', mode: 'orchestrated', agents: ['Planner'], routing: {}, enabled: false },
+      runManager: { snapshot: () => ({ currentRole: 'Planner', phases: [] }) },
+      resolvedWD: '/tmp',
+      reqUser: { id: 'u1' },
+      handleToolCall,
+      normalizeUserFacingError: (value) => String(value).includes('chrome_missing')
+        ? 'Browser açıla bilmədi: bu mühitdə GUI üçün lazım olan Chrome tapılmadı.\n\nDüzəltmə addımı:\n1. Lokal Mac-də Google Chrome quraşdırın və ya BahAI Settings-də browser mode-u `bundled` edin.\n2. Real Chrome ilə davam etmək istəyirsinizsə `scripts/start-debug-chrome.sh` işlədin.\n3. Sonra Settings-də `cdp` və ya `persistent` mode seçin.'
+        : value,
+      browserOpenArgs: { url: 'https://www.wix.com', sessionId: 'gui-wix-live', visible: true },
+      createCheckpoint: () => ({})
+    });
+
+    const text = res.chunks.join('\n');
+    expect(text.includes('Chrome tapılmadı')).toBe(true);
+    expect(text.includes('start-debug-chrome.sh')).toBe(true);
+    expect(text.includes('"type":"human_checkpoint"')).toBe(false);
+  });
 });

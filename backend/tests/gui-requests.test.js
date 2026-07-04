@@ -4,9 +4,11 @@ const {
   isGuiObserveSelfTestRequest,
   isGuiLoginCheckpointRequest,
   isGuiLoginResumeRequest,
-  buildGuiBrowserOpenArgs
+  buildGuiBrowserOpenArgs,
+  shouldAdvertiseScreenAgent
 } = require('../gui/requests');
 const { resolveGuiBrowserPolicy, getRecommendedGuiBrowserMode, shouldPreferCdp } = require('../gui/browserPolicy');
+const { buildGuiCapabilityStatus } = require('../gui/capabilityStatus');
 
 describe('GUI request classifiers', () => {
   it('detects wix login checkpoint requests', () => {
@@ -116,5 +118,30 @@ describe('browser policy', () => {
     });
 
     expect(policy.mode).toBe('bundled');
+  });
+});
+
+describe('GUI capability status', () => {
+  it('marks screen agent unavailable on non-macos platforms', () => {
+    const status = buildGuiCapabilityStatus({
+      runtimePlatform: 'linux',
+      guiBrowserMode: 'bundled',
+      defaultCdpUrl: ''
+    });
+
+    expect(status.screenAgent.available).toBe(false);
+    expect(status.screenAgent.reasons).toContain('screen_agent_macos_only');
+  });
+
+  it('does not advertise screen agent when unavailable', () => {
+    expect(
+      shouldAdvertiseScreenAgent({
+        latestUserText: 'Real browser ile desktop automation et',
+        workflow: 'gui',
+        guiCapabilities: {
+          screenAgent: { available: false }
+        }
+      })
+    ).toBe(false);
   });
 });

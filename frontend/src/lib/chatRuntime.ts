@@ -1,4 +1,4 @@
-import type { ApprovalRequest, ExecutionArtifact, PlannerArtifact, RuntimeArtifact } from './types';
+import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GuiCapabilityStatus, HumanCheckpoint, PlannerArtifact, RuntimeArtifact } from './types';
 
 export function normalizeAssistantText(content: string): string {
   if (typeof content !== 'string') return '';
@@ -241,5 +241,64 @@ export function mergeEvidenceSummaryIntoMemory(memory: Record<string, unknown>) 
   return {
     ...memory,
     evidenceSummary: buildEvidenceSummary(memory)
+  };
+}
+
+export function mergeGuiCapabilitiesIntoMemory(memory: Record<string, unknown>, guiCapabilities: GuiCapabilityStatus) {
+  return {
+    ...memory,
+    guiCapabilities,
+    guiCapabilitiesUpdatedAt: Date.now()
+  };
+}
+
+export function mergeHumanCheckpointIntoMemory(memory: Record<string, unknown>, checkpoint: HumanCheckpoint | null) {
+  if (!checkpoint?.sessionId) return memory;
+  const activeGuiSession: ActiveGuiSession = {
+    sessionId: checkpoint.sessionId,
+    workflow: checkpoint.workflow,
+    status: checkpoint.kind === 'login' ? 'pending_login' : 'observing',
+    checkpointId: checkpoint.id,
+    conversationId: checkpoint.conversationId,
+    runId: checkpoint.runId,
+    phaseRole: checkpoint.phaseRole,
+    updatedAt: Date.now()
+  };
+  return {
+    ...memory,
+    activeGuiSession
+  };
+}
+
+export function mergeGuiObservationIntoMemory(memory: Record<string, unknown>, runtimeArtifact: RuntimeArtifact) {
+  const existing = (memory.activeGuiSession || null) as ActiveGuiSession | null;
+  const sessionId = existing?.sessionId || 'default';
+  return {
+    ...memory,
+    activeGuiSession: {
+      sessionId,
+      workflow: existing?.workflow,
+      checkpointId: existing?.checkpointId,
+      conversationId: existing?.conversationId,
+      runId: existing?.runId,
+      phaseRole: existing?.phaseRole,
+      status: runtimeArtifact.status === 'failed' ? 'failed' : 'ready',
+      title: runtimeArtifact.summary || existing?.title,
+      url: runtimeArtifact.url || existing?.url,
+      updatedAt: Date.now()
+    }
+  };
+}
+
+export function resolveActiveGuiSessionInMemory(memory: Record<string, unknown>, decision: 'resume' | 'cancel') {
+  const existing = (memory.activeGuiSession || null) as ActiveGuiSession | null;
+  if (!existing) return memory;
+  return {
+    ...memory,
+    activeGuiSession: {
+      ...existing,
+      status: decision === 'resume' ? 'observing' : 'closed',
+      updatedAt: Date.now()
+    }
   };
 }

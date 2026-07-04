@@ -1,4 +1,5 @@
 const { resolveGuiBrowserPolicy } = require('./browserPolicy');
+const { buildGuiCapabilityStatus } = require('./capabilityStatus');
 
 function isGuiObserveSelfTestRequest(text = '') {
   const value = String(text || '').toLowerCase();
@@ -78,10 +79,37 @@ function buildGuiBrowserOpenArgs({
   return base;
 }
 
+function shouldAdvertiseScreenAgent({
+  latestUserText = '',
+  workflow = '',
+  guiCapabilities = null
+} = {}) {
+  const wantsRealScreenAutomation = /(real browser|real chrome|ekran agenti|screen agent|desktop automation|kompyuteri idare et|kompüteri idarə et|mouse ve keyboard|mouse və keyboard)/i.test(String(latestUserText || ''));
+  if (workflow === 'screen' || wantsRealScreenAutomation) {
+    if (!guiCapabilities) return true;
+    return Boolean(guiCapabilities.screenAgent?.available);
+  }
+  return false;
+}
+
+function getGuiCapabilityHints(options = {}) {
+  const status = buildGuiCapabilityStatus(options);
+  return {
+    status,
+    browserReady: Boolean(status.browser?.automationAvailable),
+    screenReady: Boolean(status.screenAgent?.available),
+    browserOnlyReason: !status.screenAgent?.available
+      ? 'screen_agent_unavailable'
+      : ''
+  };
+}
+
 module.exports = {
   isGuiObserveSelfTestRequest,
   isGuiLoginCheckpointRequest,
   isGuiLoginResumeRequest,
   isSeoGuiCheckpointRequest,
-  buildGuiBrowserOpenArgs
+  buildGuiBrowserOpenArgs,
+  shouldAdvertiseScreenAgent,
+  getGuiCapabilityHints
 };

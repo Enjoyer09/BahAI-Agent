@@ -1,5 +1,5 @@
-import { Shield, CheckCircle2, Clock, ListChecks, Globe, Terminal as TerminalIcon, BrainCircuit } from 'lucide-react';
-import type { ApprovalRequest, ExecutionArtifact, PlannerArtifact, Project, RuntimeArtifact } from '../../lib/types';
+import { Shield, CheckCircle2, Clock, ListChecks, Globe, Terminal as TerminalIcon, BrainCircuit, MonitorCog } from 'lucide-react';
+import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GuiCapabilityStatus, PlannerArtifact, Project, RuntimeArtifact } from '../../lib/types';
 
 interface Props {
   safeMode: boolean;
@@ -23,6 +23,8 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
     headline?: string;
     items?: Array<{ label: string; status: string; summary: string }>;
   } | null;
+  const guiCapabilities = (projectMemory?.guiCapabilities || null) as GuiCapabilityStatus | null;
+  const activeGuiSession = (projectMemory?.activeGuiSession || null) as ActiveGuiSession | null;
   return (
     <div className="h-full flex flex-col overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
       {/* Header */}
@@ -174,6 +176,89 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
                   <div className="text-xs" style={{ color: 'var(--fg-secondary)' }}>
                     {lastTerminalArtifact.output?.slice(0, 180) || lastTerminalArtifact.summary || 'No terminal output'}
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeGuiSession && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <BrainCircuit size={13} style={{ color: 'var(--fg-muted)' }} />
+              <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--fg-muted)' }}>
+                Active GUI Session
+              </span>
+            </div>
+            <div className="rounded-lg p-3 space-y-1.5" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+                  {activeGuiSession.sessionId}
+                </div>
+                <div
+                  className="text-[10px]"
+                  style={{
+                    color: activeGuiSession.status === 'failed'
+                      ? 'var(--color-warning)'
+                      : activeGuiSession.status === 'closed'
+                        ? 'var(--fg-muted)'
+                        : 'var(--color-success, #22c55e)'
+                  }}
+                >
+                  {activeGuiSession.status}
+                </div>
+              </div>
+              <div className="text-xs" style={{ color: 'var(--fg-secondary)' }}>
+                Workflow: {activeGuiSession.workflow || 'gui'}
+              </div>
+              {activeGuiSession.url && (
+                <div className="text-[10px] font-mono truncate" style={{ color: 'var(--fg-muted)' }}>
+                  {activeGuiSession.url}
+                </div>
+              )}
+              {activeGuiSession.phaseRole && (
+                <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+                  Faza: {activeGuiSession.phaseRole}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {guiCapabilities && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <MonitorCog size={13} style={{ color: 'var(--fg-muted)' }} />
+              <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--fg-muted)' }}>
+                GUI Capabilities
+              </span>
+            </div>
+            <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+                  Status: {guiCapabilities.summary.status}
+                </div>
+                <div className="text-[10px]" style={{ color: guiCapabilities.summary.status === 'missing' ? 'var(--color-warning)' : 'var(--fg-muted)' }}>
+                  {guiCapabilities.runtime.platform}
+                </div>
+              </div>
+              <div className="text-xs" style={{ color: 'var(--fg-secondary)' }}>
+                Browser mode: {guiCapabilities.browser.resolvedMode} | Workflow: {guiCapabilities.summary.recommendedWorkflow}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--fg-secondary)' }}>
+                Playwright: {guiCapabilities.browser.playwrightInstalled ? 'ok' : 'missing'} | Screen agent: {guiCapabilities.screenAgent.available ? 'ok' : 'missing'}
+              </div>
+              {!!guiCapabilities.warnings?.length && (
+                <div className="flex flex-wrap gap-1.5">
+                  {guiCapabilities.warnings.slice(0, 6).map((warning, idx) => (
+                    <span
+                      key={`${warning}-${idx}`}
+                      className="px-2 py-1 rounded-md text-[10px] font-mono"
+                      style={{ background: 'var(--bg-surface)', color: 'var(--fg-muted)', border: '1px solid var(--border-subtle)' }}
+                    >
+                      {warning}
+                    </span>
+                  ))}
                 </div>
               )}
             </div>

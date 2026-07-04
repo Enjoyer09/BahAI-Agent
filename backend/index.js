@@ -19,12 +19,16 @@ const XLSX = require('xlsx');
 const { createWorker } = require('tesseract.js');
 const { getSession, closeAllSessions, findInstalledChromePath, listInstalledBrowsers } = require('./browserSession');
 const { inspectGuiState, runGuiAction, stepGuiAgent } = require('./gui/agent');
+const { buildGuiCapabilityStatus } = require('./gui/capabilityStatus');
+const { appendGuiRepairGuidance } = require('./gui/repairGuidance');
 const {
   isGuiObserveSelfTestRequest,
   isGuiLoginCheckpointRequest,
   isGuiLoginResumeRequest,
   isSeoGuiCheckpointRequest,
-  buildGuiBrowserOpenArgs
+  buildGuiBrowserOpenArgs,
+  shouldAdvertiseScreenAgent,
+  getGuiCapabilityHints
 } = require('./gui/requests');
 const { getRecommendedGuiBrowserMode } = require('./gui/browserPolicy');
 const {
@@ -415,7 +419,34 @@ function normalizeUserFacingError(message = '') {
   if (/^Error executing tool: Unexpected token/i.test(text)) {
     return 'Tool üçün göndərilən argument forması düzgün deyildi. Daxili bərpa cəhdi edilir.';
   }
-  return text;
+  if (/^Browser open error:/i.test(text)) {
+    if (/Code:\s*chrome_missing/i.test(text)) {
+      return 'Browser açıla bilmədi: bu mühitdə GUI üçün lazım olan Chrome tapılmadı. Lokal Mac-də real Chrome quraşdırılıbsa `persistent` və ya `cdp` mode istifadə edin; Railway/Linux mühitində isə əsasən bundled browser yolu işləyəcək.';
+    }
+    if (/Code:\s*playwright_missing/i.test(text)) {
+      return 'Browser automation hazır deyil: Playwright dependency-si tapılmadı. GUI/browser workflow işləməsi üçün server mühitində Playwright quraşdırılmış olmalıdır.';
+    }
+    if (/Code:\s*cdp_unreachable/i.test(text)) {
+      return 'Browser CDP bağlantısı qurulmadı. Deməli seçilmiş Chrome debug port-da əlçatan deyil. Lokalda Chrome-u remote debugging ilə açın və ya browser mode-u `persistent` / `bundled` edin.';
+    }
+    if (/context management is not supported|Browser\.setDownloadBehavior/i.test(text)) {
+      return 'Chrome açıldı, amma bu CDP sessiyası tam idarə olunan automation context vermədi. Bu halda `persistent` mode daha sabit seçimdir.';
+    }
+    return 'Browser açıla bilmədi. GUI capability status-a baxın: Chrome, Playwright və browser mode uyğunluğu yoxlanmalıdır.';
+  }
+  if (/^Screen (open_url|screenshot|click|type|press|scroll) error:/i.test(text)) {
+    if (/ENOENT|python3/i.test(text)) {
+      return 'Screen agent hazır deyil: lokal `.venv` Python və screen automation asılılıqları tapılmadı. Bu capability indi yalnız uyğun lokal desktop mühitində işləyir.';
+    }
+    if (/open ENOENT/i.test(text)) {
+      return 'Screen agent bu server mühitində real desktop browser aça bilmir. `screen_*` alətləri Railway/Linux serverində yox, lokal masaüstü mühitdə nəzərdə tutulub.';
+    }
+    return 'Screen automation alınmadı. Bu capability yalnız uyğun lokal desktop mühitində etibarlı işləyir.';
+  }
+  if (/^GUI (observe|act|step) error:/i.test(text) && /Browser open error:/i.test(text)) {
+    return appendGuiRepairGuidance('GUI addımı browser sessiyasına bağlana bilmədi. Əvvəl browser launch capability-sini düzəltmək lazımdır.');
+  }
+  return appendGuiRepairGuidance(text);
 }
 
 function shouldEmitDebugEvent() {
@@ -3135,6 +3166,21 @@ app.get('/api/browsers', async (req, res) => {
   });
 });
 
+app.get('/api/gui-capabilities', async (req, res) => {
+  try {
+    const status = buildGuiCapabilityStatus({
+      guiBrowserMode: req.query.mode || 'cdp',
+      guiBrowserPath: req.query.browserPath || '',
+      guiBrowserCdpUrl: req.query.cdpUrl || '',
+      defaultCdpUrl: process.env.GUI_BROWSER_CDP_URL || '',
+      fallbackChromePath: findInstalledChromePath()
+    });
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'GUI capability scan failed' });
+  }
+});
+
 app.post('/api/task-plan', async (req, res) => {
   const { prompt, workingDirectory } = req.body;
   const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
@@ -3705,8 +3751,23 @@ AUDIT REJİMİ:
 - Audit cavabında prioritet findings-first olsun, sonra qısa yekun ver.`;
     }
 
-    // Screen Agent capabilities — compact version for token-limited APIs
-    sysPrompt += `
+    const guiCapabilityHints = getGuiCapabilityHints({
+      guiBrowserMode,
+      guiBrowserPath,
+      guiBrowserCdpUrl,
+      defaultCdpUrl: process.env.GUI_BROWSER_CDP_URL || '',
+      fallbackChromePath: findInstalledChromePath()
+    });
+    const shouldUseScreenAgentPrompt = shouldAdvertiseScreenAgent({
+      latestUserText,
+      workflow: effectiveWorkflow,
+      guiCapabilities: guiCapabilityHints.status
+    });
+
+    // Screen Agent capabilities — advertise only for explicit real-screen requests.
+    // Otherwise GUI/browser tasks should prefer browser_open + gui_* tools.
+    if (shouldUseScreenAgentPrompt) {
+      sysPrompt += `
 
 🖥️ EKRAN AGENTI:
 Sən ekranı görüb mouse/keyboard idarə edə bilirsən. Browser açma — istifadəçi özü açar.
@@ -3717,6 +3778,18 @@ QAYDALAR:
 - "Ekrana bax" desə → screen_screenshot çağır
 - Klik etməzdən əvvəl icazə al
 - Publish/Delete/Payment düymələrinə HEÇ VAXT toxunma`;
+    } else {
+      sysPrompt += `
+
+GUI/BROWSER PRIORITETİ:
+- Browser və GUI sorğularında əvvəlcə browser_open, browser_* və gui_* alətlərinə üstünlük ver.
+- screen_* alətlərindən yalnız istifadəçi açıq şəkildə real desktop/screen automation istəyəndə istifadə et.
+- Sadə web tapşırıqlarında Playwright/browser yolu uğursuz olmadan screen_* fallback etmə.`;
+      if (!guiCapabilityHints.screenReady) {
+        sysPrompt += `
+- Cari mühitdə screen_* unavailable ola bilər; belə hallarda screen tool çağırıb boş/error fallback etmə, istifadəçiyə konkret capability səbəbini de.`;
+      }
+    }
 
     if (isLocalOrFlakyModel) {
        // FUNC-FIX: previous prompt was 700+ lines of "QƏTİ QADAĞANDIR" rules

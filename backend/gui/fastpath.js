@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { appendGuiRepairGuidance } = require('./repairGuidance');
 
 function writeSse(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -180,12 +181,15 @@ async function handleGuiLoginCheckpoint({
     /(^|\n)(API xətası|Tool xətası|xəta|failed|unable|not found|could not)/i.test(normalized);
 
   if (!openedSuccessfully && definitelyFailed) {
+    const guidance = normalized && normalized !== String(result || '').trim()
+      ? `\n\nSəbəb: ${appendGuiRepairGuidance(normalized)}`
+      : '';
     writeSse(res, {
       type: 'assistant_message',
       message: {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: 'Browser açıla bilmədi və ya Wix yüklənmədi. Ona görə login checkpoint-ə keçmədim. Əvvəl browser launch problemini həll etmək lazımdır.'
+        content: `Browser açıla bilmədi və ya Wix yüklənmədi. Ona görə login checkpoint-ə keçmədim. Əvvəl browser launch problemini həll etmək lazımdır.${guidance}`
       }
     });
     res.write('data: [DONE]\n\n');

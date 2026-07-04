@@ -14,6 +14,7 @@ import {
   extractAttachments,
   getProjectMemory,
   getInteractions,
+  getGuiCapabilities,
   getTaskPlan,
   loadWorkspaceState,
   previewDiff,
@@ -38,7 +39,11 @@ import {
   buildValidationSnapshot,
   mergeValidationIntoMemory,
   mergeApprovalDecisionIntoMemory,
-  mergeEvidenceSummaryIntoMemory
+  mergeEvidenceSummaryIntoMemory,
+  mergeGuiCapabilitiesIntoMemory,
+  mergeHumanCheckpointIntoMemory,
+  mergeGuiObservationIntoMemory,
+  resolveActiveGuiSessionInMemory
 } from '../lib/chatRuntime';
 
 function generateId(): string {
@@ -261,6 +266,27 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     };
     loadMemory();
   }, [activeProject?.id, serverBacked]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadGuiCapabilityStatus = async () => {
+      try {
+        const guiCapabilities = await getGuiCapabilities({
+          mode: settings.guiBrowserMode,
+          browserPath: settings.guiBrowserPath,
+          cdpUrl: settings.guiBrowserCdpUrl
+        });
+        if (cancelled) return;
+        setProjectMemory((prev) => mergeGuiCapabilitiesIntoMemory(prev, guiCapabilities));
+      } catch {
+        // keep silent in UI state; ops panel will simply show nothing
+      }
+    };
+    loadGuiCapabilityStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.guiBrowserMode, settings.guiBrowserPath, settings.guiBrowserCdpUrl]);
 
   useEffect(() => {
     if (!serverBacked) {
@@ -555,6 +581,13 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
               ...prev.filter(item => item.kind !== 'checkpoint'),
               { id: event.checkpoint.id, kind: 'checkpoint', checkpoint: event.checkpoint }
             ]);
+            if (activeProject?.id) {
+              const mergedMemory = mergeHumanCheckpointIntoMemory(projectMemory, event.checkpoint);
+              setProjectMemory(mergedMemory);
+              if (serverBacked) {
+                saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+              }
+            }
             return;
           }
           if (event.type === 'assistant_delta') {
@@ -690,9 +723,11 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
                 event.result
               );
               if (runtimeArtifact) {
-                const mergedMemory = mergeEvidenceSummaryIntoMemory(
-                  mergeRuntimeArtifactIntoMemory(projectMemory, runtimeArtifact)
-                );
+                const withRuntime = mergeRuntimeArtifactIntoMemory(projectMemory, runtimeArtifact);
+                const withGuiSession = runtimeArtifact.kind === 'gui'
+                  ? mergeGuiObservationIntoMemory(withRuntime, runtimeArtifact)
+                  : withRuntime;
+                const mergedMemory = mergeEvidenceSummaryIntoMemory(withGuiSession);
                 setProjectMemory(mergedMemory);
                 if (serverBacked) {
                   saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
@@ -818,6 +853,13 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         ...prev.filter(item => item.kind !== 'checkpoint'),
         { id: event.checkpoint.id, kind: 'checkpoint', checkpoint: event.checkpoint }
       ]);
+      if (activeProject?.id) {
+        const mergedMemory = mergeHumanCheckpointIntoMemory(projectMemory, event.checkpoint);
+        setProjectMemory(mergedMemory);
+        if (serverBacked) {
+          saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+        }
+      }
       return;
     }
     if (event.type === 'assistant_message') {
@@ -875,10 +917,30 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         tool_call_id: updatedToolCallId,
         timestamp: Date.now()
       }];
+      const runningTool = currentMsgs
+        .flatMap((message) => message.tool_calls || [])
+        .find((toolCall: any) => toolCall.id === updatedToolCallId);
+      if (runningTool?.function?.name && typeof event.result === 'string' && activeProject?.id) {
+        const runtimeArtifact = extractRuntimeArtifact(
+          runningTool.function.name,
+          runningTool.function.arguments || '{}',
+          event.result
+        );
+        if (runtimeArtifact?.kind === 'gui') {
+          const mergedMemory = mergeGuiObservationIntoMemory(
+            mergeRuntimeArtifactIntoMemory(projectMemory, runtimeArtifact),
+            runtimeArtifact
+          );
+          setProjectMemory(mergedMemory);
+          if (serverBacked) {
+            saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+          }
+        }
+      }
       currentMsgsRef.current = currentMsgs;
       setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
     }
-  }, []);
+  }, [activeProject?.id, projectMemory, serverBacked]);
 
   const resolveHumanCheckpoint = useCallback(async (decision: 'resume' | 'cancel') => {
     const checkpoint = humanCheckpoint;
@@ -892,6 +954,13 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       return prev.filter(item => item.id !== checkpoint.id);
     });
     if (decision === 'resume' || decision === 'cancel') {
+      if (activeProject?.id) {
+        const mergedMemory = resolveActiveGuiSessionInMemory(projectMemory, decision);
+        setProjectMemory(mergedMemory);
+        if (serverBacked) {
+          saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+        }
+      }
       const convId = activeConvIdRef.current;
       if (!convId) return;
       const response = await resolveCheckpointRequest(checkpoint.id, decision, activeProject?.path || '');

@@ -161,6 +161,54 @@ export interface RuntimeArtifact {
   timestamp: number;
 }
 
+export interface GuiCapabilityStatus {
+  summary: {
+    status: 'ok' | 'degraded' | 'missing';
+    recommendedWorkflow: string;
+    recommendedBrowserMode: string;
+  };
+  runtime: {
+    platform: string;
+    nodeEnv: string;
+    isRemoteLinux: boolean;
+  };
+  browser: {
+    automationAvailable: boolean;
+    playwrightInstalled: boolean;
+    installedBrowsers: Array<{ id: string; name: string; path: string; installed: boolean; supportsCdp: boolean; recommended?: boolean }>;
+    chromeInstalled: boolean;
+    fallbackChromePath: string;
+    requestedMode: string;
+    resolvedMode: string;
+    modeStatus: 'ok' | 'degraded' | 'missing';
+    cdpUrl: string;
+    supportsPersistent: boolean;
+    supportsCdp: boolean;
+  };
+  screenAgent: {
+    available: boolean;
+    supportedPlatform: boolean;
+    pythonPath: string;
+    pythonExists: boolean;
+    openCommandAvailable: boolean;
+    reasons: string[];
+  };
+  warnings: string[];
+}
+
+export interface ActiveGuiSession {
+  sessionId: string;
+  workflow?: string;
+  status: 'pending_login' | 'ready' | 'observing' | 'failed' | 'closed';
+  title?: string;
+  url?: string;
+  checkpointId?: string;
+  conversationId?: string;
+  runId?: string;
+  phaseRole?: string;
+  updatedAt: number;
+}
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type SSEEvent =

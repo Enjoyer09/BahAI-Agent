@@ -3,7 +3,7 @@
 // ==========================================
 
 import { API_BASE_URL } from './constants';
-import type { ActionCenterInteraction, Attachment, Conversation, Project, SSEEvent } from './types';
+import type { ActionCenterInteraction, Attachment, Conversation, GuiCapabilityStatus, Project, SSEEvent } from './types';
 
 function getAuthHeader() {
   const token = localStorage.getItem('auth_token');
@@ -222,6 +222,21 @@ export async function loadWorkspaceState(): Promise<{ projects: Project[]; conve
 export async function getInstalledBrowsers(): Promise<{ browsers: Array<{ id: string; name: string; path: string; installed: boolean; supportsCdp: boolean; recommended?: boolean }>; cdpUrl: string; recommendedMode: string }> {
   const response = await apiFetch(`${API_BASE_URL}/api/browsers`);
   if (!response.ok) throw new Error('Browser siyahısı yüklənmədi');
+  return await response.json();
+}
+
+export async function getGuiCapabilities(input?: {
+  mode?: string;
+  browserPath?: string;
+  cdpUrl?: string;
+}): Promise<GuiCapabilityStatus> {
+  const params = new URLSearchParams();
+  if (input?.mode) params.set('mode', input.mode);
+  if (input?.browserPath) params.set('browserPath', input.browserPath);
+  if (input?.cdpUrl) params.set('cdpUrl', input.cdpUrl);
+  const query = params.toString();
+  const response = await apiFetch(`${API_BASE_URL}/api/gui-capabilities${query ? `?${query}` : ''}`);
+  if (!response.ok) throw new Error('GUI capability status yüklənmədi');
   return await response.json();
 }
 
