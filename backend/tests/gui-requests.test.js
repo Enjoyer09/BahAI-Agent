@@ -4,6 +4,9 @@ const {
   isGuiObserveSelfTestRequest,
   isGuiLoginCheckpointRequest,
   isGuiLoginResumeRequest,
+  isGuiOpenAndAwaitRequest,
+  isGuiContinuationRequest,
+  extractUrlFromGuiRequest,
   buildGuiBrowserOpenArgs,
   shouldAdvertiseScreenAgent
 } = require('../gui/requests');
@@ -26,6 +29,19 @@ describe('GUI request classifiers', () => {
   it('detects example.com self test requests', () => {
     expect(
       isGuiObserveSelfTestRequest('Browser-də https://example.com aç. Screenshot götür. Heç bir riskli action etmə. Workflow: gui.')
+    ).toBe(true);
+  });
+
+  it('detects generic gui open-and-await requests', () => {
+    expect(
+      isGuiOpenAndAwaitRequest('GUI agent chrome da laptopmarket.az saytini ac. Workflow: gui.')
+    ).toBe(true);
+    expect(extractUrlFromGuiRequest('GUI agent chrome da laptopmarket.az saytini ac. Workflow: gui.')).toBe('https://laptopmarket.az');
+  });
+
+  it('detects generic gui continuation requests without url', () => {
+    expect(
+      isGuiContinuationRequest('ASUS gaming laptop axtar. Workflow: gui.')
     ).toBe(true);
   });
 });
@@ -67,16 +83,46 @@ describe('buildGuiBrowserOpenArgs', () => {
     expect(args.cdpUrl).toBeUndefined();
     expect(args.visible).toBe(true);
   });
+
+  it('forces persistent real-chrome args when requested for gui open flows', () => {
+    const args = buildGuiBrowserOpenArgs({
+      url: 'https://laptopmarket.az',
+      sessionId: 'gui-live',
+      guiBrowserMode: 'cdp',
+      defaultCdpUrl: 'http://127.0.0.1:9222',
+      fallbackChromePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      preferPersistentIfChrome: true
+    });
+
+    expect(args.persistent).toBe(true);
+    expect(args.browserChannel).toBe('chrome');
+    expect(args.cdpUrl).toBeUndefined();
+  });
+
+  it('forces persistent chrome args even when path is not pre-resolved', () => {
+    const args = buildGuiBrowserOpenArgs({
+      url: 'https://laptopmarket.az',
+      sessionId: 'gui-live',
+      guiBrowserMode: 'cdp',
+      defaultCdpUrl: 'http://127.0.0.1:9222',
+      preferPersistentIfChrome: true
+    });
+
+    expect(args.persistent).toBe(true);
+    expect(args.browserChannel).toBe('chrome');
+    expect(args.executablePath).toBeUndefined();
+    expect(args.cdpUrl).toBeUndefined();
+  });
 });
 
 describe('browser policy', () => {
-  it('recommends cdp when cdp url exists', () => {
+  it('recommends persistent when chrome exists even if cdp url exists', () => {
     expect(
       getRecommendedGuiBrowserMode({
         installedBrowsers: [{ id: 'chrome', installed: true, recommended: true, supportsCdp: true, path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' }],
         cdpUrl: 'http://127.0.0.1:9222'
       })
-    ).toBe('cdp');
+    ).toBe('persistent');
   });
 
   it('recommends persistent when chrome exists but no cdp url exists', () => {
@@ -131,6 +177,8 @@ describe('GUI capability status', () => {
 
     expect(status.screenAgent.available).toBe(false);
     expect(status.screenAgent.reasons).toContain('screen_agent_macos_only');
+    expect(status.computerUse.available).toBe(false);
+    expect(status.computerUse.reasons).toContain('computer_use_macos_only');
   });
 
   it('does not advertise screen agent when unavailable', () => {

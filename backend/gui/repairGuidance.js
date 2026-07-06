@@ -33,6 +33,15 @@ function buildGuiRepairGuidance(message = '') {
     ]);
   }
 
+  if (/Code:\s*real_chrome_profile_locked/i.test(text)) {
+    return joinLines([
+      'Düzəltmə addımı:',
+      '1. Açıq qalan əvvəlki BahAI Chrome pəncərələrini bağlayın.',
+      '2. Google Chrome prosesini tam bağlayın.',
+      '3. GUI əmri yenidən başladın. BahAI ayrıca profil ilə davam edəcək.'
+    ]);
+  }
+
   if (/context management is not supported|Browser\.setDownloadBehavior/i.test(text)) {
     return joinLines([
       'Düzəltmə addımı:',

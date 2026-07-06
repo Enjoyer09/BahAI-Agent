@@ -33,6 +33,8 @@ const TOOL_ICONS: Record<string, React.ComponentType<{ size?: number; className?
   gui_observe: MonitorCog,
   gui_act: MousePointerClick,
   gui_step: BrainCircuit,
+  computer_use_act: MousePointerClick,
+  computer_use_step: BrainCircuit,
 };
 
 const TOOL_LABELS: Record<string, string> = {
@@ -57,6 +59,8 @@ const TOOL_LABELS: Record<string, string> = {
   gui_observe: 'GUI Observe',
   gui_act: 'GUI Action',
   gui_step: 'GUI Step',
+  computer_use_act: 'Computer Use Action',
+  computer_use_step: 'Computer Use Step',
 };
 
 function formatSummary(toolName: string, argsStr: string): string {
@@ -79,6 +83,8 @@ function formatSummary(toolName: string, argsStr: string): string {
     if (toolName === 'gui_observe') return p.goal || p.sessionId || 'observe';
     if (toolName === 'gui_act') return p.action?.type ? `${p.action.type} ${p.action.selector || p.action.key || ''}` : 'action';
     if (toolName === 'gui_step') return p.goal || p.action?.type || 'step';
+    if (toolName === 'computer_use_act') return p.action?.type || 'action';
+    if (toolName === 'computer_use_step') return p.goal || p.action?.type || 'step';
     return '';
   } catch { return ''; }
 }
@@ -99,7 +105,7 @@ function parseJsonResult(result?: string): any | null {
 }
 
 function extractGuiScreenshotPath(parsed: any): string | null {
-  return parsed?.observation?.screenshotPath || parsed?.inspection?.observation?.screenshotPath || null;
+  return parsed?.observation?.screenshotPath || parsed?.before?.screenshotPath || parsed?.inspection?.observation?.screenshotPath || null;
 }
 
 function formatAction(action: any): string {
@@ -119,7 +125,7 @@ export default function ToolCallCard({ toolName, args, result, status = 'done', 
   const label = TOOL_LABELS[toolName] || toolName;
   const summary = formatSummary(toolName, args);
   const parsedResult = useMemo(() => parseJsonResult(result), [result]);
-  const guiResult = toolName.startsWith('gui_') ? parsedResult : null;
+  const guiResult = toolName.startsWith('gui_') || toolName.startsWith('computer_use_') ? parsedResult : null;
   const screenshotPath = useMemo(() => extractScreenshotPath(result) || extractGuiScreenshotPath(guiResult), [result, guiResult]);
   const screenshotUrl = useMemo(() => {
     if (!screenshotPath || !workingDirectory) return null;

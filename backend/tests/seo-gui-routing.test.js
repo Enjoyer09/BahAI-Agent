@@ -23,4 +23,23 @@ describe('seo_gui routing', () => {
     expect(config.agents).toContain('Marketing SEO Specialist');
     expect(config.agents).toContain('GUI Operator');
   });
+
+  it('routes desktop computer-use intent into computer_use workflow', () => {
+    const route = decideManagerRoute({
+      latestUserText: 'Computer Use ile Finder penceresini ac ve desktop appi yoxla',
+      orchestrationMode: true,
+      workflow: 'default'
+    });
+
+    expect(route.workflow).toBe('computer_use');
+    expect(route.primaryAgent).toBe('Computer Use Operator');
+  });
+
+  it('resolves computer_use as solo workflow', () => {
+    const config = resolveOrchestrationConfig(true, 'computer_use', 'Computer Use ile local app test et');
+
+    expect(config.workflow).toBe('computer_use');
+    expect(config.enabled).toBe(false);
+    expect(config.agents).toContain('Solo Agent');
+  });
 });

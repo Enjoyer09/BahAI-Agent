@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { listInstalledBrowsers, findInstalledChromePath } = require('../browserSession');
 const { resolveGuiBrowserPolicy } = require('./browserPolicy');
+const { detectComputerUseStatus } = require('./computerUseStatus');
 
 const SCREEN_AGENT_PYTHON = path.resolve(__dirname, '../../.venv/bin/python3');
 
@@ -36,7 +37,7 @@ function detectScreenAgentStatus({ runtimePlatform = process.platform } = {}) {
 }
 
 function buildGuiCapabilityStatus({
-  guiBrowserMode = 'cdp',
+  guiBrowserMode = 'persistent',
   guiBrowserPath = '',
   guiBrowserCdpUrl = '',
   defaultCdpUrl = process.env.GUI_BROWSER_CDP_URL || 'http://127.0.0.1:9222',
@@ -50,6 +51,7 @@ function buildGuiCapabilityStatus({
   const installedBrowsers = listInstalledBrowsers();
   const playwrightInstalled = detectPlaywrightInstalled();
   const screenAgent = detectScreenAgentStatus({ runtimePlatform });
+  const computerUse = detectComputerUseStatus({ runtimePlatform });
   const policy = resolveGuiBrowserPolicy({
     guiBrowserMode,
     guiBrowserPath,
@@ -78,11 +80,12 @@ function buildGuiCapabilityStatus({
   if (policy.mode === 'cdp' && !chromeInstalled) warnings.push('chrome_missing_for_cdp');
   if (isRemoteLinux && !chromeInstalled) warnings.push('remote_linux_no_desktop_chrome');
   if (!screenAgent.available) warnings.push(...screenAgent.reasons);
+  if (!computerUse.available) warnings.push(...computerUse.reasons);
 
   return {
     summary: {
       status: browserAutomationAvailable ? (warnings.length ? 'degraded' : 'ok') : 'missing',
-      recommendedWorkflow: browserAutomationAvailable ? 'gui' : 'default',
+      recommendedWorkflow: computerUse.available ? 'computer_use' : (browserAutomationAvailable ? 'gui' : 'default'),
       recommendedBrowserMode: policy.mode
     },
     runtime: {
@@ -104,6 +107,7 @@ function buildGuiCapabilityStatus({
       supportsCdp: policy.supportsCdp
     },
     screenAgent,
+    computerUse,
     warnings
   };
 }

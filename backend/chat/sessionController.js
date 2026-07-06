@@ -11,6 +11,7 @@ async function runChatSession({
   projectMemory,
   apiMessages,
   emitTaskPlan,
+  emitGovernanceState,
   writeSse,
   createPhaseContext,
   openAiStreamWithFallback,
@@ -74,6 +75,10 @@ async function runChatSession({
     ? initialPlan.slice(0, Math.min(initialPlan.length, 2))
     : initialPlan;
   emitTaskPlan(res, compactPlan);
+  emitGovernanceState(res, {
+    entryPath: dependencies.entryPath,
+    gateReceipt: dependencies.initialGateReceipt
+  });
 
   try {
     const stepLimit = Math.min(dependencies.MAX_STEPS, orchestration.maxSteps || dependencies.MAX_STEPS);
@@ -282,6 +287,15 @@ async function runChatSession({
       }
     }
   } finally {
+    if (!clientDisconnected) {
+      emitGovernanceState(res, {
+        entryPath: dependencies.entryPath,
+        gateReceipt: dependencies.buildFinalGateReceipt({
+          plannerArtifact: runManager.getPlannerArtifact(),
+          executionArtifacts: runManager.getExecutionArtifacts()
+        })
+      });
+    }
     if (slotAcquired) releaseChatSlot(req.user?.id, conversationId);
     if (!res.writableEnded) {
       res.end();

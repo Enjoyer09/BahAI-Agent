@@ -61,6 +61,19 @@ function decideManagerRoute({ latestUserText = '', orchestrationMode = false, wo
     };
   }
 
+  if (workflow === 'computer_use' || /(computer use|desktop app|real desktop|mac app|mouse|keyboard|window|finder|system settings|local app)/i.test(intent.normalized)) {
+    return {
+      mode: 'delegated',
+      primaryAgent: 'Computer Use Operator',
+      secondaryAgents: [],
+      workflow: 'computer_use',
+      useTools: true,
+      maxSteps: 5,
+      reason: 'Desktop GUI sorğusu üçün browser yox, local computer-use axını daha uyğundur',
+      tokenDiscipline: buildBudget({ maxSteps: 5, agentCount: 1, allowTools: true, preferDirect: true })
+    };
+  }
+
   if (workflow === 'gui' || intent.wantsGuiAgent || intent.wantsBrowser) {
     return {
       mode: 'delegated',

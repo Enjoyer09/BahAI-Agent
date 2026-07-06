@@ -40,6 +40,7 @@ import {
   mergeValidationIntoMemory,
   mergeApprovalDecisionIntoMemory,
   mergeEvidenceSummaryIntoMemory,
+  mergeGovernanceIntoMemory,
   mergeGuiCapabilitiesIntoMemory,
   mergeHumanCheckpointIntoMemory,
   mergeGuiObservationIntoMemory,
@@ -413,9 +414,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         .then(plan => setTaskPlan(plan.items))
         .catch(() => setTaskPlan([]));
 
-      const MAX_HISTORY_MESSAGES = 16;
+      const isLikelyLocalModel = !settings.model.includes('/') || settings.baseUrl.includes('localhost') || settings.baseUrl.includes('127.0.0.1');
+      const MAX_HISTORY_MESSAGES = isLikelyLocalModel ? 8 : 16;
       const historySlice = currentMsgs.slice(-MAX_HISTORY_MESSAGES);
-      const preparedMessages = historySlice.map((m, idx) => {
+      const preparedMessagesCore = historySlice.map((m, idx) => {
         const isRecent = idx >= historySlice.length - 6;
         const trimmedToolCalls = isRecent
           ? m.tool_calls?.map((tc: any) => ({
@@ -449,6 +451,16 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         tool_calls: trimmedToolCalls,
         tool_call_id: m.tool_call_id
       })});
+
+      const activeGuiSession = projectMemory?.activeGuiSession as any;
+      const preparedMessages = (
+        activeGuiSession?.sessionId && settings.workflow === 'gui'
+          ? [{
+              role: 'system',
+              content: `Active GUI session: ${activeGuiSession.sessionId}. Cari visible browser sessiyası açıqdır. İstifadəçi yeni URL açmağı açıq deməyibsə, browser_* və gui_* addımlarında bu session üstündə davam et.`
+            }, ...preparedMessagesCore]
+          : preparedMessagesCore
+      );
 
       await sendChatMessage(
         preparedMessages,
@@ -542,6 +554,16 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
                 if (serverBacked) {
                   saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
                 }
+              }
+            }
+            return;
+          }
+          if (event.type === 'governance_state') {
+            if (activeProject?.id) {
+              const mergedMemory = mergeGovernanceIntoMemory(projectMemory, event.entryPath, event.gateReceipt);
+              setProjectMemory(mergedMemory);
+              if (serverBacked) {
+                saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
               }
             }
             return;
@@ -855,6 +877,16 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       ]);
       if (activeProject?.id) {
         const mergedMemory = mergeHumanCheckpointIntoMemory(projectMemory, event.checkpoint);
+        setProjectMemory(mergedMemory);
+        if (serverBacked) {
+          saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+        }
+      }
+      return;
+    }
+    if (event.type === 'governance_state') {
+      if (activeProject?.id) {
+        const mergedMemory = mergeGovernanceIntoMemory(projectMemory, event.entryPath, event.gateReceipt);
         setProjectMemory(mergedMemory);
         if (serverBacked) {
           saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);

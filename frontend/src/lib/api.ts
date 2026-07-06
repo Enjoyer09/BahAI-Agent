@@ -240,6 +240,12 @@ export async function getGuiCapabilities(input?: {
   return await response.json();
 }
 
+export async function getComputerUseStatus(): Promise<GuiCapabilityStatus['computerUse']> {
+  const response = await apiFetch(`${API_BASE_URL}/api/computer-use-status`);
+  if (!response.ok) throw new Error('Computer Use status yüklənmədi');
+  return await response.json();
+}
+
 export async function getInteractions(): Promise<ActionCenterInteraction[]> {
   const response = await apiFetch(`${API_BASE_URL}/api/interactions`);
   if (!response.ok) throw new Error('Interaction-lar yüklənmədi');

@@ -87,6 +87,11 @@ function resolveGuiBrowserPolicy({
 }
 
 function getRecommendedGuiBrowserMode({ installedBrowsers = [], cdpUrl = '' } = {}) {
+  const hasInstalledChrome = installedBrowsers.some((item) => item?.installed && item?.recommended)
+    || installedBrowsers.some((item) => item?.installed);
+  if (hasInstalledChrome) {
+    return 'persistent';
+  }
   return resolveGuiBrowserPolicy({
     guiBrowserMode: 'cdp',
     installedBrowsers,

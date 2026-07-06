@@ -127,6 +127,17 @@ describe('Project + file endpoints', () => {
     expect(r.status).toBe(200);
     expect(typeof r.body.summary?.status).toBe('string');
     expect(typeof r.body.browser?.playwrightInstalled).toBe('boolean');
+    expect(typeof r.body.computerUse?.available).toBe('boolean');
     expect(Array.isArray(r.body.warnings)).toBe(true);
+  });
+
+  it('returns computer use status', async () => {
+    const r = await request(base)
+      .get('/api/computer-use-status')
+      .set('Authorization', `Bearer ${token}`);
+    expect(r.status).toBe(200);
+    expect(typeof r.body.available).toBe('boolean');
+    expect(typeof r.body.appPath).toBe('string');
+    expect(Array.isArray(r.body.reasons)).toBe(true);
   });
 });

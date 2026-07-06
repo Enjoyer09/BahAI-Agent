@@ -37,9 +37,14 @@ function emitTaskPlan(res, items = []) {
   writeSse(res, { type: 'task_plan', items });
 }
 
+function emitGovernanceState(res, payload = {}) {
+  writeSse(res, { type: 'governance_state', ...payload });
+}
+
 module.exports = {
   writeSse,
   initSse,
   emitOrchestrationPrelude,
-  emitTaskPlan
+  emitTaskPlan,
+  emitGovernanceState
 };

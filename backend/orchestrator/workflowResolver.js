@@ -17,6 +17,11 @@ const ORCHESTRATION_WORKFLOWS = {
     agents: ['Solo Agent'],
     plan: ['Ekrana bax, hərəkət et, nəticəni yoxla']
   },
+  computer_use: {
+    mode: 'solo',
+    agents: ['Computer Use Operator'],
+    plan: ['Desktop UI-ni müşahidə et', 'Təhlükəsiz local action et', 'Nəticəni yoxla və checkpoint saxla']
+  },
   seo_gui: {
     mode: 'orchestrated',
     agents: ['Marketing SEO Specialist', 'GUI Operator', 'Reviewer'],
@@ -44,7 +49,7 @@ function resolveOrchestrationConfig(orchestrationMode, workflow, latestUserText 
   // FIX: Force solo mode for 'quick', 'gui', and 'solo' workflows regardless
   // of orchestrationMode toggle. These workflows are designed to run with a
   // single agent and break on token-limited APIs (FreeModel) when orchestrated.
-  const forceSoloWorkflows = ['quick', 'gui', 'solo'];
+  const forceSoloWorkflows = ['quick', 'gui', 'computer_use', 'solo'];
   const selectedWorkflowId = ORCHESTRATION_WORKFLOWS[route.workflow] ? route.workflow : 'default';
 
   if (forceSoloWorkflows.includes(selectedWorkflowId) || route.mode === 'direct') {

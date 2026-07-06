@@ -17,6 +17,12 @@ const WORKFLOW_CAPABILITIES = {
     evidence: ['live_smoke'],
     humanGatePolicy: 'strict_for_sensitive_actions'
   },
+  computer_use: {
+    capabilities: ['desktop_ui', 'visual_observation', 'checkpoint'],
+    recommendedModelClass: 'vision_reasoner',
+    evidence: ['live_smoke', 'manual_oracle'],
+    humanGatePolicy: 'strict_for_sensitive_actions'
+  },
   seo_gui: {
     capabilities: ['browser', 'visual_observation', 'seo_audit', 'checkpoint', 'review'],
     recommendedModelClass: 'vision_reasoner_plus_strategy',

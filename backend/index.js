@@ -20,11 +20,15 @@ const { createWorker } = require('tesseract.js');
 const { getSession, closeAllSessions, findInstalledChromePath, listInstalledBrowsers } = require('./browserSession');
 const { inspectGuiState, runGuiAction, stepGuiAgent } = require('./gui/agent');
 const { buildGuiCapabilityStatus } = require('./gui/capabilityStatus');
+const { detectComputerUseStatus } = require('./gui/computerUseStatus');
 const { appendGuiRepairGuidance } = require('./gui/repairGuidance');
 const {
   isGuiObserveSelfTestRequest,
   isGuiLoginCheckpointRequest,
   isGuiLoginResumeRequest,
+  isGuiOpenAndAwaitRequest,
+  isGuiContinuationRequest,
+  extractUrlFromGuiRequest,
   isSeoGuiCheckpointRequest,
   buildGuiBrowserOpenArgs,
   shouldAdvertiseScreenAgent,
@@ -35,11 +39,21 @@ const {
   handleGuiLoginResume,
   handleGuiLoginCheckpointAction,
   handleGuiLoginCheckpoint,
-  handleGuiSelfTest
+  handleGuiSelfTest,
+  handleGuiOpenAndAwaitInstruction,
+  handleGuiContinuation,
+  handleComputerUseOpenAndAwait,
+  handleComputerUseContinuation
 } = require('./gui/fastpath');
+const {
+  isComputerUseOpenRequest,
+  isComputerUseContinuationRequest,
+  extractComputerUseTarget
+} = require('./gui/computerUseRequests');
 const { resolveOrchestrationConfig } = require('./orchestrator/workflowResolver');
 const { buildRoleInstruction, buildPhaseHandoffMessage } = require('./orchestrator/rolePrompts');
 const { createRunManager } = require('./orchestrator/runManager');
+const { classifyEntryPath, buildGateReceipt } = require('./orchestrator/governance');
 const { extractPlannerArtifact, buildPlannerArtifactPrompt, buildPlannerArtifactContext } = require('./orchestrator/plannerArtifact');
 const { buildExecutionArtifact, buildExecutionArtifactContext, compactMessagesForNextPhase, classifyArtifactQuality } = require('./orchestrator/executionArtifact');
 const { getToolDefinitions } = require('./tools/registry');
@@ -53,7 +67,7 @@ const {
   buildOpenAIClient
 } = require('./chat/providers');
 const { createChatRuntime } = require('./chat/queue');
-const { writeSse, initSse, emitOrchestrationPrelude, emitTaskPlan } = require('./chat/sse');
+const { writeSse, initSse, emitOrchestrationPrelude, emitTaskPlan, emitGovernanceState } = require('./chat/sse');
 const { collectStreamOutput } = require('./chat/stream');
 const { executeToolCalls } = require('./chat/toolExecutor');
 const { openAiStreamWithFallback } = require('./chat/runner');
@@ -926,6 +940,32 @@ function buildExecutionMemoryHint(projectMemory = {}) {
 
   if (lines.length === 0) return '';
   return `Execution yaddaşı:\n${lines.join('\n')}`;
+}
+
+function buildCompactProjectMemory(projectMemory = {}) {
+  if (!projectMemory || typeof projectMemory !== 'object') return {};
+  return {
+    latestPrompt: projectMemory.latestPrompt || '',
+    latestGoal: projectMemory.latestGoal || '',
+    repoProfile: projectMemory.repoProfile
+      ? {
+          ecosystem: projectMemory.repoProfile.ecosystem || '',
+          packageManager: projectMemory.repoProfile.packageManager || '',
+          frameworks: projectMemory.repoProfile.frameworks || [],
+          buildCommand: projectMemory.repoProfile.buildCommand || '',
+          testCommand: projectMemory.repoProfile.testCommand || '',
+          lintCommand: projectMemory.repoProfile.lintCommand || ''
+        }
+      : undefined,
+    lastValidation: projectMemory.lastValidation || undefined,
+    activeGuiSession: projectMemory.activeGuiSession || undefined,
+    guiCapabilities: projectMemory.guiCapabilities
+      ? {
+          summary: projectMemory.guiCapabilities.summary || {},
+          warnings: projectMemory.guiCapabilities.warnings || []
+        }
+      : undefined
+  };
 }
 
 function isPlaceholderTestScript(script = '') {
@@ -2381,7 +2421,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                         timeout: 30000
                     });
                     const title = await session.page.title().catch(() => '');
-                    return `Browser opened: ${args.url}${title ? `\nTitle: ${title}` : ''}${session.openedVia ? `\nOpened via: ${session.openedVia}` : ''}${session.cdpAttached && session.cdpUrl ? `\nAttached CDP: ${session.cdpUrl}` : ''}${session.visible ? '\nVisible: true' : ''}${session.slowMo ? `\nSlowMo: ${session.slowMo}ms` : ''}${session.browserChannel ? `\nBrowser channel: ${session.browserChannel}` : ''}${session.executablePath ? `\nExecutable: ${session.executablePath}` : ''}${session.persistent ? `\nPersistent profile: ${session.userDataDir}` : ''}${session.launchWarning ? `\nWarning: ${session.launchWarning}` : ''}`;
+                    return `Browser opened: ${args.url}${title ? `\nTitle: ${title}` : ''}\nSession: ${session.sessionId}${session.openedVia ? `\nOpened via: ${session.openedVia}` : ''}${session.cdpAttached && session.cdpUrl ? `\nAttached CDP: ${session.cdpUrl}` : ''}${session.visible ? '\nVisible: true' : ''}${session.slowMo ? `\nSlowMo: ${session.slowMo}ms` : ''}${session.browserChannel ? `\nBrowser channel: ${session.browserChannel}` : ''}${session.executablePath ? `\nExecutable: ${session.executablePath}` : ''}${session.persistent ? `\nPersistent profile: ${session.userDataDir}` : ''}${session.launchWarning ? `\nWarning: ${session.launchWarning}` : ''}`;
                 } catch (e) {
                     const code = e?.browserLaunchCode ? `\nCode: ${e.browserLaunchCode}` : '';
                     const cdp = e?.cdpUrl ? `\nCDP: ${e.cdpUrl}` : '';
@@ -2673,6 +2713,31 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                     return `✅ Scroll edildi: ${args.amount > 0 ? 'yuxarı' : 'aşağı'} (${Math.abs(args.amount)})`;
                 } catch (e) {
                     return `Screen scroll error: ${e.message}`;
+                }
+            }
+
+            case "computer_use_act": {
+                try {
+                    const { executeComputerUseAction } = require('./gui/computerUseActions');
+                    const result = await executeComputerUseAction(args.action || {});
+                    const screenshotPath = result?.screenshotPath ? `\n[SCREENSHOT_PATH:${result.screenshotPath}]` : '';
+                    return `Computer Use action executed: ${result.action?.type || 'unknown'}${screenshotPath}`;
+                } catch (e) {
+                    return `Computer Use action error: ${e.message}`;
+                }
+            }
+
+            case "computer_use_step": {
+                try {
+                    const { stepComputerUse } = require('./gui/computerUseActions');
+                    const payload = await stepComputerUse({
+                        goal: args.goal || '',
+                        action: args.action || null,
+                        history: Array.isArray(args.history) ? args.history : []
+                    });
+                    return JSON.stringify(payload, null, 2);
+                } catch (e) {
+                    return `Computer Use step error: ${e.message}`;
                 }
             }
 
@@ -3169,7 +3234,7 @@ app.get('/api/browsers', async (req, res) => {
 app.get('/api/gui-capabilities', async (req, res) => {
   try {
     const status = buildGuiCapabilityStatus({
-      guiBrowserMode: req.query.mode || 'cdp',
+      guiBrowserMode: req.query.mode || 'persistent',
       guiBrowserPath: req.query.browserPath || '',
       guiBrowserCdpUrl: req.query.cdpUrl || '',
       defaultCdpUrl: process.env.GUI_BROWSER_CDP_URL || '',
@@ -3178,6 +3243,14 @@ app.get('/api/gui-capabilities', async (req, res) => {
     res.json(status);
   } catch (error) {
     res.status(500).json({ error: error.message || 'GUI capability scan failed' });
+  }
+});
+
+app.get('/api/computer-use-status', async (req, res) => {
+  try {
+    res.json(detectComputerUseStatus());
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Computer Use status alınmadı' });
   }
 });
 
@@ -3514,7 +3587,7 @@ app.post('/api/chat', async (req, res) => {
       safeMode = true,
       orchestrationMode = false,
       workflow = 'default',
-      guiBrowserMode = 'cdp',
+      guiBrowserMode = 'persistent',
       guiBrowserPath = '',
       guiBrowserCdpUrl = ''
     } = req.body;
@@ -3607,12 +3680,35 @@ app.post('/api/chat', async (req, res) => {
       (!conversationId || !item.conversationId || String(item.conversationId) === String(conversationId))
     ));
     const shouldForceGuiResume = isGuiLoginResumeRequest(latestUserText) && Boolean(pendingGuiLoginCheckpoint);
-    const effectiveWorkflow = shouldForceGuiResume ? 'gui' : workflow;
     const autoIntent = classifyTaskComplexity({
       userMessage: lastUserMsg?.content || '',
       messageHistoryLen: messages.length,
       hasAttachments: Array.isArray(lastUserMsg?.attachments) && lastUserMsg.attachments.length > 0
     });
+    let projectMemory = {};
+    if (projectId) {
+      if (db.hasDatabase()) {
+        try {
+          const memoryResult = await db.query(
+            'SELECT memory FROM project_memories WHERE project_id = $1 AND user_id = $2',
+            [projectId, req.user.id]
+          );
+          projectMemory = memoryResult.rows[0]?.memory || {};
+        } catch {
+          projectMemory = {};
+        }
+      } else {
+        try {
+          const localDb = await readLocalDb();
+          projectMemory = localDb.projectMemories[projectId] || {};
+        } catch {
+          projectMemory = {};
+        }
+      }
+    }
+    const hasActiveGuiSession = Boolean(projectMemory?.activeGuiSession?.sessionId);
+    const shouldForceGuiContinuation = hasActiveGuiSession && isGuiContinuationRequest(latestUserText);
+    const effectiveWorkflow = (shouldForceGuiResume || shouldForceGuiContinuation) ? 'gui' : workflow;
     const earlyOrchestration = resolveOrchestrationConfig(orchestrationMode, effectiveWorkflow, latestUserText);
 
     if (earlyOrchestration.workflow === 'gui' && isGuiLoginResumeRequest(latestUserText)) {
@@ -3650,7 +3746,8 @@ app.post('/api/chat', async (req, res) => {
           guiBrowserPath,
           guiBrowserCdpUrl,
           defaultCdpUrl: process.env.GUI_BROWSER_CDP_URL || 'http://127.0.0.1:9222',
-          fallbackChromePath: findInstalledChromePath()
+          fallbackChromePath: findInstalledChromePath(),
+          preferPersistentIfChrome: true
         }),
         createCheckpoint
       });
@@ -3674,8 +3771,77 @@ app.post('/api/chat', async (req, res) => {
           guiBrowserPath,
           guiBrowserCdpUrl,
           defaultCdpUrl: process.env.GUI_BROWSER_CDP_URL || 'http://127.0.0.1:9222',
-          fallbackChromePath: findInstalledChromePath()
+          fallbackChromePath: findInstalledChromePath(),
+          preferPersistentIfChrome: true
         })
+      });
+      return;
+    }
+
+    if (earlyOrchestration.workflow === 'gui' && isGuiOpenAndAwaitRequest(latestUserText)) {
+      const openUrl = extractUrlFromGuiRequest(latestUserText);
+      const runManager = createRunManager(earlyOrchestration, crypto.randomUUID());
+      await handleGuiOpenAndAwaitInstruction({
+        res,
+        orchestration: earlyOrchestration,
+        runManager,
+        resolvedWD,
+        reqUser: req.user,
+        handleToolCall,
+        normalizeUserFacingError,
+        promptText: latestUserText,
+        browserOpenArgs: buildGuiBrowserOpenArgs({
+          url: openUrl,
+          sessionId: 'gui-live',
+          guiBrowserMode,
+          guiBrowserPath,
+          guiBrowserCdpUrl,
+          defaultCdpUrl: process.env.GUI_BROWSER_CDP_URL || 'http://127.0.0.1:9222',
+          fallbackChromePath: findInstalledChromePath(),
+          preferPersistentIfChrome: true
+        })
+      });
+      return;
+    }
+
+    const activeGuiSessionFromMemory = projectMemory?.activeGuiSession?.sessionId
+      ? projectMemory.activeGuiSession
+      : null;
+    if (earlyOrchestration.workflow === 'gui' && activeGuiSessionFromMemory?.sessionId && isGuiContinuationRequest(latestUserText)) {
+      const runManager = createRunManager(earlyOrchestration, crypto.randomUUID());
+      await handleGuiContinuation({
+        res,
+        orchestration: earlyOrchestration,
+        runManager,
+        resolvedWD,
+        reqUser: req.user,
+        handleToolCall,
+        normalizeUserFacingError,
+        sessionId: activeGuiSessionFromMemory.sessionId,
+        promptText: latestUserText
+      });
+      return;
+    }
+
+    if (earlyOrchestration.workflow === 'computer_use' && isComputerUseOpenRequest(latestUserText, effectiveWorkflow)) {
+      const runManager = createRunManager(earlyOrchestration, crypto.randomUUID());
+      await handleComputerUseOpenAndAwait({
+        res,
+        orchestration: earlyOrchestration,
+        runManager,
+        target: extractComputerUseTarget(latestUserText),
+        promptText: latestUserText
+      });
+      return;
+    }
+
+    if (earlyOrchestration.workflow === 'computer_use' && isComputerUseContinuationRequest(latestUserText, effectiveWorkflow)) {
+      const runManager = createRunManager(earlyOrchestration, crypto.randomUUID());
+      await handleComputerUseContinuation({
+        res,
+        orchestration: earlyOrchestration,
+        runManager,
+        promptText: latestUserText
       });
       return;
     }
@@ -3833,42 +3999,45 @@ AUDIT REJİMİ:
       console.error('/api/chat normalize xətası:', error?.message || error);
       modelMessages = Array.isArray(messages) ? messages : [];
     }
-    let projectMemory = {};
-    if (db.hasDatabase() && projectId) {
-      try {
-        const memoryResult = await db.query(
-          'SELECT memory FROM project_memories WHERE project_id = $1 AND user_id = $2',
-          [projectId, req.user.id]
-        );
-        projectMemory = memoryResult.rows[0]?.memory || {};
-      } catch {
-        projectMemory = {};
-      }
-    }
-
     let fullSysPrompt = sysPrompt;
       
     const hasAttachmentInRequest = Array.isArray(messages) && messages.some((m) => Array.isArray(m?.attachments) && m.attachments.length > 0);
     const orchestration = resolveOrchestrationConfig(orchestrationMode, workflow, latestUserText);
+    const entryPath = classifyEntryPath({
+      latestUserText,
+      workflow,
+      orchestration
+    });
     const runId = crypto.randomUUID();
     const runManager = createRunManager(orchestration, runId);
+    const initialGateReceipt = buildGateReceipt({
+      entryPath,
+      plannerArtifact: runManager.getPlannerArtifact(),
+      executionArtifacts: runManager.getExecutionArtifacts(),
+      projectMemory,
+      runId,
+      workflow: orchestration.workflow
+    });
     const initialRole = runManager.currentPhase()?.role || orchestration.agents?.[0] || 'Solo Agent';
     const initialTools = getToolsForRole(initialRole, orchestration.toolProfile);
     if (isLocalOrFlakyModel) {
       fullSysPrompt += generateToolsSystemPrompt(initialTools);
     }
 
-    const repoProfilePrompt = projectMemory?.repoProfile
-      ? `Repo Profili: ${JSON.stringify(projectMemory.repoProfile)}`
+    const promptMemory = isLocalOrFlakyModel
+      ? buildCompactProjectMemory(projectMemory)
+      : projectMemory;
+    const repoProfilePrompt = promptMemory?.repoProfile
+      ? `Repo Profili: ${JSON.stringify(promptMemory.repoProfile)}`
       : '';
-    const validationHintPrompt = projectMemory?.repoProfile
-      ? buildValidationHint(projectMemory.repoProfile)
+    const validationHintPrompt = promptMemory?.repoProfile
+      ? buildValidationHint(promptMemory.repoProfile)
       : '';
-    const executionMemoryHint = buildExecutionMemoryHint(projectMemory);
+    const executionMemoryHint = buildExecutionMemoryHint(promptMemory);
     const tokenDisciplinePrompt = orchestration?.routing?.tokenDiscipline
       ? `Token büdcəsi: ${JSON.stringify(orchestration.routing.tokenDiscipline)}`
       : '';
-    const memoryPrompt = `Layihə yaddaşı: ${JSON.stringify(projectMemory)}${repoProfilePrompt ? `\n${repoProfilePrompt}` : ''}${executionMemoryHint ? `\n${executionMemoryHint}` : ''}${tokenDisciplinePrompt ? `\n${tokenDisciplinePrompt}` : ''}`;
+    const memoryPrompt = `Layihə yaddaşı: ${JSON.stringify(promptMemory)}${repoProfilePrompt ? `\n${repoProfilePrompt}` : ''}${executionMemoryHint ? `\n${executionMemoryHint}` : ''}${tokenDisciplinePrompt ? `\n${tokenDisciplinePrompt}` : ''}`;
     const apiMessages = [{ role: 'system', content: `${fullSysPrompt}\n${memoryPrompt}${validationHintPrompt ? `\n${validationHintPrompt}` : ''}` }, ...modelMessages];
     
     if (isLocalOrFlakyModel) {
@@ -3911,6 +4080,7 @@ AUDIT REJİMİ:
         projectMemory,
         apiMessages,
         emitTaskPlan,
+        emitGovernanceState,
         writeSse,
         createPhaseContext: ({ currentMessages, runManager, orchestration, resolvedWD, auditStyleRequest, projectMemory }) => {
           const activePhase = runManager.currentPhase();
@@ -4004,7 +4174,17 @@ AUDIT REJİMİ:
           normalizeUserFacingError,
           crypto,
           runId,
-          llmTimeoutMs
+          llmTimeoutMs,
+          entryPath,
+          initialGateReceipt,
+          buildFinalGateReceipt: ({ plannerArtifact, executionArtifacts }) => buildGateReceipt({
+            entryPath,
+            plannerArtifact,
+            executionArtifacts,
+            projectMemory,
+            runId,
+            workflow: orchestration.workflow
+          })
         }
       });
       activeProvider = activeProviderRef.current;

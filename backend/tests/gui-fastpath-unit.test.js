@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-const { handleGuiLoginCheckpoint, handleGuiLoginCheckpointAction } = require('../gui/fastpath');
+const { handleGuiLoginCheckpoint, handleGuiLoginCheckpointAction, handleGuiOpenAndAwaitInstruction, handleGuiContinuation } = require('../gui/fastpath');
 
 function createFakeRes() {
   const chunks = [];
@@ -91,5 +91,117 @@ describe('GUI fastpath unit', () => {
     expect(text.includes('Chrome tapılmadı')).toBe(true);
     expect(text.includes('start-debug-chrome.sh')).toBe(true);
     expect(text.includes('"type":"human_checkpoint"')).toBe(false);
+  });
+
+  it('opens generic gui site and then asks user for the next step', async () => {
+    const res = createFakeRes();
+    const handleToolCall = vi
+      .fn()
+      .mockResolvedValueOnce('Browser opened: https://laptopmarket.az\nTitle: Laptop Market\nSession: gui-live\nVisible: true')
+      .mockResolvedValueOnce('{"observation":{"sessionId":"gui-live","title":"Laptop Market","url":"https://laptopmarket.az"}}');
+
+    await handleGuiOpenAndAwaitInstruction({
+      res,
+      orchestration: { workflow: 'gui', mode: 'manager_direct', agents: ['Solo Agent'], routing: {}, enabled: false },
+      runManager: { snapshot: () => ({ currentRole: 'Solo Agent', phases: [] }) },
+      resolvedWD: '/tmp',
+      reqUser: { id: 'u1' },
+      handleToolCall,
+      normalizeUserFacingError: (value) => value,
+      promptText: 'GUI agent chrome da laptopmarket.az saytini ac. Workflow: gui.',
+      browserOpenArgs: { url: 'https://laptopmarket.az', sessionId: 'gui-live', visible: true }
+    });
+
+    const text = res.chunks.join('\n');
+    expect(text.includes('Saytı visible browser-də açır')).toBe(true);
+    expect(text.includes('Sayt açıldı və sessiya aktivdir')).toBe(true);
+    expect(text.includes('başqa nə etməyimi istəyirsiniz')).toBe(true);
+  });
+
+  it('continues on the same gui session for follow-up instruction', async () => {
+    const res = createFakeRes();
+    const handleToolCall = vi
+      .fn()
+      .mockResolvedValueOnce('Pressed Meta+L')
+      .mockResolvedValueOnce('Typed into: body')
+      .mockResolvedValueOnce('Pressed Enter')
+      .mockResolvedValueOnce('{"observation":{"sessionId":"gui-live","title":"Search Results","url":"https://laptopmarket.az/search"}}');
+
+    await handleGuiContinuation({
+      res,
+      orchestration: { workflow: 'gui', mode: 'manager_direct', agents: ['Solo Agent'], routing: {}, enabled: false },
+      runManager: { snapshot: () => ({ currentRole: 'Solo Agent', phases: [] }) },
+      resolvedWD: '/tmp',
+      reqUser: { id: 'u1' },
+      handleToolCall,
+      normalizeUserFacingError: (value) => value,
+      sessionId: 'gui-live',
+      promptText: 'ASUS gaming laptop axtar'
+    });
+
+    expect(handleToolCall).toHaveBeenCalledTimes(4);
+    const firstArgs = JSON.parse(handleToolCall.mock.calls[0][0].function.arguments);
+    const fourthArgs = JSON.parse(handleToolCall.mock.calls[3][0].function.arguments);
+    expect(firstArgs.sessionId).toBe('gui-live');
+    expect(fourthArgs.sessionId).toBe('gui-live');
+    expect(res.chunks.join('\n').includes('eyni browser sessiyası açıq qalır')).toBe(true);
+  });
+
+  it('retries generic open flow with persistent browser when cdp is unreachable', async () => {
+    const res = createFakeRes();
+    const handleToolCall = vi
+      .fn()
+      .mockResolvedValueOnce('Browser open error: Chrome CDP did not become reachable at http://127.0.0.1:9222\nCode: cdp_unreachable')
+      .mockResolvedValueOnce('Browser opened: https://laptopmarket.az\nTitle: Laptop Market\nSession: gui-live\nOpened via: persistent')
+      .mockResolvedValueOnce('{"observation":{"sessionId":"gui-live","title":"Laptop Market","url":"https://laptopmarket.az"}}');
+
+    await handleGuiOpenAndAwaitInstruction({
+      res,
+      orchestration: { workflow: 'gui', mode: 'manager_direct', agents: ['Solo Agent'], routing: {}, enabled: false },
+      runManager: { snapshot: () => ({ currentRole: 'Solo Agent', phases: [] }) },
+      resolvedWD: '/tmp',
+      reqUser: { id: 'u1' },
+      handleToolCall,
+      normalizeUserFacingError: (value) => value,
+      promptText: 'GUI agent chrome da laptopmarket.az saytini ac. Workflow: gui.',
+      browserOpenArgs: { url: 'https://laptopmarket.az', sessionId: 'gui-live', visible: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', cdpUrl: 'http://127.0.0.1:9222' }
+    });
+
+    expect(handleToolCall).toHaveBeenCalledTimes(3);
+    const retryArgs = JSON.parse(handleToolCall.mock.calls[1][0].function.arguments);
+    expect(retryArgs.persistent).toBe(true);
+    expect(retryArgs.browserChannel).toBe('chrome');
+    expect(res.chunks.join('\n').includes('Sayt açıldı və sessiya aktivdir')).toBe(true);
+  });
+
+  it('uses persistent real-chrome launch for wix login checkpoint flow', async () => {
+    const res = createFakeRes();
+    const handleToolCall = vi.fn(async () => 'Browser opened: https://www.wix.com\nTitle: Home | Wix.com\nSession: gui-wix-live\nOpened via: persistent');
+
+    await handleGuiLoginCheckpoint({
+      res,
+      orchestration: { workflow: 'gui', mode: 'manager_direct', agents: ['Solo Agent'], routing: {}, enabled: false },
+      runManager: { snapshot: () => ({ currentRole: 'Solo Agent', phases: [] }), currentPhase: () => ({ role: 'Solo Agent' }) },
+      resolvedWD: '/tmp',
+      conversationId: 'c1',
+      reqUser: { id: 'u1' },
+      handleToolCall,
+      normalizeUserFacingError: (value) => value,
+      browserOpenArgs: {
+        url: 'https://www.wix.com',
+        sessionId: 'gui-wix-live',
+        visible: true,
+        persistent: true,
+        browserChannel: 'chrome',
+        executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+      },
+      createCheckpoint: () => ({})
+    });
+
+    const firstCall = handleToolCall.mock.calls[0][0];
+    const parsed = JSON.parse(firstCall.function.arguments);
+    expect(parsed.persistent).toBe(true);
+    expect(parsed.browserChannel).toBe('chrome');
+    expect(parsed.cdpUrl).toBeUndefined();
   });
 });

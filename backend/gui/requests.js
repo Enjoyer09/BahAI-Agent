@@ -34,15 +34,41 @@ function isGuiLoginResumeRequest(text = '') {
   );
 }
 
+function extractUrlFromGuiRequest(text = '') {
+  const value = String(text || '').trim();
+  const explicitUrl = value.match(/https?:\/\/[^\s)]+/i);
+  if (explicitUrl?.[0]) return explicitUrl[0];
+  const bareDomain = value.match(/\b(?:www\.)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s)]*)?\b/i);
+  if (!bareDomain?.[0]) return '';
+  const domain = bareDomain[0];
+  return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
+}
+
+function isGuiOpenAndAwaitRequest(text = '') {
+  const value = String(text || '').toLowerCase();
+  if (!/(gui|browser|chrome|workflow:\s*gui)/i.test(value)) return false;
+  if (isGuiLoginCheckpointRequest(value) || isGuiObserveSelfTestRequest(value) || isGuiLoginResumeRequest(value)) return false;
+  if (!/(aç|ac|open|daxil ol|get|gir)/i.test(value)) return false;
+  return Boolean(extractUrlFromGuiRequest(value));
+}
+
+function isGuiContinuationRequest(text = '') {
+  const value = String(text || '').toLowerCase();
+  if (extractUrlFromGuiRequest(value)) return false;
+  if (isGuiLoginResumeRequest(value) || isGuiLoginCheckpointRequest(value) || isGuiObserveSelfTestRequest(value)) return false;
+  return /(axtar|search|tap|filter|filtr|qiymət|qiymet|sort|sırala|sirala|click|klik|bax|observe|goster|göstər|ara)/i.test(value);
+}
+
 function buildGuiBrowserOpenArgs({
   url,
   sessionId,
-  guiBrowserMode = 'cdp',
+  guiBrowserMode = 'persistent',
   guiBrowserPath = '',
   guiBrowserCdpUrl = '',
   defaultCdpUrl = 'http://127.0.0.1:9222',
   fallbackChromePath = '',
-  installedBrowsers = []
+  installedBrowsers = [],
+  preferPersistentIfChrome = false
 }) {
   const base = {
     url,
@@ -60,10 +86,25 @@ function buildGuiBrowserOpenArgs({
     installedBrowsers
   });
 
+  const preferredChromePath = policy.browserPath || fallbackChromePath || guiBrowserPath || '';
+  if (preferPersistentIfChrome) {
+    const persistentArgs = {
+      ...base,
+      browserChannel: 'chrome',
+      persistent: true
+    };
+    if (preferredChromePath) {
+      persistentArgs.executablePath = preferredChromePath;
+    }
+    return persistentArgs;
+  }
+
   if (policy.mode === 'cdp') {
     return {
       ...base,
-      cdpUrl: policy.cdpUrl
+      cdpUrl: policy.cdpUrl,
+      executablePath: policy.browserPath || undefined,
+      browserChannel: policy.browserPath ? 'chrome' : undefined
     };
   }
 
@@ -108,6 +149,9 @@ module.exports = {
   isGuiObserveSelfTestRequest,
   isGuiLoginCheckpointRequest,
   isGuiLoginResumeRequest,
+  isGuiOpenAndAwaitRequest,
+  isGuiContinuationRequest,
+  extractUrlFromGuiRequest,
   isSeoGuiCheckpointRequest,
   buildGuiBrowserOpenArgs,
   shouldAdvertiseScreenAgent,

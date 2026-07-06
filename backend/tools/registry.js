@@ -711,6 +711,65 @@ const TOOL_DEFINITIONS = [
         required: ['amount']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'computer_use_act',
+      description: 'Executes a local desktop Computer Use action such as open_app, open_url, click, type, press, scroll, or screenshot.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['open_app', 'open_url', 'click', 'type', 'press', 'scroll', 'screenshot'] },
+              app: { type: 'string' },
+              url: { type: 'string' },
+              x: { type: 'number' },
+              y: { type: 'number' },
+              clicks: { type: 'number' },
+              button: { type: 'string' },
+              text: { type: 'string' },
+              key: { type: 'string' },
+              amount: { type: 'number' }
+            },
+            required: ['type']
+          }
+        },
+        required: ['action']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'computer_use_step',
+      description: 'Runs one Computer Use observe/act/reflection step and returns screenshots plus structured action output.',
+      parameters: {
+        type: 'object',
+        properties: {
+          goal: { type: 'string' },
+          action: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['open_app', 'open_url', 'click', 'type', 'press', 'scroll', 'screenshot'] },
+              app: { type: 'string' },
+              url: { type: 'string' },
+              x: { type: 'number' },
+              y: { type: 'number' },
+              clicks: { type: 'number' },
+              button: { type: 'string' },
+              text: { type: 'string' },
+              key: { type: 'string' },
+              amount: { type: 'number' }
+            }
+          },
+          history: { type: 'array', items: { type: 'object' } }
+        },
+        required: []
+      }
+    }
   }
 ];
 

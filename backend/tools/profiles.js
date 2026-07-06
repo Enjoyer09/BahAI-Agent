@@ -71,7 +71,8 @@ const ROLE_TOOL_PROFILES = {
   Security: REVIEWER_TOOLS,
   QA: REVIEWER_TOOLS,
   Builder: BUILDER_TOOLS,
-  Implementer: BUILDER_TOOLS
+  Implementer: BUILDER_TOOLS,
+  'Computer Use Operator': ALL_TOOLS
 };
 
 const WORKFLOW_TO_PROFILE = {
@@ -79,7 +80,8 @@ const WORKFLOW_TO_PROFILE = {
   quick: 'quick',
   default: 'default',
   thorough: 'thorough',
-  'review-only': 'review-only'
+  'review-only': 'review-only',
+  computer_use: 'desktop-local'
 };
 
 function getToolProfile(profileName = 'default') {

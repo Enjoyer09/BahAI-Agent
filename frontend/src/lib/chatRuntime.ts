@@ -1,4 +1,4 @@
-import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GuiCapabilityStatus, HumanCheckpoint, PlannerArtifact, RuntimeArtifact } from './types';
+import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GateReceipt, GovernanceEntryPath, GuiCapabilityStatus, HumanCheckpoint, PlannerArtifact, RuntimeArtifact } from './types';
 
 export function normalizeAssistantText(content: string): string {
   if (typeof content !== 'string') return '';
@@ -79,11 +79,13 @@ export function extractRuntimeArtifact(toolName: string, args: string, result: s
   }
 
   if (tool.startsWith('browser_')) {
+    const sessionMatch = output.match(/sessionId["=: ]+([a-zA-Z0-9._-]+)/i) || output.match(/^Session:\s*([a-zA-Z0-9._-]+)/im) || output.match(/"sessionId":"([^"]+)"/i);
     const screenshotMatch = output.match(/Screenshot saved:\s*(.+)$/im);
     return {
       kind: 'browser',
       toolName: tool,
       summary: output.slice(0, 400) || tool,
+      sessionId: sessionMatch?.[1]?.trim() || (typeof parsedArgs.sessionId === 'string' ? parsedArgs.sessionId : undefined),
       screenshotPath: screenshotMatch?.[1]?.trim() || undefined,
       selector: typeof parsedArgs.selector === 'string' ? parsedArgs.selector : undefined,
       url: typeof parsedArgs.url === 'string' ? parsedArgs.url : undefined,
@@ -143,7 +145,7 @@ export function extractRuntimeArtifact(toolName: string, args: string, result: s
 
 export function mergeRuntimeArtifactIntoMemory(memory: Record<string, unknown>, artifact: RuntimeArtifact) {
   const history = Array.isArray(memory.runtimeArtifacts) ? memory.runtimeArtifacts : [];
-  return {
+  const nextMemory = {
     ...memory,
     lastRuntimeArtifact: artifact,
     runtimeArtifacts: [...history, artifact].slice(-12),
@@ -151,6 +153,20 @@ export function mergeRuntimeArtifactIntoMemory(memory: Record<string, unknown>, 
     lastGuiArtifact: artifact.kind === 'gui' ? artifact : memory.lastGuiArtifact || null,
     lastTerminalArtifact: artifact.kind === 'terminal' ? artifact : memory.lastTerminalArtifact || null
   };
+  if (artifact.kind === 'browser' && artifact.sessionId) {
+    return {
+      ...nextMemory,
+      activeGuiSession: {
+        sessionId: artifact.sessionId,
+        workflow: (memory.activeGuiSession as any)?.workflow || 'gui',
+        status: 'ready',
+        title: artifact.summary,
+        url: artifact.url,
+        updatedAt: Date.now()
+      }
+    };
+  }
+  return nextMemory;
 }
 
 export function buildValidationSnapshot(result: string) {
@@ -249,6 +265,21 @@ export function mergeGuiCapabilitiesIntoMemory(memory: Record<string, unknown>, 
     ...memory,
     guiCapabilities,
     guiCapabilitiesUpdatedAt: Date.now()
+  };
+}
+
+export function mergeGovernanceIntoMemory(
+  memory: Record<string, unknown>,
+  entryPath: GovernanceEntryPath,
+  gateReceipt: GateReceipt
+) {
+  return {
+    ...memory,
+    governance: {
+      entryPath,
+      gateReceipt,
+      updatedAt: Date.now()
+    }
   };
 }
 

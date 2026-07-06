@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { appendGuiRepairGuidance } = require('./repairGuidance');
+const { openUrl, openApp, takeScreenshot } = require('./screen-agent');
 
 function writeSse(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -319,9 +320,322 @@ async function handleGuiSelfTest({
   res.end();
 }
 
+async function handleGuiOpenAndAwaitInstruction({
+  res,
+  orchestration,
+  runManager,
+  resolvedWD,
+  reqUser,
+  handleToolCall,
+  normalizeUserFacingError,
+  browserOpenArgs,
+  promptText = ''
+}) {
+  const runId = crypto.randomUUID();
+  initSse(res);
+  emitOrchestrationPrelude(res, orchestration, runManager, runId);
+
+  const toolCalls = [
+    {
+      id: `call_${crypto.randomUUID()}`,
+      type: 'function',
+      function: {
+        name: 'browser_open',
+        arguments: JSON.stringify(browserOpenArgs)
+      }
+    },
+    {
+      id: `call_${crypto.randomUUID()}`,
+      type: 'function',
+      function: {
+        name: 'gui_observe',
+        arguments: JSON.stringify({
+          sessionId: browserOpenArgs.sessionId || 'gui-live',
+          goal: String(promptText || 'Open the requested website and observe the current page state.'),
+          history: []
+        })
+      }
+    }
+  ];
+
+  writeSse(res, {
+    type: 'assistant_message',
+    message: {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: 'Saytı visible browser-də açır və cari vəziyyəti qısa müşahidə edirəm. Sonra dayanıb növbəti addımı sizdən soruşacağam.',
+      tool_calls: toolCalls
+    }
+  });
+
+  let browserOpenRaw = '';
+  let browserFailed = false;
+  for (let index = 0; index < toolCalls.length; index += 1) {
+    const toolCall = toolCalls[index];
+    writeSse(res, { type: 'tool_execution', tool: toolCall.function.name, args: toolCall.function.arguments, tool_call_id: toolCall.id });
+    let result = await handleToolCall(toolCall, resolvedWD, reqUser);
+    const normalized = normalizeUserFacingError(result);
+    writeSse(res, { type: 'tool_result', result: normalized });
+    if (toolCall.function.name === 'browser_open') {
+      browserOpenRaw = String(result || '');
+      browserFailed = /^Browser open error:/i.test(browserOpenRaw.trim());
+      if (browserFailed && /cdp_unreachable/i.test(browserOpenRaw) && browserOpenArgs?.url) {
+        const retryToolCall = {
+          id: `call_${crypto.randomUUID()}`,
+          type: 'function',
+          function: {
+            name: 'browser_open',
+            arguments: JSON.stringify({
+              ...browserOpenArgs,
+              cdpUrl: undefined,
+              browserChannel: 'chrome',
+              executablePath: browserOpenArgs.executablePath,
+              persistent: true
+            })
+          }
+        };
+        writeSse(res, { type: 'tool_execution', tool: retryToolCall.function.name, args: retryToolCall.function.arguments, tool_call_id: retryToolCall.id });
+        result = await handleToolCall(retryToolCall, resolvedWD, reqUser);
+        const retryNormalized = normalizeUserFacingError(result);
+        writeSse(res, { type: 'tool_result', result: retryNormalized });
+        browserOpenRaw = String(result || '');
+        browserFailed = /^Browser open error:/i.test(browserOpenRaw.trim());
+      }
+      if (browserFailed) break;
+    }
+  }
+
+  if (browserFailed) {
+    writeSse(res, {
+      type: 'assistant_message',
+      message: {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `Saytı aça bilmədim.\n\n${appendGuiRepairGuidance(normalizeUserFacingError(browserOpenRaw))}`
+      }
+    });
+    res.write('data: [DONE]\n\n');
+    res.end();
+    return;
+  }
+
+  writeSse(res, {
+    type: 'assistant_message',
+    message: {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: 'Sayt açıldı və sessiya aktivdir. İndi başqa nə etməyimi istəyirsiniz? Məsələn: məhsul axtarım, filter tətbiq edim, qiymət müqayisəsi edim, yoxsa konkret bir məhsul səhifəsinə keçim?'
+    }
+  });
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+
+async function handleGuiContinuation({
+  res,
+  orchestration,
+  runManager,
+  resolvedWD,
+  reqUser,
+  handleToolCall,
+  normalizeUserFacingError,
+  sessionId = 'gui-live',
+  promptText = ''
+}) {
+  const runId = crypto.randomUUID();
+  initSse(res);
+  emitOrchestrationPrelude(res, orchestration, runManager, runId);
+
+  const searchText = String(promptText || '').trim();
+  const toolCalls = [
+    {
+      id: `call_${crypto.randomUUID()}`,
+      type: 'function',
+      function: {
+        name: 'browser_press',
+        arguments: JSON.stringify({
+          sessionId,
+          key: 'Meta+L'
+        })
+      }
+    },
+    {
+      id: `call_${crypto.randomUUID()}`,
+      type: 'function',
+      function: {
+        name: 'browser_type',
+        arguments: JSON.stringify({
+          sessionId,
+          selector: 'body',
+          text: searchText
+        })
+      }
+    },
+    {
+      id: `call_${crypto.randomUUID()}`,
+      type: 'function',
+      function: {
+        name: 'browser_press',
+        arguments: JSON.stringify({
+          sessionId,
+          key: 'Enter'
+        })
+      }
+    },
+    {
+      id: `call_${crypto.randomUUID()}`,
+      type: 'function',
+      function: {
+        name: 'gui_observe',
+        arguments: JSON.stringify({
+          sessionId,
+          goal: `Continue the current browser task after this user instruction: ${searchText}`,
+          history: []
+        })
+      }
+    }
+  ];
+
+  writeSse(res, {
+    type: 'assistant_message',
+    message: {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: 'Aktiv browser sessiyasında davam edirəm. Verilən əmri tətbiq edib nəticəni qısa müşahidə edəcəyəm.',
+      tool_calls: toolCalls
+    }
+  });
+
+  for (const toolCall of toolCalls) {
+    writeSse(res, { type: 'tool_execution', tool: toolCall.function.name, args: toolCall.function.arguments, tool_call_id: toolCall.id });
+    const result = await handleToolCall(toolCall, resolvedWD, reqUser);
+    writeSse(res, { type: 'tool_result', result: normalizeUserFacingError(result) });
+  }
+
+  writeSse(res, {
+    type: 'assistant_message',
+    message: {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: 'Əməliyyat icra olundu və eyni browser sessiyası açıq qalır. İstəsən növbəti addımı da bu sessiyada davam etdirə bilərəm.'
+    }
+  });
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+
+async function handleComputerUseOpenAndAwait({
+  res,
+  orchestration,
+  runManager,
+  target,
+  promptText = ''
+}) {
+  const runId = crypto.randomUUID();
+  initSse(res);
+  emitOrchestrationPrelude(res, orchestration, runManager, runId);
+
+  try {
+    let result;
+    if (target?.type === 'url') {
+      result = await openUrl(target.value);
+    } else {
+      result = await openApp(target?.value || 'Finder');
+    }
+    const screenshot = await takeScreenshot();
+
+    writeSse(res, {
+      type: 'assistant_message',
+      message: {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `Computer Use ilə ${target?.type === 'url' ? 'URL açdım' : 'app açdım'} və cari vəziyyəti müşahidə etdim. İndi növbəti addımı sizdən gözləyirəm.`,
+      }
+    });
+    writeSse(res, {
+      type: 'tool_result',
+      result: JSON.stringify({
+        observation: {
+          title: target?.value || '',
+          url: target?.type === 'url' ? target.value : '',
+          screenshotPath: screenshot.path
+        },
+        action: result
+      })
+    });
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (error) {
+    writeSse(res, {
+      type: 'assistant_message',
+      message: {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `Computer Use açılışı alınmadı: ${error.message || error}`
+      }
+    });
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
+}
+
+async function handleComputerUseContinuation({
+  res,
+  orchestration,
+  runManager,
+  promptText = ''
+}) {
+  const runId = crypto.randomUUID();
+  initSse(res);
+  emitOrchestrationPrelude(res, orchestration, runManager, runId);
+
+  const lower = String(promptText || '').toLowerCase();
+  const inferredAction = lower.includes('scroll')
+    ? { type: 'scroll', amount: -4 }
+    : lower.includes('enter') || lower.includes('bas')
+      ? { type: 'press', key: 'enter' }
+      : lower.includes('yaz') || lower.includes('type')
+        ? { type: 'type', text: String(promptText || '').replace(/^.*?(yaz|type)\s*/i, '').trim() || String(promptText || '').trim() }
+        : { type: 'screenshot' };
+
+  let actionResult = null;
+  try {
+    const { executeComputerUseAction } = require('./computerUseActions');
+    actionResult = await executeComputerUseAction(inferredAction);
+  } catch {
+    actionResult = null;
+  }
+  const screenshot = await takeScreenshot().catch(() => null);
+  writeSse(res, {
+    type: 'assistant_message',
+    message: {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: `Computer Use sessiyası aktivdir. Davam əmrinə uyğun addımı tətbiq etdim və hazırkı desktop vəziyyətini yenidən müşahidə etdim.`
+    }
+  });
+  if (screenshot?.path || actionResult) {
+    writeSse(res, {
+      type: 'tool_result',
+      result: JSON.stringify({
+        action: actionResult?.action || inferredAction,
+        observation: {
+          screenshotPath: screenshot.path
+        }
+      })
+    });
+  }
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+
 module.exports = {
   handleGuiLoginResume,
   handleGuiLoginCheckpointAction,
   handleGuiLoginCheckpoint,
-  handleGuiSelfTest
+  handleGuiSelfTest,
+  handleGuiOpenAndAwaitInstruction,
+  handleGuiContinuation,
+  handleComputerUseOpenAndAwait,
+  handleComputerUseContinuation
 };

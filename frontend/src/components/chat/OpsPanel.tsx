@@ -1,5 +1,5 @@
 import { Shield, CheckCircle2, Clock, ListChecks, Globe, Terminal as TerminalIcon, BrainCircuit, MonitorCog } from 'lucide-react';
-import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GuiCapabilityStatus, PlannerArtifact, Project, RuntimeArtifact } from '../../lib/types';
+import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GateReceipt, GovernanceEntryPath, GuiCapabilityStatus, PlannerArtifact, Project, RuntimeArtifact } from '../../lib/types';
 
 interface Props {
   safeMode: boolean;
@@ -25,6 +25,7 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
   } | null;
   const guiCapabilities = (projectMemory?.guiCapabilities || null) as GuiCapabilityStatus | null;
   const activeGuiSession = (projectMemory?.activeGuiSession || null) as ActiveGuiSession | null;
+  const governance = (projectMemory?.governance || null) as { entryPath?: GovernanceEntryPath; gateReceipt?: GateReceipt } | null;
   return (
     <div className="h-full flex flex-col overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
       {/* Header */}
@@ -246,7 +247,7 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
                 Browser mode: {guiCapabilities.browser.resolvedMode} | Workflow: {guiCapabilities.summary.recommendedWorkflow}
               </div>
               <div className="text-xs" style={{ color: 'var(--fg-secondary)' }}>
-                Playwright: {guiCapabilities.browser.playwrightInstalled ? 'ok' : 'missing'} | Screen agent: {guiCapabilities.screenAgent.available ? 'ok' : 'missing'}
+                Playwright: {guiCapabilities.browser.playwrightInstalled ? 'ok' : 'missing'} | Screen agent: {guiCapabilities.screenAgent.available ? 'ok' : 'missing'} | Computer Use: {guiCapabilities.computerUse.available ? 'ok' : 'missing'}
               </div>
               {!!guiCapabilities.warnings?.length && (
                 <div className="flex flex-wrap gap-1.5">
@@ -337,6 +338,43 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
             </div>
           </div>
         ) : null}
+
+        {governance?.entryPath && governance?.gateReceipt && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <BrainCircuit size={13} style={{ color: 'var(--fg-muted)' }} />
+              <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--fg-muted)' }}>
+                Governance
+              </span>
+            </div>
+            <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+              <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+                Entry Path: {governance.entryPath.mode}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--fg-secondary)' }}>
+                {governance.entryPath.reason}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--fg-secondary)' }}>
+                Gate: {governance.gateReceipt.overall}
+              </div>
+              <div className="space-y-1">
+                {governance.gateReceipt.evidence.slice(0, 4).map((item, idx) => (
+                  <div key={`${item.label}-${idx}`} className="flex items-start justify-between gap-2 text-[10px]">
+                    <span style={{ color: 'var(--fg-main)' }}>{item.label}</span>
+                    <span style={{ color: item.status === 'failed' ? 'var(--color-warning)' : item.status === 'missing' ? 'var(--fg-muted)' : 'var(--color-success)' }}>
+                      {item.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {(governance.gateReceipt.handoff.unresolvedRisk || governance.gateReceipt.handoff.nextFocus?.length) && (
+                <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+                  {governance.gateReceipt.handoff.unresolvedRisk || governance.gateReceipt.handoff.nextFocus.join(' | ')}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Task Plan */}
         <div>

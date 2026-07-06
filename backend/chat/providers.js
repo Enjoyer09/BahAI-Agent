@@ -40,6 +40,10 @@ function normalizeProviderBaseUrl(rawBaseUrl = '') {
   if (/^https?:\/\/freemodel\.dev\/?$/i.test(value)) {
     return 'https://api.freemodel.dev/v1';
   }
+  // Freebuff2API local proxy convenience
+  if (/^https?:\/\/(?:localhost|127\.0\.0\.1):8080\/?$/i.test(value)) {
+    return `${value.replace(/\/$/, '')}/v1`;
+  }
   return value;
 }
 

@@ -46,7 +46,12 @@ export default function SettingsPanel({ settingsCtx }: Props) {
     () => MODELS.filter((m) => m.provider === 'FreeModel'),
     []
   );
+  const freebuffOptions = useMemo(
+    () => MODELS.filter((m) => m.provider === 'Freebuff'),
+    []
+  );
   const isFreemodelBase = /api\.freemodel\.dev/i.test(baseUrl);
+  const isFreebuffBase = /localhost:8080|127\.0\.0\.1:8080|freebuff/i.test(baseUrl);
 
   const selected = MODELS.find(m => m.id === model);
   const activeWorkflow = WORKFLOW_OPTIONS.find((item) => item.id === workflow);
@@ -105,20 +110,26 @@ export default function SettingsPanel({ settingsCtx }: Props) {
   const StatusIcon = statusMeta.icon;
   const installedBrowserCount = guiCapabilities?.browser.installedBrowsers.filter((item) => item.installed).length || 0;
 
-  const handlePreset = (type: 'ollama' | 'lmstudio' | 'openrouter' | 'freemodel') => {
+  const handlePreset = (type: 'ollama' | 'lmstudio' | 'openrouter' | 'freemodel' | 'freebuff') => {
     if (type === 'ollama') {
       setBaseUrl('http://localhost:11434/v1');
       setApiKey('ollama');
-      setModel('qwen2.5-coder:latest');
+      setModel('gemma4:12b');
       setIsCustomMode(true);
     } else if (type === 'lmstudio') {
       setBaseUrl('http://localhost:1234/v1');
       setApiKey('lm-studio');
-      setModel('qwen2.5-coder-7b');
+      setModel('gemma4:12b');
       setIsCustomMode(true);
     } else if (type === 'freemodel') {
       setBaseUrl('https://api.freemodel.dev/v1');
+      setApiKey('');
       setModel('gpt-5.5');
+      setIsCustomMode(true);
+    } else if (type === 'freebuff') {
+      setBaseUrl('http://localhost:8080/v1');
+      setApiKey('');
+      setModel('gpt-4.1');
       setIsCustomMode(true);
     } else {
       setBaseUrl('https://openrouter.ai/api/v1');
@@ -189,6 +200,7 @@ export default function SettingsPanel({ settingsCtx }: Props) {
               <div>Browser mode: <span style={{ color: 'var(--fg-main)' }}>{guiCapabilities.browser.resolvedMode}</span></div>
               <div>Playwright: <span style={{ color: 'var(--fg-main)' }}>{guiCapabilities.browser.playwrightInstalled ? 'ok' : 'missing'}</span></div>
               <div>Screen agent: <span style={{ color: 'var(--fg-main)' }}>{guiCapabilities.screenAgent.available ? 'ok' : 'missing'}</span></div>
+              <div>Computer Use: <span style={{ color: 'var(--fg-main)' }}>{guiCapabilities.computerUse.available ? 'ok' : 'missing'}</span></div>
               <div>Tapılan browser: <span style={{ color: 'var(--fg-main)' }}>{installedBrowserCount}</span></div>
             </div>
 
@@ -209,6 +221,11 @@ export default function SettingsPanel({ settingsCtx }: Props) {
             <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
               Tövsiyə: {guiCapabilities.summary.recommendedWorkflow} workflow, {guiCapabilities.summary.recommendedBrowserMode} browser mode
             </div>
+            {guiCapabilities.computerUse.appPath && (
+              <div className="text-[10px] font-mono truncate" style={{ color: 'var(--fg-muted)' }}>
+                {guiCapabilities.computerUse.appPath}
+              </div>
+            )}
           </>
         ) : (
           <div className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>
@@ -237,6 +254,8 @@ export default function SettingsPanel({ settingsCtx }: Props) {
           onClick={() => {
             setIsCustomMode(true);
             setBaseUrl('http://localhost:11434/v1');
+            setApiKey('ollama');
+            setModel('gemma4:12b');
           }}
           className="flex-1 py-1 text-[11px] font-medium rounded-md transition-all"
           style={{
@@ -333,6 +352,12 @@ export default function SettingsPanel({ settingsCtx }: Props) {
                 FreeModel
               </button>
               <button
+                onClick={() => handlePreset('freebuff')}
+                className="text-[10px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] text-[var(--fg-main)] font-semibold transition-all"
+              >
+                Freebuff
+              </button>
+              <button
                 onClick={() => handlePreset('ollama')}
                 className="text-[10px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] text-[var(--fg-main)] font-semibold transition-all"
               >
@@ -402,6 +427,28 @@ export default function SettingsPanel({ settingsCtx }: Props) {
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {isFreebuffBase && (
+            <div className="space-y-1">
+              <label style={labelStyle}>
+                <Code2 size={12} /> Freebuff Modelləri
+              </label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              >
+                {freebuffOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+              <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+                Freebuff2API proxy üçün tipik endpoint: `http://localhost:8080/v1`
+              </div>
             </div>
           )}
 

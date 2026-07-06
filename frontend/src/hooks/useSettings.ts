@@ -36,6 +36,27 @@ export function useSettings() {
   const [guiBrowserCdpUrl, setGuiBrowserCdpUrl] = useState(() => loadSetting('guiBrowserCdpUrl', DEFAULT_SETTINGS.guiBrowserCdpUrl));
   const [guiAutoStartBrowser, setGuiAutoStartBrowser] = useState(() => localStorage.getItem('guiAutoStartBrowser') === 'true');
 
+  useEffect(() => {
+    try {
+      const migrationKey = 'guiBrowserModeMigrated_v2';
+      if (localStorage.getItem(migrationKey) === 'true') return;
+      const savedMode = localStorage.getItem('guiBrowserMode');
+      const savedCdpUrl = localStorage.getItem('guiBrowserCdpUrl') || '';
+      const savedBrowserPath = localStorage.getItem('guiBrowserPath') || '';
+      const looksLikeLegacyDefault = savedMode === 'cdp'
+        && (!savedCdpUrl || savedCdpUrl === 'http://127.0.0.1:9222');
+      if (looksLikeLegacyDefault) {
+        setGuiBrowserMode('persistent');
+        if (!savedBrowserPath) {
+          localStorage.removeItem('guiBrowserPath');
+        }
+      }
+      localStorage.setItem(migrationKey, 'true');
+    } catch {
+      // ignore localStorage migration issues
+    }
+  }, []);
+
   // Persist to localStorage
   useEffect(() => { localStorage.setItem('apiKey', apiKey); }, [apiKey]);
   useEffect(() => { localStorage.setItem('baseUrl', baseUrl); }, [baseUrl]);

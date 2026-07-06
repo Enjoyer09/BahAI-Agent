@@ -145,6 +145,7 @@ export interface ExecutionArtifact {
 export interface RuntimeArtifact {
   kind: 'browser' | 'terminal' | 'gui';
   toolName?: string;
+  sessionId?: string;
   command?: string;
   summary: string;
   screenshotPath?: string;
@@ -193,6 +194,26 @@ export interface GuiCapabilityStatus {
     openCommandAvailable: boolean;
     reasons: string[];
   };
+  computerUse: {
+    available: boolean;
+    supportedPlatform: boolean;
+    appPath: string;
+    binaryPath: string;
+    infoPlistPath: string;
+    configPath: string;
+    appExists: boolean;
+    binaryExists: boolean;
+    infoPlistExists: boolean;
+    configExists: boolean;
+    bundleDetected: boolean;
+    bundleId: string;
+    config: {
+      locale: string;
+      direction: string;
+      accentColor: string;
+    } | null;
+    reasons: string[];
+  };
   warnings: string[];
 }
 
@@ -209,6 +230,28 @@ export interface ActiveGuiSession {
   updatedAt: number;
 }
 
+export interface GovernanceEntryPath {
+  mode: 'audit' | 'bootstrap' | 'spec-intake';
+  reason: string;
+}
+
+export interface GateReceipt {
+  runId: string;
+  workflow: string;
+  entryPath: GovernanceEntryPath;
+  overall: 'ready' | 'partial' | 'blocked';
+  evidence: Array<{
+    label: string;
+    status: string;
+    summary: string;
+  }>;
+  handoff: {
+    plannerGoal: string;
+    nextFocus: string[];
+    unresolvedRisk: string;
+  };
+}
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type SSEEvent =
@@ -223,6 +266,7 @@ export type SSEEvent =
   | { type: 'approval_request'; approvalId: string; tool: string; args: string; meta?: ApprovalRequest['meta'] }
   | { type: 'approval_resolved'; approvalId: string; decision: 'approved' | 'rejected' }
   | { type: 'human_checkpoint'; checkpoint: HumanCheckpoint }
+  | { type: 'governance_state'; entryPath: GovernanceEntryPath; gateReceipt: GateReceipt }
   | { type: 'workspace_updated'; path: string }
   | { type: 'error'; message: string }
   | { type: 'debug'; info: any };

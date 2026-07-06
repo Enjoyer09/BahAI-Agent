@@ -12,6 +12,15 @@ function createBrowserLaunchError(code, message, extra = {}) {
   return error;
 }
 
+function isRealChromePreferred({ browserChannel = '', executablePath = '', persistent = false, cdpUrl = '' } = {}) {
+  return Boolean(
+    persistent ||
+    String(browserChannel || '').trim() === 'chrome' ||
+    String(executablePath || '').trim() ||
+    String(cdpUrl || '').trim()
+  );
+}
+
 const DEFAULT_CHROME_PATHS = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
@@ -126,6 +135,16 @@ function findInstalledChromePath() {
   return '';
 }
 
+function buildDefaultBahaiChromeProfileDir() {
+  return path.join(
+    process.env.HOME || '/tmp',
+    'Library',
+    'Application Support',
+    'bahAI',
+    'chrome-profile'
+  );
+}
+
 function listInstalledBrowsers() {
   return KNOWN_BROWSER_APPS.map((browser) => ({
     ...browser,
@@ -141,25 +160,32 @@ async function getSession(sessionId = 'default', options = {}) {
   }
 
   const chromium = await getChromium();
-  const cdpUrl = String(options.cdpUrl || process.env.GUI_BROWSER_CDP_URL || '').trim();
+  const requestedPersistent = Boolean(options.persistent || process.env.GUI_BROWSER_PERSISTENT === 'true');
+  const requestedBrowserChannel = String(options.browserChannel || process.env.GUI_BROWSER_CHANNEL || '').trim();
+  let requestedExecutablePath = String(options.executablePath || process.env.GUI_BROWSER_EXECUTABLE_PATH || '').trim();
+  if (!requestedExecutablePath && requestedBrowserChannel === 'chrome') {
+    requestedExecutablePath = findInstalledChromePath();
+  }
+  const shouldIgnoreEnvCdp = requestedPersistent || Boolean(requestedBrowserChannel) || Boolean(requestedExecutablePath);
+  const rawCdpUrl = options.cdpUrl !== undefined
+    ? options.cdpUrl
+    : (shouldIgnoreEnvCdp ? '' : process.env.GUI_BROWSER_CDP_URL || '');
+  const cdpUrl = String(rawCdpUrl || '').trim();
   const visible = Boolean(options.visible || process.env.GUI_BROWSER_VISIBLE === 'true');
   const slowMo = Number.isFinite(Number(options.slowMoMs || process.env.GUI_BROWSER_SLOW_MO_MS))
     ? Number(options.slowMoMs || process.env.GUI_BROWSER_SLOW_MO_MS)
     : 0;
-  const browserChannel = String(options.browserChannel || process.env.GUI_BROWSER_CHANNEL || '').trim();
-  let executablePath = String(options.executablePath || process.env.GUI_BROWSER_EXECUTABLE_PATH || '').trim();
-  if (!executablePath && browserChannel === 'chrome') {
-    executablePath = findInstalledChromePath();
-  }
+  const browserChannel = requestedBrowserChannel;
+  let executablePath = requestedExecutablePath;
   // FIX: Prefer CDP mode when CDP URL is configured. This ensures we use real Chrome
   // (not Playwright's bundled Chromium) which allows Google OAuth login.
   // Only fall back to persistent Playwright if no CDP URL is available.
   const hasCdpUrl = Boolean(cdpUrl);
-  const persistent = !hasCdpUrl && Boolean(options.persistent || process.env.GUI_BROWSER_PERSISTENT === 'true');
+  const persistent = !hasCdpUrl && requestedPersistent;
   const userDataDir = String(
     options.userDataDir ||
     process.env.GUI_BROWSER_USER_DATA_DIR ||
-    path.join(process.env.HOME || '/tmp', '.bahai', 'chrome-debug-profile')
+    buildDefaultBahaiChromeProfileDir()
   );
   const sessionSignature = JSON.stringify({
     cdpUrl,
@@ -196,10 +222,12 @@ async function getSession(sessionId = 'default', options = {}) {
   let context;
   let cdpAttached = false;
   let openedVia = 'bundled';
+  const preferRealChrome = isRealChromePreferred({ browserChannel, executablePath, persistent, cdpUrl });
 
   // FIX: Clear stale Chrome singleton lock files before launching persistent context.
   // These locks remain if Chrome crashed or was force-killed, preventing relaunch.
   if (persistent && userDataDir) {
+    try { fs.mkdirSync(userDataDir, { recursive: true }); } catch { /* ignore */ }
     const lockFiles = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
     for (const lockFile of lockFiles) {
       try { fs.unlinkSync(path.join(userDataDir, lockFile)); } catch { /* ignore */ }
@@ -220,6 +248,19 @@ async function getSession(sessionId = 'default', options = {}) {
       } catch (cdpError) {
         if (!isCdpContextManagementError(cdpError)) {
           throw cdpError;
+        }
+        if (preferRealChrome) {
+          throw createBrowserLaunchError(
+            'real_chrome_required',
+            cdpError.message,
+            {
+              cdpUrl,
+              browserChannel,
+              executablePath,
+              persistent,
+              userDataDir
+            }
+          );
         }
         const fallbackChromePath = executablePath || findInstalledChromePath();
         if (!fallbackChromePath) {
@@ -270,16 +311,16 @@ async function getSession(sessionId = 'default', options = {}) {
         launchWarning = 'Recovered from stale browser session (killed orphan process).';
         openedVia = 'persistent_recovered';
       } catch (retryError) {
-        // Final fallback: use fresh temp profile
-        const tempDir = path.join(userDataDir + '-temp-' + Date.now());
-        fs.mkdirSync(tempDir, { recursive: true });
-        context = await chromium.launchPersistentContext(tempDir, {
-          ...launchOptions,
-          viewport: { width: 1440, height: 960 }
-        });
-        browser = context.browser();
-        launchWarning = `Could not reuse profile, launched with fresh temp profile: ${tempDir}`;
-        openedVia = 'persistent_temp_profile';
+        throw createBrowserLaunchError(
+          'real_chrome_profile_locked',
+          retryError.message || 'Chrome profile is locked by another running session.',
+          {
+            browserChannel,
+            executablePath,
+            persistent,
+            userDataDir
+          }
+        );
       }
     } else if (!browserChannel && !executablePath) {
       throw createBrowserLaunchError(
@@ -293,23 +334,30 @@ async function getSession(sessionId = 'default', options = {}) {
           userDataDir
         }
       );
+    } else if (preferRealChrome) {
+      throw createBrowserLaunchError(
+        error.browserLaunchCode || 'real_chrome_required',
+        error.message,
+        {
+          cdpUrl,
+          browserChannel,
+          executablePath,
+          persistent,
+          userDataDir
+        }
+      );
     } else {
-      launchWarning = `Requested browser unavailable, fell back to bundled Chromium: ${error.message}`;
-      const fallbackOptions = {
-        headless: !visible,
-        slowMo,
-      };
-      if (persistent) {
-        context = await chromium.launchPersistentContext(userDataDir, {
-          ...fallbackOptions,
-          viewport: { width: 1440, height: 960 }
-        });
-        browser = context.browser();
-        openedVia = 'persistent_bundled_fallback';
-      } else {
-        browser = await chromium.launch(fallbackOptions);
-        openedVia = 'bundled_fallback';
-      }
+      throw createBrowserLaunchError(
+        error.browserLaunchCode || 'browser_launch_failed',
+        error.message,
+        {
+          cdpUrl,
+          browserChannel,
+          executablePath,
+          persistent,
+          userDataDir
+        }
+      );
     }
   }
   if (!context && !cdpAttached) {
@@ -377,6 +425,7 @@ module.exports = {
   getSession,
   closeAllSessions,
   findInstalledChromePath,
+  buildDefaultBahaiChromeProfileDir,
   listInstalledBrowsers,
   isCdpContextManagementError,
   createBrowserLaunchError
