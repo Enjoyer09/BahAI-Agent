@@ -20,6 +20,7 @@ Product split work is now in progress, not just planned.
 - Web UI presents itself as `BahAI Cloud`.
 - Desktop UI presents itself as `BahAI Desktop` and exposes `Cloud / Local`.
 - Chat input model picker was removed from the main surface.
+- Web settings are being simplified toward chat-first behavior; desktop retains advanced execution and GUI controls.
 - Backend provider routing now respects:
   - `web_chat` => cloud-only provider candidates
   - `desktop_code + local` => local-only Ollama-style candidates

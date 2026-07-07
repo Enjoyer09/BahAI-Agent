@@ -25,7 +25,9 @@ export function useSettings() {
   const [executionMode, setExecutionMode] = useState<'cloud' | 'local'>(() => {
     const saved = localStorage.getItem('executionMode');
     if (saved === 'cloud' || saved === 'local') return saved;
-    return 'cloud';
+    return productMode === 'desktop_code'
+      ? (DEFAULT_SETTINGS.executionMode as 'cloud' | 'local')
+      : 'cloud';
   });
   const [apiKey, setApiKey] = useState(() => loadSetting('apiKey', ''));
   const [baseUrl, setBaseUrl] = useState(() => loadSetting('baseUrl', DEFAULT_BASE_URL));
@@ -68,6 +70,31 @@ export function useSettings() {
       // ignore localStorage migration issues
     }
   }, []);
+
+  useEffect(() => {
+    if (productMode !== 'desktop_code') return;
+
+    if (executionMode === 'local') {
+      setBaseUrl((prev) => prev.includes('11434') ? prev : 'http://localhost:11434/v1');
+      setApiKey('ollama');
+      setModel((prev) => {
+        if (!prev) return 'gemma4:12b';
+        if (prev.includes('/') || /^gpt-|^claude|^gemini|^o[134]/i.test(prev)) return 'gemma4:12b';
+        return prev;
+      });
+      return;
+    }
+
+    setBaseUrl((prev) => {
+      if (prev.includes('11434') || prev.includes('1234')) return 'https://api.freemodel.dev/v1';
+      return prev || 'https://api.freemodel.dev/v1';
+    });
+    setApiKey((prev) => prev === 'ollama' ? '' : prev);
+    setModel((prev) => {
+      if (!prev || (!prev.includes('/') && !/^gpt-|^claude|^gemini|^o[134]/i.test(prev))) return 'gpt-5.5';
+      return prev;
+    });
+  }, [executionMode, productMode, setApiKey, setBaseUrl, setModel]);
 
   // Persist to localStorage
   useEffect(() => { localStorage.setItem('executionMode', executionMode); }, [executionMode]);

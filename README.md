@@ -7,7 +7,14 @@ BahAI iki məhsul xətti üzrə formalaşır:
 - `BahAI Desktop`
   Electron app, code-agent-first təcrübədir və `Cloud / Local` execution source ilə işləyir
 
-Layihə təkcə chat assistant deyil, həm də:
+Layihə iki fərqli məhsul səthi üzərində qurulur:
+
+- `BahAI Cloud`
+  sadə, chat-first hosted web təcrübəsi
+- `BahAI Desktop`
+  local/cloud source seçimi olan daha güclü code-agent desktop təcrübəsi
+
+Desktop tərəfdə əlavə olaraq:
 
 - orchestral multi-role coding flow
 - browser-backed GUI agent
@@ -16,7 +23,7 @@ Layihə təkcə chat assistant deyil, həm də:
 
 ## Məhsul istiqaməti
 
-- Web səthində model/provider seçimi gizlidir
+- Web səthində model/provider seçimi gizlidir və UI chat-first saxlanılır
 - Desktop-da user yalnız execution source seçir: `Cloud` və ya `Local`
 - Cloud routing üçün arxa planda provider orchestration istifadə olunur
 - Local routing üçün desktop local model router əsas rol oynayır

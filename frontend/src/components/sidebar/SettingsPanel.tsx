@@ -59,6 +59,7 @@ export default function SettingsPanel({ settingsCtx }: Props) {
   const activeWorkflow = WORKFLOW_OPTIONS.find((item) => item.id === workflow);
   const isDesktopProduct = productMode === 'desktop_code';
   const isWebProduct = productMode === 'web_chat';
+  const showDesktopControls = isDesktopProduct;
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +166,64 @@ export default function SettingsPanel({ settingsCtx }: Props) {
     marginBottom: '4px',
   };
 
+  if (isWebProduct) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg p-3" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+          <div className="text-[11px] font-semibold mb-2" style={{ color: 'var(--fg-main)' }}>
+            Aktiv konfiqurasiya
+          </div>
+          <div className="text-[11px] space-y-1" style={{ color: 'var(--fg-secondary)' }}>
+            <div>Məhsul: <span style={{ color: 'var(--fg-main)' }}>BahAI Cloud</span></div>
+            <div>Rejim: <span style={{ color: 'var(--fg-main)' }}>Cloud</span></div>
+          </div>
+        </div>
+
+        <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+          <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+            BahAI Cloud
+          </div>
+          <div className="text-[11px]" style={{ color: 'var(--fg-secondary)' }}>
+            Web versiyada model, provider və workflow seçimi gizlidir. BahAI sorğuya uyğun cloud routing-i arxa planda özü idarə edir.
+          </div>
+          <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+            Daha dərin GUI, local runtime və code-agent sazlamaları desktop tətbiqində açılır.
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <button
+            onClick={() => setPerformanceMode(!performanceMode)}
+            className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors"
+            style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
+            role="switch"
+            aria-checked={performanceMode}
+          >
+            <div className="flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--fg-main)' }}>
+              <Zap size={14} style={{ color: performanceMode ? 'var(--color-accent)' : 'var(--fg-muted)' }} />
+              Performans Rejimi
+            </div>
+            <div
+              className="w-9 h-5 rounded-full relative transition-colors"
+              style={{ background: performanceMode ? 'var(--color-accent)' : 'var(--fg-faint)' }}
+            >
+              <div
+                className="absolute top-0.5 w-4 h-4 rounded-full transition-all"
+                style={{
+                  background: 'white',
+                  left: performanceMode ? '18px' : '2px',
+                }}
+              />
+            </div>
+          </button>
+          <p className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>
+            Animasiyaları və arxa fon bulanıqlığını azaldaraq web təcrübəsini yüngülləşdirir.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg p-3" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
@@ -174,10 +233,14 @@ export default function SettingsPanel({ settingsCtx }: Props) {
         <div className="text-[11px] space-y-1" style={{ color: 'var(--fg-secondary)' }}>
           <div>Məhsul: <span style={{ color: 'var(--fg-main)' }}>{isWebProduct ? 'BahAI Cloud' : 'BahAI Desktop'}</span></div>
           <div>Rejim: <span style={{ color: 'var(--fg-main)' }}>{isWebProduct ? 'Cloud' : executionMode === 'local' ? 'Local' : 'Cloud'}</span></div>
-          <div>Model: <span style={{ color: 'var(--fg-main)' }}>{selected?.name || model}</span></div>
-          <div>Workflow: <span style={{ color: 'var(--fg-main)' }}>{orchestrationMode ? (activeWorkflow?.name || workflow) : 'Söndürülüb'}</span></div>
-          <div>Browser: <span style={{ color: 'var(--fg-main)' }}>{guiBrowserMode}</span></div>
-          <div>Endpoint: <span style={{ color: 'var(--fg-main)' }}>{baseUrl}</span></div>
+          {!isWebProduct && (
+            <>
+              <div>Model: <span style={{ color: 'var(--fg-main)' }}>{selected?.name || model}</span></div>
+              <div>Workflow: <span style={{ color: 'var(--fg-main)' }}>{orchestrationMode ? (activeWorkflow?.name || workflow) : 'Söndürülüb'}</span></div>
+              <div>Browser: <span style={{ color: 'var(--fg-main)' }}>{guiBrowserMode}</span></div>
+              <div>Endpoint: <span style={{ color: 'var(--fg-main)' }}>{baseUrl}</span></div>
+            </>
+          )}
         </div>
       </div>
 
@@ -219,6 +282,7 @@ export default function SettingsPanel({ settingsCtx }: Props) {
         </div>
       )}
 
+      {showDesktopControls && (
       <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -277,20 +341,10 @@ export default function SettingsPanel({ settingsCtx }: Props) {
           </div>
         )}
       </div>
-
-      {isWebProduct && (
-        <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
-          <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
-            BahAI Cloud
-          </div>
-          <div className="text-[11px]" style={{ color: 'var(--fg-secondary)' }}>
-            Web versiyada model və provider seçimi gizlidir. BahAI cloud routing qatında ən uyğun modeli özü seçir.
-          </div>
-        </div>
       )}
 
       {/* Provider Selector Tab */}
-      {!isWebProduct && (
+      {showDesktopControls && (
       <>
       <div className="flex rounded-lg p-0.5 bg-[var(--bg-hover)] border border-[var(--border)]">
         <button
@@ -532,6 +586,8 @@ export default function SettingsPanel({ settingsCtx }: Props) {
       </>
       )}
 
+      {showDesktopControls && (
+      <>
       {/* Performance mode */}
       <div className="space-y-2 pt-2">
         <button
@@ -668,6 +724,8 @@ export default function SettingsPanel({ settingsCtx }: Props) {
           Animasiyaları və arxa fon bulanıqlığını söndürərək performansı artırır.
         </p>
       </div>
+      </>
+      )}
     </div>
   );
 }

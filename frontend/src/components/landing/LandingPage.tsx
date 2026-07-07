@@ -8,7 +8,6 @@ import {
   Rocket,
   ChevronDown,
   CheckCircle2,
-  Terminal,
   Shield,
   Sparkles,
   Bot,
@@ -65,39 +64,39 @@ function GridDots() {
 export default function LandingPage({ onGetStarted }: LandingPageProps) {
   const features = [
     {
-      icon: <Code2 size={22} />,
-      title: 'Avtonom Kodlaşdırma',
-      desc: 'Faylları yaradır, redaktə edir və layihəni sıfırdan qurur. Siz sadəcə təsvir edin.',
+      icon: <Bot size={22} />,
+      title: 'Chat-First Assistant',
+      desc: 'Sual verin, fikir aydınlaşdırın, plan qurun və işinizi sürətləndirin. Web təcrübə sadə və çevikdir.',
       color: '#10a37f',
     },
     {
-      icon: <Terminal size={22} />,
-      title: 'Terminal və Git',
-      desc: 'Əmrləri icra edir, repoları klonlayır və layihəni avtomatik qurur.',
+      icon: <Globe size={22} />,
+      title: 'BahAI Cloud',
+      desc: 'Railway üzərində işləyən cloud assistant. Model seçimi gizlidir, routing arxa planda həll olunur.',
       color: '#3b82f6',
     },
     {
-      icon: <Globe size={22} />,
-      title: 'Canlı Önizləmə',
-      desc: 'Yazılan kodu anında brauzerdə görün. Real vaxtda dəyişikliklər.',
+      icon: <Code2 size={22} />,
+      title: 'BahAI Desktop',
+      desc: 'Desktop tətbiqində Cloud və Local mənbələri ilə daha dərin kod agent təcrübəsi əldə edin.',
       color: '#8b5cf6',
     },
     {
       icon: <Shield size={22} />,
-      title: 'Təhlükəsiz Rejim',
-      desc: 'Həssas əməliyyatlar üçün təsdiq sistemi. Nəzarət sizdə qalır.',
+      title: 'Ağıllı Yönləndirmə',
+      desc: 'İstifadəçi modeli seçmədən BahAI sorğuya uyğun cavab yolunu və provider qatını özü müəyyən edir.',
       color: '#f59e0b',
     },
     {
       icon: <Cpu size={22} />,
-      title: 'Çoxsaylı AI Modelləri',
-      desc: 'DeepSeek, MiniMax, Nemotron və digər modellər — bir yerdə.',
+      title: 'Arxa Fon Model Layeri',
+      desc: 'Cloud və local model qatları ayrıdır. Məhsul səthi sadə qalır, texniki seçimlər daxildə idarə olunur.',
       color: '#ec4899',
     },
     {
       icon: <Rocket size={22} />,
-      title: 'Bir Kliklə Deploy',
-      desc: 'Layihənizi GitHub və Railway-ə göndərin. Dünyada yayımlayın.',
+      title: 'Böyüyən Ekosistem',
+      desc: 'GUI, SEO və orchestration imkanları desktop səthində mərhələli şəkildə genişlənir.',
       color: '#06b6d4',
     },
   ];
@@ -105,25 +104,25 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
   const steps = [
     {
       num: '01',
-      title: 'İdeyanı Yaz',
-      desc: 'Nə yaratmaq istədiyinizi sadə dildə agentə bildirin. Məsələn: "Bir POS sistemi qur"',
+      title: 'Yaz və Soruş',
+      desc: 'Web-də sualını və ya iş məqsədini sadə dildə yaz. BahAI cavabı aydınlaşdırır və növbəti addımı təklif edir.',
     },
     {
       num: '02',
-      title: 'Agent İşləyir',
-      desc: 'bahAI faylları yaradır, kitabxanaları quraşdırır, kodu yazır və test edir.',
+      title: 'BahAI Yönləndirir',
+      desc: 'Sorğuya uyğun cavab, plan və ya icra yolu arxa planda seçilir. İstifadəçi əlavə sazlama ilə məşğul olmur.',
     },
     {
       num: '03',
-      title: 'Canlıya Çıx',
-      desc: 'Nəticəni dərhal yoxlayın və tək düymə ilə dünyada yayımlayın.',
+      title: 'Daha Dərin İşə Keç',
+      desc: 'Lazım olanda desktop tətbiqinə keçərək Local və ya Cloud source ilə kod agent axınlarını davam etdir.',
     },
   ];
 
   const stats = [
-    { value: '9', label: 'AI ALƏTİ' },
-    { value: '15', label: 'ADDIMLI AGENT' },
-    { value: '0 AZN', label: 'PULSUZ' },
+    { value: '2', label: 'MƏHSUL XƏTTİ' },
+    { value: 'Cloud', label: 'CHAT-FIRST WEB' },
+    { value: 'Desktop', label: 'CODE AGENT' },
   ];
 
   return (
@@ -196,11 +195,11 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         </AnimateIn>
 
         <AnimateIn delay={0.1}>
-          <h1
+            <h1
             className="text-4xl sm:text-5xl md:text-7xl font-bold text-center max-w-4xl leading-[1.08] tracking-tight mb-6"
             style={{ color: '#f0f0f0' }}
           >
-            Azərbaycanın ilk və tək
+            BahAI ilə
             <br />
             <span
               className="font-black"
@@ -211,15 +210,14 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 backgroundClip: 'text',
               }}
             >
-              AI kod agenti
+              cloud chat-dən desktop agentə
             </span>
           </h1>
         </AnimateIn>
 
         <AnimateIn delay={0.2}>
           <p className="text-zinc-400 text-center max-w-xl text-base md:text-lg mb-10 leading-relaxed">
-            Proqram təminatını sıfırdan qurun. Sadəcə ideyanızı deyin,
-            bahAI qalanını həll etsin — pulsuz.
+            Web-də sürətli assistant təcrübəsi əldə edin, desktop-da isə daha dərin kod agent axınlarına keçin.
           </p>
         </AnimateIn>
 
@@ -235,7 +233,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               }}
             >
               <Sparkles size={16} />
-              Pulsuz Proqramını Qur
+              BahAI-a Daxil Ol
               <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
             </button>
             <button
@@ -285,10 +283,10 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">XÜSUSİYYƏTLƏR</span>
             </div>
             <h2 className="text-3xl md:text-5xl font-bold mb-4" style={{ color: '#f0f0f0' }}>
-              Hər şey bir yerdə
+              İki səth, bir sistem
             </h2>
             <p className="text-zinc-400 max-w-xl mb-16 text-base md:text-lg leading-relaxed">
-              bahAI sadəcə kod yazmır — o, bütün inkişaf prosesini idarə edir.
+              BahAI Cloud gündəlik chat və düşünmə işləri üçündür. BahAI Desktop isə daha güclü icra səthi kimi qurulur.
             </p>
           </AnimateIn>
 
@@ -329,7 +327,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               3 sadə addım
             </h2>
             <p className="text-zinc-400 max-w-xl mb-16 text-base md:text-lg">
-              Kod yazmağı bilmirsiniz? Problem deyil. bahAI hər şeyi edir.
+              Məhsul səthi sadə qalır, arxadakı mürəkkəbliyi isə BahAI idarə edir.
             </p>
           </AnimateIn>
 
@@ -391,7 +389,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
 
               <h3 className="text-xl md:text-2xl font-bold mb-2" style={{ color: '#f0f0f0' }}>PreBeta Test Rejimi</h3>
               <p className="text-zinc-400 mb-8 text-sm leading-relaxed max-w-md mx-auto">
-                Missiyamız hər kəsə kod yazmaq imkanı verməkdir. Bu səbəbdən platforma tamamilə pulsuzdur.
+                Məqsədimiz Azərbaycanda istifadəsi rahat, pulsuz və praktik AI iş mühiti qurmaqdır.
               </p>
 
               <div className="flex items-baseline justify-center gap-2 mb-8">
@@ -401,11 +399,11 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
 
               <div className="space-y-3 mb-10 text-left max-w-sm mx-auto">
                 {[
-                  'Limitsiz layihə yaratmaq',
-                  'Bütün AI modellərinə giriş',
-                  'Terminal və Git inteqrasiyası',
-                  'Canlı önizləmə və deploy',
-                  'GitHub repo klonlama',
+                  'BahAI Cloud chat təcrübəsi',
+                  'Desktop üçün Cloud / Local keçidi',
+                  'Arxa fon model routing',
+                  'Orchestration və workflow bazası',
+                  'Genişlənən GUI və agent imkanları',
                 ].map((item, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <CheckCircle2 size={16} style={{ color: 'var(--color-accent)' }} />
@@ -424,7 +422,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 }}
               >
                 <Sparkles size={18} />
-                Pulsuz Proqramını Qur
+                Pulsuz Başla
                 <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
@@ -444,10 +442,10 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
           >
             <GridDots />
             <h2 className="text-2xl md:text-4xl font-bold mb-4 relative z-10" style={{ color: '#f0f0f0' }}>
-              İdeyanızı kod çevirin
+              BahAI ilə işə başla
             </h2>
             <p className="text-zinc-400 mb-8 text-sm md:text-base max-w-md mx-auto relative z-10">
-              bahAI ilə proqram qurmaq heç vaxt bu qədər asan olmayıb. Pulsuz başlayın.
+              Web-də sürətli danış, desktop-da daha dərin icra et. Eyni sistem, iki fərqli ritm.
             </p>
             <button
               onClick={onGetStarted}
