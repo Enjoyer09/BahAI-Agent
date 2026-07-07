@@ -103,6 +103,11 @@ body {
   overscroll-behavior: none;
 }
 
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 input, textarea, button, select {
   font-family: inherit;
   color: inherit;
@@ -401,4 +406,17 @@ button, a, [role="button"] {
 .dvh-screen {
   height: 100vh;
   height: 100dvh;
+}
+
+.mobile-chat-input-wrap {
+  background: linear-gradient(to top, var(--bg-main) 78%, rgba(0, 0, 0, 0));
+}
+
+@supports (padding: max(0px)) {
+  .safe-bottom {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+  .safe-top {
+    padding-top: max(0px, env(safe-area-inset-top));
+  }
 }

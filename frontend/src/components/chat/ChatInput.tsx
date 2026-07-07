@@ -17,6 +17,8 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isListening, setIsListening] = useState(false);
+  const isElectronShell = typeof window !== 'undefined' && window.navigator.userAgent.includes('Electron');
+  const disableMobileMic = Boolean(isMobile && !isElectronShell);
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -172,7 +174,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
   const canSend = (text.trim() || attachments.length > 0) && !loading && !blockedByActionCenter;
 
   return (
-    <div className={isMobile ? 'px-2 pb-2 pt-1 safe-bottom' : 'px-4 pb-4 pt-2'}>
+    <div className={isMobile ? 'px-2 pb-2 pt-1 safe-bottom mobile-chat-input-wrap' : 'px-4 pb-4 pt-2'}>
       <div className="max-w-3xl mx-auto">
         {!isMobile && onSafeModeToggle && (
           <div className="flex justify-center items-center gap-2 mb-2">
@@ -198,7 +200,9 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
           style={{
             background: 'var(--bg-surface-alt)',
             border: '1px solid var(--border)',
-            padding: isMobile ? '8px 10px' : '12px 14px',
+            padding: isMobile ? '9px 10px' : '12px 14px',
+            borderRadius: isMobile ? '22px' : undefined,
+            boxShadow: isMobile ? '0 8px 30px rgba(0, 0, 0, 0.22)' : undefined,
           }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
@@ -209,13 +213,13 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             className="rounded-full transition-colors shrink-0 flex items-center justify-center"
             style={{
               color: 'var(--fg-muted)',
-              width: isMobile ? '40px' : '44px',
-              height: isMobile ? '40px' : '44px',
+              width: isMobile ? '38px' : '44px',
+              height: isMobile ? '38px' : '44px',
             }}
             title="Fayl əlavə et"
             aria-label="Attach file"
           >
-            <Plus size={isMobile ? 18 : 20} />
+            <Plus size={isMobile ? 17 : 20} />
           </button>
           <input
             type="file"
@@ -241,7 +245,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             style={{
               color: 'var(--fg-main)',
               fontSize: isMobile ? '16px' : '14px', // 16px prevents iOS zoom
-              maxHeight: isMobile ? '96px' : '200px',
+              maxHeight: isMobile ? '120px' : '200px',
             }}
             disabled={blockedByActionCenter}
             aria-label="Message input"
@@ -264,25 +268,26 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
               }
             `}</style>
             
-            {/* Microphone button */}
-            <button
-              onClick={toggleListening}
-              type="button"
-              className="rounded-full transition-all flex items-center justify-center shrink-0"
-              style={{
-                color: isListening ? '#a855f7' : 'var(--fg-muted)',
-                background: isListening ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
-                width: isMobile ? '36px' : '40px',
-                height: isMobile ? '36px' : '40px',
-                border: isListening ? '1px solid rgba(168, 85, 247, 0.3)' : 'none',
-                boxShadow: isListening ? '0 0 15px rgba(168, 85, 247, 0.4)' : 'none',
-                animation: isListening ? 'pulse-purple 1.5s infinite' : 'none',
-              }}
-              title={isListening ? "Səsli daxiletməni dayandır" : "Səslə danış"}
-              aria-label="Toggle voice input"
-            >
-              {isListening ? <MicOff size={isMobile ? 16 : 18} /> : <Mic size={isMobile ? 16 : 18} />}
-            </button>
+            {!disableMobileMic && (
+              <button
+                onClick={toggleListening}
+                type="button"
+                className="rounded-full transition-all flex items-center justify-center shrink-0"
+                style={{
+                  color: isListening ? '#a855f7' : 'var(--fg-muted)',
+                  background: isListening ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
+                  width: isMobile ? '36px' : '40px',
+                  height: isMobile ? '36px' : '40px',
+                  border: isListening ? '1px solid rgba(168, 85, 247, 0.3)' : 'none',
+                  boxShadow: isListening ? '0 0 15px rgba(168, 85, 247, 0.4)' : 'none',
+                  animation: isListening ? 'pulse-purple 1.5s infinite' : 'none',
+                }}
+                title={isListening ? "Səsli daxiletməni dayandır" : "Səslə danış"}
+                aria-label="Toggle voice input"
+              >
+                {isListening ? <MicOff size={isMobile ? 16 : 18} /> : <Mic size={isMobile ? 16 : 18} />}
+              </button>
+            )}
 
             {loading ? (
               <button
@@ -292,8 +297,8 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                 style={{
                   background: 'rgba(239, 68, 68, 0.1)',
                   color: '#ef4444',
-                  width: isMobile ? '36px' : '40px',
-                  height: isMobile ? '36px' : '40px',
+                  width: isMobile ? '38px' : '40px',
+                  height: isMobile ? '38px' : '40px',
                 }}
                 aria-label="Stop generation"
               >
@@ -309,8 +314,8 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                   background: canSend ? 'var(--color-accent)' : 'transparent',
                   color: canSend ? 'white' : 'var(--fg-muted)',
                   cursor: canSend ? 'pointer' : 'default',
-                  width: isMobile ? '36px' : '40px',
-                  height: isMobile ? '36px' : '40px',
+                  width: isMobile ? '38px' : '40px',
+                  height: isMobile ? '38px' : '40px',
                 }}
                 aria-label="Send message"
               >
@@ -353,7 +358,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
         )}
 
         {/* Disclaimer */}
-        <div className={isMobile ? 'text-center mt-1 px-1' : 'text-center mt-2'}>
+        <div className={isMobile ? 'text-center mt-1 px-1 pb-1' : 'text-center mt-2'}>
           <span className="text-xs" style={{ color: 'var(--fg-muted)' }}>
             bahAI səhv edə bilər. Vacib məlumatları yoxlayın.
           </span>
