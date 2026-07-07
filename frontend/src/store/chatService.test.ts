@@ -54,14 +54,14 @@ describe('getWelcomeMessage', () => {
 
   it('returns server-backed message for web_chat', () => {
     const msg = getWelcomeMessage('web_chat', true);
-    expect(msg).toContain('BahAI Cloud asistentiəm');
+    expect(msg).toContain('Söhbət tarixçəniz');
     expect(msg).toContain('tarixçəniz');
   });
 
   it('returns offline message for web_chat', () => {
     const msg = getWelcomeMessage('web_chat', false);
-    expect(msg).toContain('BahAI Cloud asistentiəm');
-    expect(msg).toContain('Hazırsınızsa');
+    expect(msg).toContain('Yazın');
+    expect(msg).toContain('kömək');
   });
 });
 

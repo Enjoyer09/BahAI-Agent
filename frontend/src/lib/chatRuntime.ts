@@ -4,8 +4,10 @@ export function isToolCallLikeText(content: string): boolean {
   const text = String(content || '').trim();
   if (!text) return false;
   return (
+    /^(?:json\s+)?\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
     /^```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
     /^\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
+    /^(?:json\s+)?\{\s*"name"\s*:\s*"[^"]+"/is.test(text) ||
     /^(?:```(?:json)?\s*)?"arguments"\s*:\s*\{/is.test(text) ||
     /^(?:```(?:json)?\s*)?\{\s*"arguments"\s*:\s*\{/is.test(text) ||
     /^(?:```(?:json)?\s*)?"url"\s*:\s*"https?:\/\/[^\s"]+/is.test(text) ||

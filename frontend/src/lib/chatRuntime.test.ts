@@ -52,6 +52,10 @@ describe('normalizeAssistantText', () => {
     expect(normalizeAssistantText('{"name":"web_search","arguments":{"query":"Baku weather today"}}')).toBe('');
   });
 
+  it('strips raw tool call json blocks prefixed with json', () => {
+    expect(normalizeAssistantText('json { "name": "web_fetch", "arguments": {"url":"https://wttr.in/Baku?format=3"} }')).toBe('');
+  });
+
   it('strips leaked tool argument fragments', () => {
     expect(normalizeAssistantText('"arguments": { "url": "https://wttr.in/Baku?format=3" }')).toBe('');
   });
@@ -60,6 +64,10 @@ describe('normalizeAssistantText', () => {
 describe('isToolCallLikeText', () => {
   it('detects raw tool call json', () => {
     expect(isToolCallLikeText('{"name":"web_search","arguments":{"query":"Baku weather today"}}')).toBe(true);
+  });
+
+  it('detects raw tool call json prefixed with json', () => {
+    expect(isToolCallLikeText('json { "name": "web_fetch", "arguments": {"url":"https://wttr.in/Baku?format=3"} }')).toBe(true);
   });
 
   it('detects leaked arguments fragment', () => {
