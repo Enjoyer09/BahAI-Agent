@@ -47,6 +47,8 @@ import type { SendMessageContext } from '../store/chatService';
 export function useChat(settings: Settings, userKey?: string | number | null) {
   const [state, dispatch] = useReducer(chatReducer, undefined, createInitialState);
   const activeConvIdRef = useRef<string | null>(null);
+  const conversationsRef = useRef<Conversation[]>([]);
+  const serverBackedRef = useRef<boolean>(false);
   const streamThrottleRef = useRef<number>(0);
   const streamBufferRef = useRef<string>('');
   const storageTimeout = useRef<any>(null);
@@ -54,6 +56,14 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   useEffect(() => {
     activeConvIdRef.current = state.activeConvId;
   }, [state.activeConvId]);
+
+  useEffect(() => {
+    conversationsRef.current = state.conversations;
+  }, [state.conversations]);
+
+  useEffect(() => {
+    serverBackedRef.current = state.serverBacked;
+  }, [state.serverBacked]);
 
   // Reset on userKey change (cross-account bleed prevention)
   useEffect(() => {
@@ -239,15 +249,19 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     setTaskPlan: (items: string[]) => dispatch({ type: 'SET_TASK_PLAN', plan: items }),
 
     addSystemMessage: (content: string) => {
+      const convId = activeConvIdRef.current;
+      if (!convId) return;
       const msg: Message = { id: generateId(), role: 'system', content, timestamp: Date.now() };
-      dispatch({ type: 'ADD_MESSAGE_TO_CONVERSATION', id: state.activeConvId!, message: msg });
+      dispatch({ type: 'ADD_MESSAGE_TO_CONVERSATION', id: convId, message: msg });
     },
 
     updateAssistantMessage: (content: string) => {
+      const convId = activeConvIdRef.current;
+      if (!convId) return;
       const now = Date.now();
       if (!streamThrottleRef.current || now - streamThrottleRef.current > 33) {
         streamThrottleRef.current = now;
-        const conv = state.conversations.find(c => c.id === state.activeConvId);
+        const conv = conversationsRef.current.find(c => c.id === convId);
         if (!conv) return;
         const msgs = [...conv.messages];
         const lastMsg = msgs[msgs.length - 1];
@@ -256,12 +270,14 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         } else {
           msgs.push({ id: 'streaming_' + now, role: 'assistant', content, timestamp: now });
         }
-        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: state.activeConvId!, messages: msgs });
+        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
       }
     },
 
     finalizeAssistantMessage: (msg: Message) => {
-      const conv = state.conversations.find(c => c.id === state.activeConvId);
+      const convId = activeConvIdRef.current;
+      if (!convId) return;
+      const conv = conversationsRef.current.find(c => c.id === convId);
       if (!conv) return;
       const msgs = [...conv.messages];
       const lastMsg = msgs[msgs.length - 1];
@@ -270,14 +286,16 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       } else {
         msgs.push(msg);
       }
-      dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: state.activeConvId!, messages: msgs });
-      if (state.serverBacked && state.activeConvId) {
-        updateConversationOnServer(state.activeConvId, { messages: msgs }).catch(console.error);
+      dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
+      if (serverBackedRef.current) {
+        updateConversationOnServer(convId, { messages: msgs }).catch(console.error);
       }
     },
 
     updateToolExecution: (toolCallId: string | undefined, tool: string) => {
-      const conv = state.conversations.find(c => c.id === state.activeConvId);
+      const convId = activeConvIdRef.current;
+      if (!convId) return;
+      const conv = conversationsRef.current.find(c => c.id === convId);
       if (!conv) return;
       const msgs = conv.messages.map((m, idx) => {
         if (idx === conv.messages.length - 1 && m.role === 'assistant' && m.tool_calls) {
@@ -292,14 +310,16 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         }
         return m;
       });
-      dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: state.activeConvId!, messages: msgs });
-      if (state.serverBacked) {
-        updateConversationOnServer(state.activeConvId!, { messages: msgs }).catch(console.error);
+      dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
+      if (serverBackedRef.current) {
+        updateConversationOnServer(convId, { messages: msgs }).catch(console.error);
       }
     },
 
     addToolResult: (toolMsg: Message, _updatedToolCallId: string) => {
-      const conv = state.conversations.find(c => c.id === state.activeConvId);
+      const convId = activeConvIdRef.current;
+      if (!convId) return;
+      const conv = conversationsRef.current.find(c => c.id === convId);
       if (!conv) return;
       const msgs = conv.messages.map((m, idx) => {
         if (idx === conv.messages.length - 1 && m.role === 'assistant' && m.tool_calls) {
@@ -312,9 +332,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         }
         return m;
       });
-      dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: state.activeConvId!, messages: [...msgs, toolMsg] });
-      if (state.serverBacked) {
-        updateConversationOnServer(state.activeConvId!, { messages: [...msgs, toolMsg] }).catch(console.error);
+      const nextMsgs = [...msgs, toolMsg];
+      dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: nextMsgs });
+      if (serverBackedRef.current) {
+        updateConversationOnServer(convId, { messages: nextMsgs }).catch(console.error);
       }
     },
 
@@ -364,7 +385,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     incrementPreviewKey: () => {
       dispatch({ type: 'INCREMENT_PREVIEW_KEY' });
     },
-  }), [state.activeConvId, state.conversations, state.serverBacked, activeProject]);
+  }), [activeProject]);
 
   // ==========================================
   // sendMessage
