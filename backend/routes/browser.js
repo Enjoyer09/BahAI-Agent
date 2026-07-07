@@ -22,7 +22,10 @@ router.get('/browsers', async (req, res) => {
 router.get('/gui-capabilities', async (req, res) => {
   try {
     const status = buildGuiCapabilityStatus({});
-    res.json({ capabilities: status });
+    res.json({
+      ...status,
+      capabilities: status
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -32,7 +35,10 @@ router.get('/gui-capabilities', async (req, res) => {
 router.get('/computer-use-status', async (req, res) => {
   try {
     const status = detectComputerUseStatus({});
-    res.json({ status });
+    res.json({
+      ...status,
+      status
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

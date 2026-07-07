@@ -25,7 +25,9 @@ router.get('/files', async (req, res) => {
       isDirectory: entry.isDirectory(),
       path: path.join(dirPath, entry.name)
     }));
-    res.json({ files, currentPath: dirPath });
+    files.currentPath = dirPath;
+    files.files = files;
+    res.json(files);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

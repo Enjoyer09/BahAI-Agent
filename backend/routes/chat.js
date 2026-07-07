@@ -215,11 +215,11 @@ WEB SCRAPING QAYDASI (bunu diqqətlə oxu!)
 
 Hansı tool-u seçməli:
 
-• `web_fetch` — YALNIZ statik səhifələr üçün: plain HTML, blog yazıları, 
+• \`web_fetch\` — YALNIZ statik səhifələr üçün: plain HTML, blog yazıları, 
   API reference sənədləri, GitHub README-lər. JavaScript icra ETMİR.
   Sadəcə HTTP GET + HTML strip edir.
 
-• `browser_open` + `browser_eval` — Dinamik (JS) səhifələr üçün: 
+• \`browser_open\` + \`browser_eval\` — Dinamik (JS) səhifələr üçün: 
   e-ticarət saytları (laptopmarket.az, trendyol, wix), SPA-lar 
   (React/Vue/Angular), dashboard-lar, login tələb edən səhifələr.
   Playwright browser-də JS icra edir.
