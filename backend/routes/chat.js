@@ -63,12 +63,17 @@ async function readLocalDb() {
 
 router.post('/', async (req, res) => {
   // --- Extract request params ---
-  const { message, conversationId, projectId, safeMode, productMode, executionMode,
+  const { message, messages, conversationId, projectId, safeMode, productMode, executionMode,
     orchestrationMode, workflow, frontendApiKey, frontendBaseUrl, frontendModel,
     guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl } = req.body;
 
-  const latestUserText = String(message || '').trim();
-  const hasAttachment = Boolean(req.body.attachment);
+  const normalizedMessages = Array.isArray(messages) ? messages : [];
+  const lastUserMessage = [...normalizedMessages]
+    .reverse()
+    .find((item) => item && item.role === 'user' && typeof item.content === 'string');
+  const latestUserText = String(message || lastUserMessage?.content || '').trim();
+  const requestAttachment = req.body.attachment || lastUserMessage?.attachments?.[0];
+  const hasAttachment = Boolean(requestAttachment);
   const hasAttachmentInRequest = hasAttachment && !latestUserText;
 
   if (!latestUserText && !hasAttachmentInRequest) {
@@ -83,7 +88,7 @@ router.post('/', async (req, res) => {
 
   // --- Auto-routing ---
   const autoIntent = frontendModel === 'auto'
-    ? classifyTaskComplexity({ userMessage: latestUserText, messageHistoryLen: 0, hasAttachments: Boolean(req.body.attachment) })
+    ? classifyTaskComplexity({ userMessage: latestUserText, messageHistoryLen: normalizedMessages.length, hasAttachments: hasAttachment })
     : null;
 
   const providerCandidates = buildProviderCandidates({
@@ -243,10 +248,10 @@ ${generateToolsSystemPrompt(TOOLS)}`;
   const apiMessages = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: latestUserText },
-    ...(req.body.attachment ? [{
+    ...(requestAttachment ? [{
       role: 'user',
       content: '[İstifadəçi attachment göndərdi]',
-      attachments: [req.body.attachment]
+      attachments: [requestAttachment]
     }] : [])
   ];
 
