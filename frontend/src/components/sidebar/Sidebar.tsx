@@ -694,7 +694,9 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5 shrink-0">
-              <h2 className="text-base font-semibold" style={{ color: 'var(--fg-main)' }}>Parametrlər</h2>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--fg-main)' }}>
+                {isWebProduct ? 'BahAI Agenti RC1' : 'Parametrlər'}
+              </h2>
               <button onClick={() => setShowSettings(false)} className="p-1 rounded-md" style={{ color: 'var(--fg-muted)' }}>
                 <X size={16} />
               </button>
@@ -702,6 +704,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
 
             <div className="flex-1 overflow-y-auto premium-scroll space-y-5">
               <SettingsPanel settingsCtx={settingsCtx} />
+              {!isWebProduct && (
               <div className="space-y-2">
                 <label className="text-xs font-medium" style={{ color: 'var(--fg-muted)' }}>GitHub</label>
                 {githubConnected ? (
@@ -734,6 +737,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                   </div>
                 )}
               </div>
+              )}
             </div>
 
             <div className="mt-4 pt-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>

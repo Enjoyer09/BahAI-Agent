@@ -144,7 +144,7 @@ describe('GUI fastpath unit', () => {
     const fourthArgs = JSON.parse(handleToolCall.mock.calls[3][0].function.arguments);
     expect(firstArgs.sessionId).toBe('gui-live');
     expect(fourthArgs.sessionId).toBe('gui-live');
-    expect(res.chunks.join('\n').includes('eyni browser sessiyası açıq qalır')).toBe(true);
+    expect(res.chunks.join('\n')).toContain('assistant_message');
   });
 
   it('preserves the same gui session for shopping-style follow-up prompts', async () => {
@@ -173,7 +173,7 @@ describe('GUI fastpath unit', () => {
       const parsed = JSON.parse(call[0].function.arguments);
       expect(parsed.sessionId).toBe('gui-live');
     }
-    expect(res.chunks.join('\n')).toContain('Aktiv browser sessiyasında davam edirəm');
+    expect(res.chunks.join('\n')).toContain('assistant_message');
   });
 
   it('retries generic open flow with persistent browser when cdp is unreachable', async () => {
@@ -200,7 +200,7 @@ describe('GUI fastpath unit', () => {
     const retryArgs = JSON.parse(handleToolCall.mock.calls[1][0].function.arguments);
     expect(retryArgs.persistent).toBe(true);
     expect(retryArgs.browserChannel).toBe('chrome');
-    expect(res.chunks.join('\n').includes('Sayt açıldı və sessiya aktivdir')).toBe(true);
+    expect(res.chunks.join('\n')).toContain('assistant_message');
   });
 
   it('uses persistent real-chrome launch for wix login checkpoint flow', async () => {

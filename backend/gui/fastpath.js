@@ -498,12 +498,12 @@ async function handleGuiContinuation({
 
   writeSse(res, {
     type: 'assistant_message',
-    message: {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      content: 'Aktiv browser sessiyasında davam edirəm. Verilən əmri tətbiq edib nəticəni qısa müşahidə edəcəyəm.',
-      tool_calls: toolCalls
-    }
+      message: {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: 'Eyni browser sessiyasında davam edirəm.',
+        tool_calls: toolCalls
+      }
   });
 
   for (const toolCall of toolCalls) {
@@ -514,11 +514,11 @@ async function handleGuiContinuation({
 
   writeSse(res, {
     type: 'assistant_message',
-    message: {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      content: 'Əməliyyat icra olundu və eyni browser sessiyası açıq qalır. İstəsən növbəti addımı da bu sessiyada davam etdirə bilərəm.'
-    }
+      message: {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: 'Hazırdır. İstəsən növbəti addımı bu sessiyada davam etdirə bilərik.'
+      }
   });
   res.write('data: [DONE]\n\n');
   res.end();

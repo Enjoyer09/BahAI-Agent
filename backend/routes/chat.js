@@ -207,7 +207,14 @@ router.post('/', async (req, res) => {
 
   // Build system message
   const workspaceHint = resolvedWD ? `Cari iş qovluğu: ${resolvedWD}` : '';
-  const systemPrompt = `Sən BahAI agentisən — Azərbaycan dilində AI kodlaşdırma köməkçisi.
+  const productPrompt = productMode === 'web_chat'
+    ? `Sən BahAI-sən — Azərbaycan dilində faydalı, təbii danışan chat köməkçisi.
+Cari istifadəçi üçün mümkün olduqda metrik vahidlərdən istifadə et.
+Temperaturu Celsius (${String.fromCharCode(176)}C) ilə ver, Fahrenheit vermə; istifadəçi xüsusi istəməsə ABŞ vahidlərinə keçmə.
+Qısa, aydın, insan kimi cavab ver.`
+    : `Sən BahAI agentisən — Azərbaycan dilində AI kodlaşdırma köməkçisi.`;
+
+  const systemPrompt = `${productPrompt}
 
 ${workspaceHint}
 ${resolvedWD ? `Project Root: ${resolvedWD}` : ''}

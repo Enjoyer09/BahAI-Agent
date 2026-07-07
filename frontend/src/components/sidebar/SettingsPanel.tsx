@@ -207,28 +207,6 @@ export default function SettingsPanel({ settingsCtx }: Props) {
   if (isWebProduct) {
     return (
       <div className="space-y-4">
-        <div className="rounded-lg p-3" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
-          <div className="text-[11px] font-semibold mb-2" style={{ color: 'var(--fg-main)' }}>
-            Aktiv konfiqurasiya
-          </div>
-          <div className="text-[11px] space-y-1" style={{ color: 'var(--fg-secondary)' }}>
-            <div>Məhsul: <span style={{ color: 'var(--fg-main)' }}>BahAI Cloud</span></div>
-            <div>Rejim: <span style={{ color: 'var(--fg-main)' }}>Cloud</span></div>
-          </div>
-        </div>
-
-        <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
-          <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
-            BahAI Cloud
-          </div>
-          <div className="text-[11px]" style={{ color: 'var(--fg-secondary)' }}>
-            Web versiyada model, provider və workflow seçimi gizlidir. BahAI sorğuya uyğun cloud routing-i arxa planda özü idarə edir.
-          </div>
-          <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
-            Daha dərin GUI, local runtime və code-agent sazlamaları desktop tətbiqində açılır.
-          </div>
-        </div>
-
         <div className="space-y-1.5">
           <button
             onClick={() => setPerformanceMode(!performanceMode)}
