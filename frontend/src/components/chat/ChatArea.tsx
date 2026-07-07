@@ -112,18 +112,21 @@ export default function ChatArea({ messages, loading, onSend, onStop, workingDir
               <Spinner size={14} className="text-white" />
             </div>
             <div className="flex-1 pt-0.5 flex items-center gap-3">
-              <div className="flex items-center gap-2 px-1">
-                <span className="text-sm italic" style={{ color: 'var(--fg-secondary)' }}>Düşünürəm</span>
-                <div className="flex items-end gap-1 h-5" aria-hidden="true">
-                  {[0, 1, 2, 3].map((i) => (
+              <div
+                className="flex items-center px-1"
+                aria-label="Assistant is thinking"
+                title="BahAI cavab hazırlayır"
+              >
+                <div className="flex items-end gap-1.5 h-5" aria-hidden="true">
+                  {[0, 1, 2, 3, 4].map((i) => (
                     <span
                       key={i}
                       className="block rounded-full"
                       style={{
-                        width: '5px',
-                        height: `${8 + (i % 2) * 4}px`,
+                        width: '6px',
+                        height: `${7 + ((i + 1) % 3) * 3}px`,
                         background: 'var(--color-accent)',
-                        animation: `bahai-wave 1s ease-in-out ${i * 0.12}s infinite`
+                        animation: `bahai-wave 1s ease-in-out ${i * 0.1}s infinite`
                       }}
                     />
                   ))}
