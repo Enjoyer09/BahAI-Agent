@@ -1,8 +1,9 @@
 import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Bot, Volume2, VolumeX } from 'lucide-react';
-import { useState, useCallback, useRef } from 'react';
-import MarkdownRenderer from '../common/MarkdownRenderer';
+import { useState, useCallback, useRef, lazy, Suspense } from 'react';
 import ToolCallCard from './ToolCallCard';
 import type { Message } from '../../lib/types';
+
+const MarkdownRenderer = lazy(() => import('../common/MarkdownRenderer'));
 
 interface Props {
   message: Message;
@@ -211,7 +212,9 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
 
             {/* Content */}
             <div className="prose prose-sm max-w-none min-w-0" style={{ color: 'var(--fg-main)' }}>
-              <MarkdownRenderer content={message.content || ''} />
+              <Suspense fallback={<div className="text-sm leading-relaxed" style={{ color: 'var(--fg-main)' }}>{message.content || ''}</div>}>
+                <MarkdownRenderer content={message.content || ''} />
+              </Suspense>
             </div>
           </div>
 

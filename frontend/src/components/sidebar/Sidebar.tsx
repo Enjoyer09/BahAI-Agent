@@ -270,6 +270,8 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
       chat.createConversation(chat.activeProject.id);
     } else if (activeProjects.length > 0) {
       chat.createConversation(activeProjects[0].id);
+    } else if (isWebProduct && safeProjects.length > 0) {
+      chat.createConversation(safeProjects[0].id);
     } else {
       setAddMode('local');
       setShowAddModal(true);
@@ -313,7 +315,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
               style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
             >
               <div className="text-[11px] font-semibold mb-1" style={{ color: 'var(--fg-main)' }}>
-                {chat.activeProject?.name || (isWebProduct ? 'BahAI Cloud' : 'bahAI')}
+                {isWebProduct ? 'BahAI Cloud' : (chat.activeProject?.name || 'bahAI')}
               </div>
               <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
                 {isWebProduct ? 'Chat history və assistant ayarları' : (chat.activeProject?.path || 'Layihə seçilməyib')}

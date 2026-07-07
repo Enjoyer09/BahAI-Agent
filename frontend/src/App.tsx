@@ -287,7 +287,7 @@ function AppContent() {
             </button>
             <div className="min-w-0 flex-1 text-center px-1">
               <div className="text-sm font-medium truncate" style={{ color: 'var(--fg-main)' }}>
-                {chat.activeProject?.name || (isWebProduct ? 'BahAI Cloud' : 'bahAI')}
+                {isWebProduct ? 'BahAI Cloud' : (chat.activeProject?.name || 'bahAI')}
               </div>
               <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
                 {isWebProduct ? 'Cloud Chat' : `${settings.executionMode === 'local' ? 'Local' : 'Cloud'} Desktop`}
@@ -304,8 +304,8 @@ function AppContent() {
                   <Settings size={18} />
                 </button>
               )}
-              <button
-                onClick={() => {
+                <button
+                  onClick={() => {
                   if (chat.activeProject) chat.createConversation(chat.activeProject.id);
                 }}
                 className="p-2.5 rounded-lg transition-colors"

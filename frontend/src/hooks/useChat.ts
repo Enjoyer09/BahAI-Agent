@@ -66,7 +66,7 @@ function getDefaultConversationTitle(productMode?: Settings['productMode']): str
 }
 
 function getDefaultWorkspaceName(productMode?: Settings['productMode']): string {
-  return productMode === 'web_chat' ? 'BahAI Cloud' : 'bahAI Sandbox';
+  return productMode === 'web_chat' ? 'BahAI Cloud Session' : 'bahAI Sandbox';
 }
 
 function getWelcomeMessage(productMode?: Settings['productMode'], serverBacked = false): string {
