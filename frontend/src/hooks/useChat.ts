@@ -40,7 +40,6 @@ import {
   mergeApprovalDecisionIntoMemory,
   mergeEvidenceSummaryIntoMemory,
   mergeGuiCapabilitiesIntoMemory,
-  mergeHumanCheckpointIntoMemory,
   resolveActiveGuiSessionInMemory,
 } from '../lib/chatRuntime';
 import type { SendMessageContext } from '../store/chatService';
@@ -379,7 +378,8 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
     }
 
-    const activeConv = state.conversations.find(c => c.id === state.activeConvId) || null;
+    const convId = state.activeConvId;
+    const activeConv = state.conversations.find(c => c.id === convId) || null;
     const userMsg: Message = { id: generateId(), role: 'user', content: input, attachments, timestamp: Date.now() };
     const shouldAutoRenameConversation = activeConv && (
       !activeConv.title ||
