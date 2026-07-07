@@ -196,9 +196,9 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
 
         {/* Input container — pill shape */}
         <div
-          className="relative flex items-end rounded-3xl transition-all"
+          className="relative flex items-end rounded-3xl transition-all tahoe-glass"
           style={{
-            background: 'var(--bg-surface-alt)',
+            background: 'var(--glass-surface)',
             border: '1px solid var(--border)',
             padding: isMobile ? '9px 10px' : '12px 14px',
             borderRadius: isMobile ? '22px' : undefined,
@@ -210,11 +210,13 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
           {/* Attach button — left */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="rounded-full transition-colors shrink-0 flex items-center justify-center"
+            className="rounded-full transition-colors shrink-0 flex items-center justify-center tahoe-button"
             style={{
               color: 'var(--fg-muted)',
               width: isMobile ? '38px' : '44px',
               height: isMobile ? '38px' : '44px',
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04))',
+              border: '1px solid rgba(255,255,255,0.08)',
             }}
             title="Fayl əlavə et"
             aria-label="Attach file"
@@ -272,13 +274,13 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
               <button
                 onClick={toggleListening}
                 type="button"
-                className="rounded-full transition-all flex items-center justify-center shrink-0"
+                className="rounded-full transition-all flex items-center justify-center shrink-0 tahoe-button"
                 style={{
                   color: isListening ? '#a855f7' : 'var(--fg-muted)',
-                  background: isListening ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
+                  background: isListening ? 'rgba(168, 85, 247, 0.15)' : 'linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04))',
                   width: isMobile ? '36px' : '40px',
                   height: isMobile ? '36px' : '40px',
-                  border: isListening ? '1px solid rgba(168, 85, 247, 0.3)' : 'none',
+                  border: isListening ? '1px solid rgba(168, 85, 247, 0.3)' : '1px solid rgba(255,255,255,0.08)',
                   boxShadow: isListening ? '0 0 15px rgba(168, 85, 247, 0.4)' : 'none',
                   animation: isListening ? 'pulse-purple 1.5s infinite' : 'none',
                 }}
@@ -293,12 +295,13 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
               <button
                 onClick={onStop}
                 type="button"
-                className="rounded-full transition-colors shrink-0 flex items-center justify-center"
+                className="rounded-full transition-colors shrink-0 flex items-center justify-center tahoe-button"
                 style={{
                   background: 'rgba(239, 68, 68, 0.1)',
                   color: '#ef4444',
                   width: isMobile ? '38px' : '40px',
                   height: isMobile ? '38px' : '40px',
+                  border: '1px solid rgba(239, 68, 68, 0.18)',
                 }}
                 aria-label="Stop generation"
               >
@@ -309,13 +312,16 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                 onClick={handleSend}
                 disabled={!canSend}
                 type="button"
-                className="rounded-full transition-all shrink-0 flex items-center justify-center"
+                className="rounded-full transition-all shrink-0 flex items-center justify-center tahoe-button"
                 style={{
-                  background: canSend ? 'var(--color-accent)' : 'transparent',
+                  background: canSend
+                    ? 'linear-gradient(180deg, rgba(16, 163, 127, 0.95), rgba(16, 163, 127, 0.78))'
+                    : 'linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04))',
                   color: canSend ? 'white' : 'var(--fg-muted)',
                   cursor: canSend ? 'pointer' : 'default',
                   width: isMobile ? '38px' : '40px',
                   height: isMobile ? '38px' : '40px',
+                  border: canSend ? '1px solid rgba(16, 163, 127, 0.65)' : '1px solid rgba(255,255,255,0.08)',
                 }}
                 aria-label="Send message"
               >

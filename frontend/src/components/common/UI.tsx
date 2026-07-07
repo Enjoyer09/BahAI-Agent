@@ -41,9 +41,10 @@ const sizeStyles: Record<string, React.CSSProperties> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = 'secondary', size = 'md', loading, icon, children, style, disabled, ...props }, ref) => (
+  ({ variant = 'secondary', size = 'md', loading, icon, children, style, disabled, className = '', ...props }, ref) => (
     <button
       ref={ref}
+      className={variant !== 'ghost' ? `tahoe-button ${className}`.trim() : className}
       disabled={disabled || loading}
       style={{
         ...variantStyles[variant],
