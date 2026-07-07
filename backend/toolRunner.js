@@ -221,6 +221,32 @@ async function handleToolCall(toolCall, workingDirectory, user) {
         // (if configured via env) returns the best results. Falls back to DuckDuckGo.
         const query = String(args.query || '').trim();
         if (!query) return 'Axtarış sorğusu daxil edin.';
+        const lowerQuery = query.toLowerCase();
+        const isWeatherQuery = /\b(hava|weather|temperature|temp|derece|dərəcə)\b/i.test(lowerQuery);
+        const cityMatch = query.match(/\b(baku|bakı|baki|sumqayit|sumqayıt|ganja|gence|gəncə)\b/i);
+        const normalizedCity = cityMatch
+          ? ({
+              baku: 'Baku',
+              bakı: 'Baku',
+              baki: 'Baku',
+              sumqayit: 'Sumqayit',
+              sumqayıt: 'Sumqayit',
+              ganja: 'Ganja',
+              gence: 'Ganja',
+              gəncə: 'Ganja'
+            }[cityMatch[1].toLowerCase()] || 'Baku')
+          : null;
+
+        if (isWeatherQuery && normalizedCity) {
+          try {
+            const wttrUrl = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=%C+%t+%w+%h`;
+            const wttrRes = await fetch(wttrUrl, { timeout: 10000, headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
+            if (wttrRes.ok) {
+              const weatherLine = (await wttrRes.text()).trim();
+              if (weatherLine) return weatherLine;
+            }
+          } catch { /* weather fallback failed; continue to normal search */ }
+        }
 
         const googKey = process.env.GOOGLE_API_KEY || '';
         const googCx = process.env.GOOGLE_CSE_ID || '';
@@ -293,7 +319,16 @@ async function handleToolCall(toolCall, workingDirectory, user) {
           }
         } catch { /* ddg failed */ }
 
-        return `"${query}" üçün nəticə tapılmadı.\n\n📌 Axtarışı təkmilləşdirmək üçün:\n• Daha qısa və spesifik açar sözlər istifadə edin\n• _GOOGLE_API_KEY_ və _GOOGLE_CSE_ID_ env dəyişənlərini təyin edin (Google Custom Search üçün)\n• Birbaşa URL verilibsə browser_open ilə yoxlayın`;
+        const isSportsScheduleQuery = /\b(dünya çempionatı|world championship|oyunlar|games|fixture|schedule|match|matç)\b/i.test(lowerQuery);
+        if (isSportsScheduleQuery) {
+          return `Bu sorğu hələ kifayət qədər konkret deyil. Hansı dünya çempionatını nəzərdə tutduğunuzu yazın: məsələn futbol, voleybol, basketbol, şahmat və ya başqa turnir.`;
+        }
+
+        if (isWeatherQuery) {
+          return `Hazırda bu hava sorğusu üçün dəqiq nəticə çıxara bilmədim. Şəhərin adını bir az daha dəqiq yazın; məsələn: "Bakıda hava necədir?" və ya "Sumqayıtda hava necədir?"`;
+        }
+
+        return `"${query}" üçün dəqiq nəticə çıxara bilmədim. Sorğunu bir az daha konkret yazın və ya mövzunu daraldın.`;
       }
 
       case "web_fetch": {
