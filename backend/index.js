@@ -44,6 +44,7 @@ const approvalsRouter = require('./routes/approvals');
 // ==========================================
 const PORT = process.env.PORT || 3001;
 const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../sandbox'));
+const FRONTEND_DIST = path.resolve(__dirname, '../frontend/dist');
 // SEC-FIX: By default only the sandbox directory is allowed. Previously the entire
 // project root was included which let the AI agent read/write .env, node_modules,
 // backend/ and frontend/ source files. On cloud deployments ALLOWED_DIRECTORIES
@@ -95,6 +96,11 @@ const corsConfig = allowedOrigins.length > 0
 
 app.use(corsConfig);
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
+
+// ==========================================
+// Frontend Static App (Railway/Web)
+// ==========================================
+app.use(express.static(FRONTEND_DIST));
 
 // ==========================================
 // Helmet / CSP
@@ -227,6 +233,13 @@ app.use('/api', miscRouter);
 
 // Approvals — POST /api/approvals/:id, POST /api/checkpoints/:id, GET /api/interactions
 app.use('/api', injectChatRuntime, approvalsRouter);
+
+// SPA fallback for web product routes
+app.get(['/','/chat','/login','/settings','/projects','/conversations/:id'], function(req, res, next) {
+  res.sendFile(path.join(FRONTEND_DIST, 'index.html'), function(err) {
+    if (err) next();
+  });
+});
 
 // ==========================================
 // 404 Handler
