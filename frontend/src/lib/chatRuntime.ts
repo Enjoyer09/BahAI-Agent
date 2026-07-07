@@ -8,6 +8,28 @@ export function normalizeAssistantText(content: string): string {
   return match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
 }
 
+export function chooseAssistantContent(streamedRaw: string, finalRaw: string): string {
+  const finalContent = normalizeAssistantText(finalRaw || '');
+  const streamedContent = normalizeAssistantText(streamedRaw || '');
+  const finalLooksTruncated = Boolean(
+    streamedContent &&
+    finalContent &&
+    streamedContent.length > finalContent.length + 40 &&
+    (
+      finalContent.length < 160 ||
+      streamedContent.startsWith(finalContent) ||
+      finalContent.endsWith(':') ||
+      finalContent.endsWith('...') ||
+      /^(\*\*Problem\*\*|\*\*Findings\*\*)/i.test(finalContent)
+    )
+  );
+  if (finalLooksTruncated) return streamedContent;
+  if (streamedContent.length > finalContent.length && finalContent.length < 120) {
+    return streamedContent;
+  }
+  return finalContent;
+}
+
 export function normalizeUiErrorMessage(content: string): string {
   const text = String(content || '').trim();
   if (!text) return 'Naməlum xəta baş verdi.';

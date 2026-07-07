@@ -29,6 +29,7 @@ import {
 } from '../lib/api';
 import {
   normalizeAssistantText,
+  chooseAssistantContent,
   normalizeUiErrorMessage,
   extractRepoProfileFromToolResult,
   mergeRepoProfileIntoMemory,
@@ -669,25 +670,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
             return;
           }
           if (event.type === 'assistant_message') {
-            const finalContent = normalizeAssistantText(event.message.content || '');
-            const streamedContent = normalizeAssistantText(streamBufferRef.current || '');
-            const finalLooksTruncated = Boolean(
-              streamedContent &&
-              finalContent &&
-              streamedContent.length > finalContent.length + 40 &&
-              (
-                finalContent.length < 160 ||
-                streamedContent.startsWith(finalContent) ||
-                finalContent.endsWith(':') ||
-                finalContent.endsWith('...') ||
-                /^(\*\*Problem\*\*|\*\*Findings\*\*)/i.test(finalContent)
-              )
-            );
-            const content = finalLooksTruncated
-              ? streamedContent
-              : (streamedContent.length > finalContent.length && finalContent.length < 120
-                  ? streamedContent
-                  : finalContent);
+            const content = chooseAssistantContent(streamBufferRef.current || '', event.message.content || '');
             const assistantMsg: Message = {
               id: generateId(),
               role: 'assistant',

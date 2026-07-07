@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { mergeGuiObservationIntoMemory, mergeHumanCheckpointIntoMemory, resolveActiveGuiSessionInMemory } from './chatRuntime';
+import {
+  chooseAssistantContent,
+  mergeGuiObservationIntoMemory,
+  mergeHumanCheckpointIntoMemory,
+  resolveActiveGuiSessionInMemory
+} from './chatRuntime';
 
 describe('active GUI session memory', () => {
   it('stores checkpoint session as pending login', () => {
@@ -46,5 +51,23 @@ describe('active GUI session memory', () => {
       }
     }, 'cancel');
     expect((memory as any).activeGuiSession.status).toBe('closed');
+  });
+
+  it('keeps the longer streamed answer when final content looks truncated', () => {
+    const streamed = 'Bəli, Azərbaycan Respublikasının Vergi Məcəlləsi haqqında ümumi məlumata sahibəm. Vergi Məcəlləsi 2000-ci ildə qəbul edilib və iki əsas hissədən ibarətdir: Ümumi hissə və Xüsusi hissə. Əsas vergi növləri bunlardır.';
+    const final = 'Bəli, Azərbaycan Respublikasının Vergi Məcəlləsi haqqında ümumi məlumata sahibəm. Əsas vergi növləri:';
+    expect(chooseAssistantContent(streamed, final)).toBe(streamed);
+  });
+
+  it('keeps the streamed answer when final text is report-shaped and shorter', () => {
+    const streamed = 'Laptopmarket.az üzrə ilk nəticələrə görə ən ucuz laptop qiymətini dəqiqləşdirmək üçün public nəticələr topladım və aşağıdakı variantlar görünür.';
+    const final = '**Problem**\n- Laptopmarket.az üzrə ilk nəticələr';
+    expect(chooseAssistantContent(streamed, final)).toBe(streamed);
+  });
+
+  it('prefers the final answer when it is complete and longer', () => {
+    const streamed = 'Bakıda hava';
+    const final = 'Bu gün Bakı üçün ən dəqiq nəticəni web axtarışdan yoxlayıb sizə temperatur intervalını deyə bilərəm.';
+    expect(chooseAssistantContent(streamed, final)).toBe(final);
   });
 });

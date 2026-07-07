@@ -297,6 +297,13 @@ function isAuditStyleRequest(text = '') {
   return /(audit|review|kodu yoxla|yoxla proqrami|proqrami audit|xəta|sehf|səhv|bug|risk|tapıntı|finding)/i.test(String(text));
 }
 
+function isCurrentFactsOrPublicWebsiteRequest(text = '') {
+  const value = String(text || '').toLowerCase();
+  const asksCurrentFact = /\b(bugün|bugun|bu gün|today|hazırda|hazirda|indi|current|latest|son|neçə|nece dərəcə|nece derece|qiymət|qiymet|hava|weather|temperature|stock|price)\b/i.test(value);
+  const asksPublicWebsiteFact = /\b(site|sayt|website|web sayt|websayt|domain|laptopmarket|wix|trendyol|kontakt|baku electronics)\b/i.test(value);
+  return asksCurrentFact || asksPublicWebsiteFact;
+}
+
 function flattenResponseJsonText(text = '') {
   if (typeof text !== 'string') return text;
   const match = text.trim().match(/^\s*\{\s*"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*\}\s*$/);
@@ -4004,6 +4011,7 @@ app.post('/api/chat', async (req, res) => {
       /qwen|ollama|llama|local|nemotron/i.test(effectiveModel);
 
     const auditStyleRequest = isAuditStyleRequest(latestUserText);
+    const currentFactsRequest = isCurrentFactsOrPublicWebsiteRequest(latestUserText);
 
     const webChatNeedsDesktopRedirect =
       isWebChatProduct &&
@@ -4037,6 +4045,18 @@ CAVAB TƏRZİ:
 - dəqiq
 - səmimi, amma peşəkar
 - nəticə yönümlü`;
+
+    if (isWebChatProduct && currentFactsRequest) {
+      sysPrompt += `
+
+WEB FACT MODE:
+- Bu sorğu current/public-web fakt sorğusudur.
+- Yaddaşdan təxmin etmə.
+- Əvvəl \`web_search\` çağır.
+- Əgər konkret sayt və ya məhsul qiyməti soruşulursa, sorğunu domain və məhsul niyyəti ilə ver (məsələn site:domain.tld ...).
+- \`web_search\` nəticələri kifayət etmirsə uyğun public URL üçün \`web_fetch\` et.
+- Browser automation edə bilmədiyini yalnız \`web_search\` və \`web_fetch\` fakt toplamaq üçün kifayət etmədikdən sonra de.`;
+    }
 
     if (webChatNeedsDesktopRedirect) {
       sysPrompt += `
@@ -4146,6 +4166,7 @@ QAYDALAR:
 4. JSON ilə user-facing cavab vermə.
 5. Chat-first davran: izah, plan, snippet və reasoning ver.
 6. Bugünkü hava, son qiymət, news və public website faktları üçün \`web_search\` və lazım olsa \`web_fetch\` istifadə et; "canlı məlumata çıxışım yoxdur" demə, əgər bu alətlər kifayət edirsə.
+7. Məsələn istifadəçi "laptopmarket.az saytından ən ucuz laptop qiymətini tap" deyirsə, əvvəl \`web_search\` ilə domain üzrə fakt topla; birbaşa "dinamik saytdır, edə bilmirəm" cavabı vermə.
 
 CAVAB FORMATI:
 - Tool çağırışı üçün: tək JSON blok.
