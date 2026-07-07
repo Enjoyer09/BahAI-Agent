@@ -84,4 +84,25 @@ describe('chat queue runtime', () => {
 
     await expect(queuedPromise).rejects.toThrow('Client disconnected while waiting in queue');
   });
+
+  it('superseding one conversation frees the slot for another queued conversation', async () => {
+    const runtime = createChatRuntime({
+      maxActiveChatTotal: 1,
+      maxActiveChatPerUser: 1,
+      chatQueueTimeoutMs: 200,
+      chatSlotMaxAgeMs: 10000
+    });
+
+    const firstReq = createFakeReq();
+    const secondReq = createFakeReq();
+    const abortSpy = vi.fn();
+
+    await runtime.acquireChatSlotQueued('u1', 'conv-a', firstReq);
+    runtime.setConversationAbort('u1', 'conv-a', abortSpy);
+    const queuedPromise = runtime.acquireChatSlotQueued('u1', 'conv-b', secondReq);
+
+    expect(runtime.supersedeConversation('u1', 'conv-a')).toBe(true);
+    expect(abortSpy).toHaveBeenCalledWith('superseded');
+    await expect(queuedPromise).resolves.toBe(true);
+  });
 });

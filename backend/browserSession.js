@@ -249,7 +249,8 @@ async function getSession(sessionId = 'default', options = {}) {
         if (!isCdpContextManagementError(cdpError)) {
           throw cdpError;
         }
-        if (preferRealChrome) {
+        const fallbackChromePath = executablePath || findInstalledChromePath();
+        if (!fallbackChromePath) {
           throw createBrowserLaunchError(
             'real_chrome_required',
             cdpError.message,
@@ -261,10 +262,6 @@ async function getSession(sessionId = 'default', options = {}) {
               userDataDir
             }
           );
-        }
-        const fallbackChromePath = executablePath || findInstalledChromePath();
-        if (!fallbackChromePath) {
-          throw cdpError;
         }
         launchWarning = [
           launchWarning,

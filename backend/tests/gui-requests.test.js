@@ -44,6 +44,21 @@ describe('GUI request classifiers', () => {
       isGuiContinuationRequest('ASUS gaming laptop axtar. Workflow: gui.')
     ).toBe(true);
   });
+
+  it('detects price-oriented shopping follow-up requests as gui continuation', () => {
+    expect(
+      isGuiContinuationRequest('ən ucuz dell laptopunu tap')
+    ).toBe(true);
+    expect(
+      isGuiContinuationRequest('en ucuz dell laptopunu axtar tap')
+    ).toBe(true);
+  });
+
+  it('does not treat fresh URL opens as continuation', () => {
+    expect(
+      isGuiContinuationRequest('GUI agent chrome da laptopmarket.az saytını aç')
+    ).toBe(false);
+  });
 });
 
 describe('buildGuiBrowserOpenArgs', () => {

@@ -3668,11 +3668,23 @@ app.post('/api/chat', async (req, res) => {
       ? [...messages].reverse().find((m) => m.role === 'user')
       : null;
     const latestUserTextForQueue = String(lastUserMsgForQueue?.content || '');
-    const isGuiFastPathRequest = workflow === 'gui' && (
-      isGuiLoginCheckpointRequest(latestUserTextForQueue) ||
-      isGuiLoginResumeRequest(latestUserTextForQueue) ||
-      isGuiObserveSelfTestRequest(latestUserTextForQueue)
-    );
+    const isGuiFastPathRequest =
+      (
+        workflow === 'gui' && (
+          isGuiLoginCheckpointRequest(latestUserTextForQueue) ||
+          isGuiLoginResumeRequest(latestUserTextForQueue) ||
+          isGuiObserveSelfTestRequest(latestUserTextForQueue) ||
+          isGuiOpenAndAwaitRequest(latestUserTextForQueue) ||
+          isGuiContinuationRequest(latestUserTextForQueue)
+        )
+      ) ||
+      (
+        workflow === 'computer_use' && (
+          isComputerUseOpenRequest(latestUserTextForQueue, workflow) ||
+          isComputerUseContinuationRequest(latestUserTextForQueue, workflow)
+        )
+      ) ||
+      isSeoGuiCheckpointRequest(latestUserTextForQueue, workflow);
 
     let slotAcquired = false;
     if (!isGuiFastPathRequest) {
@@ -3999,6 +4011,8 @@ MƏHSUL QAYDASI:
 - Bu səth chat-first cloud assistentdir, tam lokal code-operator deyil.
 - Cavabların praktik, qısa və aydın olsun.
 - Lazım olsa read-only alətlərlə fakt topla, amma özünü fayl dəyişən local operator kimi təqdim etmə.
+- Son məlumat, bugünkü hava, qiymət, xəbər, canlı servis və ya public website faktı soruşulursa bunu statik biliklə uydurma; \`web_search\` və lazım olsa \`web_fetch\` ilə yoxla.
+- Public website barədə araşdırma istənəndə "browser automation aktiv deyil" deməyə tələsmə; əvvəl \`web_search\` və \`web_fetch\` ilə əldə edilə bilən faktları topla.
 - İstifadəçi repo və ya layihə barədə soruşursa, əvvəl oxu, sonra danış. Uydurma finding yazma.
 - İstifadəçi coding sualı verirsə, izah, plan, snippet, refactor təklifi və risk analizi verə bilərsən.
 - Desktop-only əməliyyatlar etmir: GUI/browser idarəsi, terminal icrası, git push/commit, lokal fayl yazma, qovluq seçimi, server başlatma.
@@ -4118,6 +4132,7 @@ QAYDALAR:
 3. Tool təlimatını istifadəçiyə yazma; lazım olanda tool-u özün çağır.
 4. JSON ilə user-facing cavab vermə.
 5. Chat-first davran: izah, plan, snippet və reasoning ver.
+6. Bugünkü hava, son qiymət, news və public website faktları üçün \`web_search\` və lazım olsa \`web_fetch\` istifadə et; "canlı məlumata çıxışım yoxdur" demə, əgər bu alətlər kifayət edirsə.
 
 CAVAB FORMATI:
 - Tool çağırışı üçün: tək JSON blok.

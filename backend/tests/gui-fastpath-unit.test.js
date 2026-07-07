@@ -147,6 +147,35 @@ describe('GUI fastpath unit', () => {
     expect(res.chunks.join('\n').includes('eyni browser sessiyası açıq qalır')).toBe(true);
   });
 
+  it('preserves the same gui session for shopping-style follow-up prompts', async () => {
+    const res = createFakeRes();
+    const handleToolCall = vi
+      .fn()
+      .mockResolvedValueOnce('Pressed Meta+L')
+      .mockResolvedValueOnce('Typed into: body')
+      .mockResolvedValueOnce('Pressed Enter')
+      .mockResolvedValueOnce('{"observation":{"sessionId":"gui-live","title":"Dell results","url":"https://laptopmarket.az/search?q=dell"}}');
+
+    await handleGuiContinuation({
+      res,
+      orchestration: { workflow: 'gui', mode: 'manager_direct', agents: ['Solo Agent'], routing: {}, enabled: false },
+      runManager: { snapshot: () => ({ currentRole: 'Solo Agent', phases: [] }) },
+      resolvedWD: '/tmp',
+      reqUser: { id: 'u1' },
+      handleToolCall,
+      normalizeUserFacingError: (value) => value,
+      sessionId: 'gui-live',
+      promptText: 'en ucuz dell laptopunu axtar tap'
+    });
+
+    expect(handleToolCall).toHaveBeenCalledTimes(4);
+    for (const call of handleToolCall.mock.calls) {
+      const parsed = JSON.parse(call[0].function.arguments);
+      expect(parsed.sessionId).toBe('gui-live');
+    }
+    expect(res.chunks.join('\n')).toContain('Aktiv browser sessiyasında davam edirəm');
+  });
+
   it('retries generic open flow with persistent browser when cdp is unreachable', async () => {
     const res = createFakeRes();
     const handleToolCall = vi
@@ -203,5 +232,29 @@ describe('GUI fastpath unit', () => {
     expect(parsed.persistent).toBe(true);
     expect(parsed.browserChannel).toBe('chrome');
     expect(parsed.cdpUrl).toBeUndefined();
+  });
+
+  it('stops after browser launch failure and does not run gui_observe', async () => {
+    const res = createFakeRes();
+    const handleToolCall = vi
+      .fn()
+      .mockResolvedValueOnce('Browser open error: No installed Chrome found for CDP mode\nCode: chrome_missing');
+
+    await handleGuiOpenAndAwaitInstruction({
+      res,
+      orchestration: { workflow: 'gui', mode: 'manager_direct', agents: ['Solo Agent'], routing: {}, enabled: false },
+      runManager: { snapshot: () => ({ currentRole: 'Solo Agent', phases: [] }) },
+      resolvedWD: '/tmp',
+      reqUser: { id: 'u1' },
+      handleToolCall,
+      normalizeUserFacingError: (value) => value,
+      promptText: 'GUI agent chrome da laptopmarket.az saytini ac. Workflow: gui.',
+      browserOpenArgs: { url: 'https://laptopmarket.az', sessionId: 'gui-live', visible: true, cdpUrl: 'http://127.0.0.1:9222' }
+    });
+
+    expect(handleToolCall).toHaveBeenCalledTimes(1);
+    const text = res.chunks.join('\n');
+    expect(text).toContain('Saytı aça bilmədim');
+    expect(text).not.toContain('Sayt açıldı və sessiya aktivdir');
   });
 });
