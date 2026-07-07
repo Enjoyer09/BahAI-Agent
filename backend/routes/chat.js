@@ -49,6 +49,16 @@ const {
   mapMessagesToResponsesInput, mapToolsToResponsesTools
 } = require('../helpers');
 
+function getDirectWebChatReply(latestUserText = '') {
+  const text = String(latestUserText || '').trim();
+  const lower = text.toLowerCase();
+  const isSportsScheduleQuery = /\b(dünya çempionatı|world championship|oyunlar|games|fixture|schedule|match|matç)\b/i.test(lower);
+  if (isSportsScheduleQuery) {
+    return 'Hansı dünya çempionatını nəzərdə tutduğunuzu dəqiqləşdirin: futbol, voleybol, basketbol, şahmat və ya başqa turnir? Turniri yazın, mən qısa və dəqiq davam edim.';
+  }
+  return '';
+}
+
 async function readLocalDb() {
   try {
     const fs = require('fs/promises');
@@ -204,6 +214,16 @@ router.post('/', async (req, res) => {
   // --- Main Chat Processing ---
   const TOOLS = getToolDefinitions();
   const db = require('../db');
+  const directWebReply = productMode === 'web_chat' ? getDirectWebChatReply(latestUserText) : '';
+
+  if (directWebReply) {
+    initSse(res);
+    writeSse(res, {
+      type: 'assistant_message',
+      message: { role: 'assistant', content: directWebReply }
+    });
+    return res.end();
+  }
 
   // Build system message
   const workspaceHint = resolvedWD ? `Cari iş qovluğu: ${resolvedWD}` : '';
@@ -304,7 +324,7 @@ ${generateToolsSystemPrompt(TOOLS)}`;
         buildOpenAIClient, normalizeMessagesForModel,
         mapMessagesToResponsesInput, mapToolsToResponsesTools,
         isResponsesSchemaMismatchError, buildDeepSeekRecoveryMessages,
-        llmTimeoutMs: LLM_TIMEOUT_MS,
+        llmTimeoutMs: productMode === 'web_chat' ? LLM_TIMEOUT_CHAT : LLM_TIMEOUT_MS,
         handleToolCall, normalizeToolName, extractTextToolCalls,
         buildToolCallCacheKey, flattenResponseJsonText,
         normalizeFinalAssistantReport, isSensitiveTool,
