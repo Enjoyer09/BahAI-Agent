@@ -79,7 +79,7 @@ export async function sendChatMessage(
   baseUrl: string,
   model: string,
   workingDirectory: string,
-  options: { safeMode: boolean; projectId?: string | null; conversationId?: string | null; orchestrationMode?: boolean; workflow?: string; guiBrowserMode?: string; guiBrowserPath?: string; guiBrowserCdpUrl?: string },
+  options: { safeMode: boolean; projectId?: string | null; conversationId?: string | null; orchestrationMode?: boolean; workflow?: string; guiBrowserMode?: string; guiBrowserPath?: string; guiBrowserCdpUrl?: string; productMode?: 'web_chat' | 'desktop_code'; executionMode?: 'cloud' | 'local' },
   onEvent: (event: SSEEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
@@ -88,6 +88,8 @@ export async function sendChatMessage(
     apiKey,
     baseUrl,
     model,
+    productMode: options.productMode,
+    executionMode: options.executionMode,
     workingDirectory,
     safeMode: options.safeMode,
     projectId: options.projectId || undefined,

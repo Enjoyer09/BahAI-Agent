@@ -267,6 +267,10 @@ function parseProviderPoolFromEnv() {
 function looksLikeOllamaModel(modelId) {
   if (!modelId) return false;
   if (modelId.includes('/')) return false; // openrouter style
+  if (/^gpt-/i.test(modelId)) return false;
+  if (/^o[134]/i.test(modelId)) return false;
+  if (/^claude/i.test(modelId)) return false;
+  if (/^gemini/i.test(modelId)) return false;
   return modelId.includes(':') || /^(gemma|qwen|llama|deepseek|mistral|phi|codellama)/i.test(modelId);
 }
 
@@ -3582,6 +3586,8 @@ app.post('/api/chat', async (req, res) => {
       model,
       workingDirectory,
       baseUrl,
+      productMode = 'desktop_code',
+      executionMode = 'cloud',
       projectId,
       conversationId,
       safeMode = true,
@@ -3665,9 +3671,24 @@ app.post('/api/chat', async (req, res) => {
        await ensureDir(resolvedWD);
     }
 
+    const requestedProductMode = productMode === 'web_chat' ? 'web_chat' : 'desktop_code';
+    const requestedExecutionMode = executionMode === 'local' ? 'local' : 'cloud';
+    const effectiveExecutionMode = requestedProductMode === 'web_chat' ? 'cloud' : requestedExecutionMode;
+
     const frontendApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
     const frontendBaseUrl = (typeof baseUrl === 'string' ? baseUrl.trim() : '') || process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1";
     const frontendModel = model || process.env.OPENAI_MODEL || 'qwen/qwen3-coder:free';
+    const policyBaseUrl = requestedProductMode === 'web_chat'
+      ? (process.env.OPENAI_BASE_URL || frontendBaseUrl)
+      : (effectiveExecutionMode === 'local' ? (process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1') : frontendBaseUrl);
+    const policyModel = requestedProductMode === 'web_chat'
+      ? (process.env.OPENAI_MODEL || frontendModel || 'auto')
+      : (effectiveExecutionMode === 'local'
+          ? (looksLikeOllamaModel(frontendModel) ? frontendModel : (process.env.DESKTOP_LOCAL_DEFAULT_MODEL || process.env.OLLAMA_DEFAULT_MODEL || 'gemma4:12b'))
+          : frontendModel);
+    const policyApiKey = requestedProductMode === 'web_chat'
+      ? (process.env.OPENAI_API_KEY || frontendApiKey)
+      : (effectiveExecutionMode === 'local' ? 'ollama' : frontendApiKey);
 
     // FUNC-FIX: classify the LATEST user message for the new "auto" model so
     // we can pick fast/local vs smart/cloud automatically.
@@ -3708,8 +3729,15 @@ app.post('/api/chat', async (req, res) => {
     }
     const hasActiveGuiSession = Boolean(projectMemory?.activeGuiSession?.sessionId);
     const shouldForceGuiContinuation = hasActiveGuiSession && isGuiContinuationRequest(latestUserText);
-    const effectiveWorkflow = (shouldForceGuiResume || shouldForceGuiContinuation) ? 'gui' : workflow;
-    const earlyOrchestration = resolveOrchestrationConfig(orchestrationMode, effectiveWorkflow, latestUserText);
+    const requestedWorkflow = requestedProductMode === 'web_chat'
+      ? 'quick'
+      : workflow;
+    const requestedOrchestrationMode = requestedProductMode === 'web_chat' ? false : orchestrationMode;
+    const effectiveWorkflow = (shouldForceGuiResume || shouldForceGuiContinuation) ? 'gui' : requestedWorkflow;
+    const earlyOrchestration = resolveOrchestrationConfig(requestedOrchestrationMode, effectiveWorkflow, latestUserText);
+    if (requestedProductMode === 'web_chat') {
+      earlyOrchestration.toolProfile = 'web-chat';
+    }
 
     if (earlyOrchestration.workflow === 'gui' && isGuiLoginResumeRequest(latestUserText)) {
       const runManager = createRunManager(earlyOrchestration, crypto.randomUUID());
@@ -3847,10 +3875,12 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const providerCandidates = buildProviderCandidates({
-      frontendApiKey,
-      frontendBaseUrl,
-      frontendModel,
+      frontendApiKey: policyApiKey,
+      frontendBaseUrl: policyBaseUrl,
+      frontendModel: policyModel,
       autoIntent,
+      productMode: requestedProductMode,
+      executionMode: effectiveExecutionMode,
       env: process.env,
       parseProviderPoolFromEnv,
       looksLikeOllamaModel
@@ -4002,7 +4032,14 @@ AUDIT REJİMİ:
     let fullSysPrompt = sysPrompt;
       
     const hasAttachmentInRequest = Array.isArray(messages) && messages.some((m) => Array.isArray(m?.attachments) && m.attachments.length > 0);
-    const orchestration = resolveOrchestrationConfig(orchestrationMode, workflow, latestUserText);
+    const orchestration = resolveOrchestrationConfig(requestedOrchestrationMode, requestedWorkflow, latestUserText);
+    if (requestedProductMode === 'web_chat') {
+      orchestration.toolProfile = 'web-chat';
+      orchestration.enabled = false;
+      orchestration.mode = 'manager_direct';
+      orchestration.workflow = 'quick';
+      orchestration.agents = ['Solo Agent'];
+    }
     const entryPath = classifyEntryPath({
       latestUserText,
       workflow,

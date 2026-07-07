@@ -90,6 +90,8 @@ function buildProviderCandidates({
   frontendBaseUrl,
   frontendModel,
   autoIntent,
+  productMode = 'desktop_code',
+  executionMode = 'cloud',
   env,
   parseProviderPoolFromEnv,
   looksLikeOllamaModel
@@ -98,24 +100,44 @@ function buildProviderCandidates({
 
   const OLLAMA_BASE = env.OLLAMA_BASE_URL || 'http://localhost:11434/v1';
   const normalizedFrontendBaseUrl = normalizeProviderBaseUrl(frontendBaseUrl);
+  const defaultLocalModel = env.DESKTOP_LOCAL_DEFAULT_MODEL || env.OLLAMA_DEFAULT_MODEL || 'gemma4:12b';
+  const cloudOnly = productMode === 'web_chat' || executionMode === 'cloud';
+  const localOnly = productMode === 'desktop_code' && executionMode === 'local';
 
-  if (frontendModel === 'auto') {
+  if (localOnly) {
+    const chosenLocalModel = looksLikeOllamaModel(frontendModel) ? frontendModel : defaultLocalModel;
+    list.push({
+      id: 'desktop_local_primary',
+      apiKey: 'ollama',
+      baseURL: OLLAMA_BASE,
+      model: chosenLocalModel,
+      wireApi: 'chat_completions'
+    });
+  }
+
+  if (!localOnly && frontendModel === 'auto') {
     const cloudKey = frontendApiKey || env.OPENAI_API_KEY || '';
-    const cloudBase = normalizedFrontendBaseUrl || env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+    const normalizedEnvBase = normalizeProviderBaseUrl(env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1');
+    const frontendLooksLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));
+    const cloudBase = (cloudOnly && frontendLooksLocal)
+      ? normalizedEnvBase
+      : (normalizedFrontendBaseUrl || normalizedEnvBase);
     const fastLocal = env.AUTO_FAST_MODEL || 'qwen2.5-coder:7b';
     const smartCloud = env.AUTO_SMART_MODEL || 'anthropic/claude-sonnet-4.5';
 
     const localProvider = { id: 'auto_ollama_fast', apiKey: 'ollama', baseURL: OLLAMA_BASE, model: fastLocal };
     const cloudProvider = cloudKey ? { id: 'auto_cloud_smart', apiKey: cloudKey, baseURL: cloudBase, model: smartCloud, wireApi: detectWireApi(cloudBase) } : null;
 
-    if (autoIntent === 'smart' && cloudProvider) {
+    if (cloudOnly) {
+      if (cloudProvider) list.push(cloudProvider);
+    } else if (autoIntent === 'smart' && cloudProvider) {
       list.push(cloudProvider);
       list.push(localProvider);
     } else {
       list.push(localProvider);
       if (cloudProvider) list.push(cloudProvider);
     }
-  } else if (frontendModel && looksLikeOllamaModel(frontendModel)) {
+  } else if (!localOnly && frontendModel && looksLikeOllamaModel(frontendModel) && !cloudOnly) {
     list.push({
       id: 'local_ollama_auto',
       apiKey: 'ollama',
@@ -125,7 +147,7 @@ function buildProviderCandidates({
     });
   }
 
-  if (frontendApiKey && frontendBaseUrl && frontendModel && frontendModel !== 'auto') {
+  if (!localOnly && frontendApiKey && frontendBaseUrl && frontendModel && frontendModel !== 'auto') {
     list.push({
       id: 'frontend',
       apiKey: frontendApiKey,
@@ -136,13 +158,23 @@ function buildProviderCandidates({
   }
 
   for (const provider of parseProviderPoolFromEnv()) {
-    list.push(provider);
+    const looksLocalBase = /localhost|127\.0\.0\.1|11434|1234/i.test(String(provider.baseURL || ''));
+    if (localOnly && looksLocalBase) {
+      list.push(provider);
+      continue;
+    }
+    if (cloudOnly && looksLocalBase) {
+      continue;
+    }
+    if (!localOnly) {
+      list.push(provider);
+    }
   }
 
   const envApiKey = env.OPENAI_API_KEY || env.NVIDIA_API_KEY || '';
   const envBase = env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
   const envModel = env.OPENAI_MODEL || 'qwen/qwen3-coder:free';
-  if (envApiKey && frontendModel !== 'auto') {
+  if (!localOnly && envApiKey && frontendModel !== 'auto') {
     list.push({
       id: env.OPENAI_API_KEY ? 'env_openai' : 'env_nvidia',
       apiKey: envApiKey,

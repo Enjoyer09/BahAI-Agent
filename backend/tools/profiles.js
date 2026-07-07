@@ -51,6 +51,10 @@ const REVIEWER_TOOLS = Array.from(new Set([
   'run_tests'
 ]));
 
+const WEB_CHAT_TOOLS = Array.from(new Set([
+  ...READ_ONLY_TOOLS
+]));
+
 const TOOL_PROFILES = {
   solo: ALL_TOOLS,
   default: ALL_TOOLS,
@@ -59,7 +63,8 @@ const TOOL_PROFILES = {
   audit: ALL_TOOLS,
   coding: ALL_TOOLS,
   'review-only': ALL_TOOLS,
-  'desktop-local': ALL_TOOLS
+  'desktop-local': ALL_TOOLS,
+  'web-chat': WEB_CHAT_TOOLS
 };
 
 const ROLE_TOOL_PROFILES = {
@@ -98,8 +103,9 @@ function getToolsForProfile(profileName = 'default') {
 }
 
 function getToolsForRole(roleName = 'Solo Agent', fallbackProfile = 'default') {
-  const allowedToolNames = ROLE_TOOL_PROFILES[roleName] || getToolProfile(fallbackProfile);
-  const allowed = new Set(allowedToolNames);
+  const roleTools = ROLE_TOOL_PROFILES[roleName] || ALL_TOOLS;
+  const profileTools = getToolProfile(fallbackProfile);
+  const allowed = new Set(roleTools.filter((toolName) => profileTools.includes(toolName)));
   return getToolDefinitions().filter((tool) => allowed.has(tool.function.name));
 }
 

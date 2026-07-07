@@ -5,9 +5,26 @@ Repo: `/Users/macbookair/Documents/GitHub/BahAI-Agent`
 
 ## Mission
 
-BahAI is being upgraded from a chat/code helper into an orchestral coding agent with browser-backed GUI/Computer Use capabilities. The user prefers direct implementation and usually asks for the strongest next step. Keep answers concise, implement first when the direction is clear, and avoid fake audit/findings without reading files.
+BahAI is being split into a dual-product shape:
+
+- `BahAI Cloud`: hosted web, chat-first, cloud-only routing
+- `BahAI Desktop`: desktop code agent with `Cloud / Local` execution choice
+
+The user prefers direct implementation and usually asks for the strongest next step. Keep answers concise, implement first when the direction is clear, and avoid fake audit/findings without reading files.
 
 ## Current Status
+
+Product split work is now in progress, not just planned.
+
+- Frontend settings/chat surface now carries `productMode` and `executionMode`.
+- Web UI presents itself as `BahAI Cloud`.
+- Desktop UI presents itself as `BahAI Desktop` and exposes `Cloud / Local`.
+- Chat input model picker was removed from the main surface.
+- Backend provider routing now respects:
+  - `web_chat` => cloud-only provider candidates
+  - `desktop_code + local` => local-only Ollama-style candidates
+  - `desktop_code + cloud` => cloud-oriented candidates
+- Web requests attempting `gui`, `computer_use`, or `seo_gui` are downgraded to a safer chat workflow path.
 
 P0/P1 orchestration hardening is mostly complete. BahAI now has:
 

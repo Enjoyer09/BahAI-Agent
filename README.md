@@ -1,11 +1,25 @@
 # BahAI Agent
 
-BahAI desktop-first AI coding agent-dir. Layihə təkcə chat assistant deyil, həm də:
+BahAI iki məhsul xətti üzrə formalaşır:
+
+- `BahAI Cloud`
+  hosted web təcrübəsi, hazırda Railway-də işləyir və chat-first cloud assistant kimi mövqelənir
+- `BahAI Desktop`
+  Electron app, code-agent-first təcrübədir və `Cloud / Local` execution source ilə işləyir
+
+Layihə təkcə chat assistant deyil, həm də:
 
 - orchestral multi-role coding flow
 - browser-backed GUI agent
 - local desktop Electron app
 - project memory, approvals, diff preview, terminal və browser artifact-ləri
+
+## Məhsul istiqaməti
+
+- Web səthində model/provider seçimi gizlidir
+- Desktop-da user yalnız execution source seçir: `Cloud` və ya `Local`
+- Cloud routing üçün arxa planda provider orchestration istifadə olunur
+- Local routing üçün desktop local model router əsas rol oynayır
 
 ## Əsas hissələr
 
@@ -100,5 +114,22 @@ npm run check:harness
   əvvəlki inkişaf mərhələlərinin qeydləri
 - `AUDIT_REPORT.md`
   əvvəlki audit snapshot-larından biri
+
+## Freebuff auto-start
+
+BahAI acilanda Freebuff2API proxy-ni arxa fonda qaldirmaq ucun startup script bunu avtomatik yoxlayir.
+
+Lazim olan env:
+
+- `FREEBUFF_AUTO_START=true`
+- `FREEBUFF_BASE_URL=http://127.0.0.1:8080/v1`
+- `FREEBUFF_START_CMD="..."`  - Freebuff2API-ni qaldiran komanda
+
+Qeyd:
+
+- Bu deyerleri `.env` ve ya `.env.local` daxilinde saxlaya bilersen; startup script onlarin ikisini de avtomatik oxuyur.
+- Proxy artiq isleyirse BahAI ona toxunmur.
+- `FREEBUFF_START_CMD` verilmeyibse BahAI normal acilir, sadece Freebuff skip olunur.
+- Log fayli adeten `${TMPDIR:-/tmp}/bahai-agent/freebuff.log` olur.
 
 Yeni işə başlayan agent və ya developer üçün əsas istiqamət yenə də `README.md` + `ARCHITECTURE.md` + `memory/CODE_AGENT_HANDOFF.md` üçlüyüdür.

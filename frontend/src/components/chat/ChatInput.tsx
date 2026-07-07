@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Square, Paperclip, X, Plus, ChevronDown, Mic, MicOff, Shield, ShieldOff } from 'lucide-react';
+import { Send, Square, Paperclip, X, Plus, Mic, MicOff, Shield, ShieldOff } from 'lucide-react';
 import type { Attachment } from '../../lib/types';
-import { MODELS } from '../../lib/constants';
 
 interface Props {
   onSend: (text: string, attachments?: Attachment[]) => void;
@@ -10,20 +9,16 @@ interface Props {
   blockedByActionCenter?: boolean;
   safeMode?: boolean;
   onSafeModeToggle?: () => void;
-  model?: string;
-  onModelChange?: (model: string) => void;
   isMobile?: boolean;
 }
 
-export default function ChatInput({ onSend, onStop, loading, blockedByActionCenter, safeMode, onSafeModeToggle, model, onModelChange, isMobile }: Props) {
+export default function ChatInput({ onSend, onStop, loading, blockedByActionCenter, safeMode, onSafeModeToggle, isMobile }: Props) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [isListening, setIsListening] = useState(false);
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
   const toggleListening = useCallback(() => {
@@ -97,17 +92,6 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, isMobile ? 120 : 200)}px`;
     }
   }, [text, isMobile]);
-
-  useEffect(() => {
-    if (!showModelDropdown) return;
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowModelDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showModelDropdown]);
 
   const handleSend = useCallback(() => {
     if ((text.trim() || attachments.length > 0) && !loading && !blockedByActionCenter) {
@@ -185,72 +169,25 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
   }, []);
 
   const canSend = (text.trim() || attachments.length > 0) && !loading && !blockedByActionCenter;
-  const selectedModel = MODELS.find(m => m.id === model);
 
   return (
     <div className={isMobile ? 'px-2 pb-2 pt-1 safe-bottom' : 'px-4 pb-4 pt-2'}>
       <div className="max-w-3xl mx-auto">
-        {/* Model selector + Safe Mode toggle — desktop only */}
-        {onModelChange && model && !isMobile && (
-          <div className="flex justify-center items-center gap-2 mb-2 relative" ref={dropdownRef}>
+        {!isMobile && onSafeModeToggle && (
+          <div className="flex justify-center items-center gap-2 mb-2">
             <button
-              onClick={() => setShowModelDropdown(!showModelDropdown)}
+              onClick={onSafeModeToggle}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-              style={{ color: 'var(--fg-muted)' }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-              data-testid="model-selector-btn"
+              style={{
+                color: safeMode ? 'var(--color-accent)' : 'var(--fg-muted)',
+                background: safeMode ? 'var(--color-accent-muted)' : 'transparent'
+              }}
+              title={safeMode ? 'Safe Mode aktivdir — hər kritik əməliyyat üçün təsdiq tələb olunur. Söndürmək üçün klikləyin.' : 'Safe Mode söndürülüb — agent təsdiqsiz işləyir. Aktivləşdirmək üçün klikləyin.'}
+              data-testid="safe-mode-toggle"
             >
-              {selectedModel?.name || model}
-              <ChevronDown size={12} />
+              {safeMode ? <Shield size={12} /> : <ShieldOff size={12} />}
+              {safeMode ? 'Safe Mode' : 'Auto'}
             </button>
-
-            {/* FUNC-FIX: Safe Mode toggle was hidden in OpsPanel — now visible
-                  next to the model selector. Clear icon + tooltip. */}
-            {onSafeModeToggle && (
-              <button
-                onClick={onSafeModeToggle}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                style={{
-                  color: safeMode ? 'var(--color-accent)' : 'var(--fg-muted)',
-                  background: safeMode ? 'var(--color-accent-muted)' : 'transparent'
-                }}
-                title={safeMode ? 'Safe Mode aktivdir — hər kritik əməliyyat üçün təsdiq tələb olunur. Söndürmək üçün klikləyin.' : 'Safe Mode söndürülüb — agent təsdiqsiz işləyir. Aktivləşdirmək üçün klikləyin.'}
-                data-testid="safe-mode-toggle"
-              >
-                {safeMode ? <Shield size={12} /> : <ShieldOff size={12} />}
-                {safeMode ? 'Safe Mode' : 'Auto'}
-              </button>
-            )}
-
-            {showModelDropdown && (
-              <div
-                className="absolute bottom-full mb-1 rounded-lg overflow-hidden animate-scale-in z-50"
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  boxShadow: 'var(--shadow-lg)',
-                  minWidth: '200px',
-                }}
-              >
-                {MODELS.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => { onModelChange(m.id); setShowModelDropdown(false); }}
-                    className="w-full text-left px-3 py-2.5 text-sm transition-colors"
-                    style={{
-                      color: m.id === model ? 'var(--color-accent)' : 'var(--fg-secondary)',
-                      background: m.id === model ? 'var(--color-accent-muted)' : 'transparent',
-                    }}
-                    onMouseEnter={(e) => { if (m.id !== model) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                    onMouseLeave={(e) => { if (m.id !== model) e.currentTarget.style.background = 'transparent'; }}
-                  >
-                    {m.name}
-                    <span className="text-[10px] ml-2" style={{ color: 'var(--fg-muted)' }}>{m.provider}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         )}
 

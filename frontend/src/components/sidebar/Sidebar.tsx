@@ -83,9 +83,11 @@ function groupByDate(conversations: Conversation[]): { label: string; items: Con
 
 export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobile = false }: Props) {
   const { signOut, user } = useAuth();
-  const { setProjectDir } = settingsCtx;
+  const { setProjectDir, productMode, executionMode } = settingsCtx;
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
+  const isWebProduct = productMode === 'web_chat';
+  const isDesktopLocal = productMode === 'desktop_code' && executionMode === 'local';
 
   const [showSettings, setShowSettings] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -320,23 +322,25 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
           </div>
         )}
 
-        <div className="px-3 pb-2 shrink-0">
-          <button
-            onClick={handleOpenProject}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-            style={{
-              color: 'var(--fg-main)',
-              background: 'transparent',
-              border: '1px solid var(--border)',
-              minHeight: '44px',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            <FolderOpen size={18} />
-            Projects
-          </button>
-        </div>
+        {!isWebProduct && (
+          <div className="px-3 pb-2 shrink-0">
+            <button
+              onClick={handleOpenProject}
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              style={{
+                color: 'var(--fg-main)',
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                minHeight: '44px',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <FolderOpen size={18} />
+              Projects
+            </button>
+          </div>
+        )}
 
         {/* Search */}
         <div className="px-3 pb-2 shrink-0">
@@ -359,52 +363,69 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
         </div>
 
         {/* Add project button */}
-        <div className="px-3 pb-2 shrink-0 relative">
-          <button
-            ref={addBtnRef}
-            onClick={(e) => { e.stopPropagation(); setShowAddMenu(!showAddMenu); }}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-colors"
-            style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            <PlusCircle size={16} /> Layihə əlavə et
-          </button>
-
-          {showAddMenu && (
-            <div
-              ref={addMenuRef}
-              className="absolute left-3 right-3 top-full z-50 rounded-lg overflow-hidden animate-scale-in"
-              style={{
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)',
-                boxShadow: 'var(--shadow-lg)',
-              }}
+        {!isWebProduct && (
+          <div className="px-3 pb-2 shrink-0 relative">
+            <button
+              ref={addBtnRef}
+              onClick={(e) => { e.stopPropagation(); setShowAddMenu(!showAddMenu); }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-colors"
+              style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
-              {/* Local folder option — show in development OR desktop app (non-web) */}
-              {(import.meta.env.MODE !== 'production' || window.navigator.userAgent.includes('Electron')) && (
+              <PlusCircle size={16} /> Layihə əlavə et
+            </button>
+
+            {showAddMenu && (
+              <div
+                ref={addMenuRef}
+                className="absolute left-3 right-3 top-full z-50 rounded-lg overflow-hidden animate-scale-in"
+                style={{
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  boxShadow: 'var(--shadow-lg)',
+                }}
+              >
+                {(import.meta.env.MODE !== 'production' || window.navigator.userAgent.includes('Electron')) && (
+                  <button
+                    onClick={() => { setAddMode('local'); setShowAddModal(true); setShowAddMenu(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors"
+                    style={{ color: 'var(--fg-secondary)' }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <FolderPlus size={14} /> Lokal Qovluq
+                  </button>
+                )}
                 <button
-                  onClick={() => { setAddMode('local'); setShowAddModal(true); setShowAddMenu(false); }}
+                  onClick={() => { setAddMode('remote'); setShowAddModal(true); setShowAddMenu(false); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors"
-                  style={{ color: 'var(--fg-secondary)' }}
+                  style={{ color: 'var(--fg-secondary)', borderTop: '1px solid var(--border)' }}
                   onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
-                  <FolderPlus size={14} /> Lokal Qovluq
+                  <GitBranch size={14} /> GitHub Repo
                 </button>
-              )}
-              <button
-                onClick={() => { setAddMode('remote'); setShowAddModal(true); setShowAddMenu(false); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors"
-                style={{ color: 'var(--fg-secondary)', borderTop: '1px solid var(--border)' }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-              >
-                <GitBranch size={14} /> GitHub Repo
-              </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isDesktopLocal && (
+          <div className="px-3 pb-2 shrink-0">
+            <div
+              className="rounded-xl px-3 py-2.5"
+              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
+            >
+              <div className="text-[11px] font-semibold mb-1" style={{ color: 'var(--fg-main)' }}>
+                Local Desktop
+              </div>
+              <div className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>
+                Fayllar, terminal və lokal modellər bu Mac üzərində işləyir.
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Conversation list grouped by date */}
         <div className="flex-1 overflow-y-auto premium-scroll px-2 space-y-1">

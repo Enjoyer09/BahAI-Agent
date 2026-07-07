@@ -22,6 +22,12 @@ export const MODELS: ModelOption[] = [
   { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash ⚡', provider: 'Cloud (Sürətli)' },
   { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5 ⚡', provider: 'Cloud (Sürətli)' },
   // Freebuff2API proxy (OpenAI-compatible)
+  { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro (Freebuff) ⭐', provider: 'Freebuff' },
+  { id: 'kimi-k2.6', name: 'Kimi K2.6 (Freebuff)', provider: 'Freebuff' },
+  { id: 'minimax-m2.7', name: 'MiniMax M2.7 (Freebuff)', provider: 'Freebuff' },
+  { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (Freebuff) ⚡', provider: 'Freebuff' },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (Freebuff) ⚡', provider: 'Freebuff' },
+  { id: 'gpt-5.4', name: 'GPT-5.4 (Freebuff)', provider: 'Freebuff' },
   { id: 'gpt-4.1', name: 'GPT-4.1 (Freebuff)', provider: 'Freebuff' },
   { id: 'gpt-4o', name: 'GPT-4o (Freebuff)', provider: 'Freebuff' },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Freebuff)', provider: 'Freebuff' },
@@ -37,6 +43,8 @@ export const MODELS: ModelOption[] = [
 ];
 
 export const DEFAULT_SETTINGS = {
+  productMode: (typeof window !== 'undefined' && window.navigator.userAgent.includes('Electron')) ? 'desktop_code' : 'web_chat',
+  executionMode: (typeof window !== 'undefined' && window.navigator.userAgent.includes('Electron')) ? 'local' : 'cloud',
   apiKey: 'ollama',
   baseUrl: 'http://localhost:11434/v1',
   model: 'gemma4:12b',

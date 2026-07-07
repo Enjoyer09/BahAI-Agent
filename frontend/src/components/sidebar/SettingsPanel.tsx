@@ -11,6 +11,8 @@ interface Props {
 
 export default function SettingsPanel({ settingsCtx }: Props) {
   const { 
+    productMode,
+    executionMode, setExecutionMode,
     model, setModel, 
     performanceMode, setPerformanceMode,
     orchestrationMode, setOrchestrationMode,
@@ -55,6 +57,8 @@ export default function SettingsPanel({ settingsCtx }: Props) {
 
   const selected = MODELS.find(m => m.id === model);
   const activeWorkflow = WORKFLOW_OPTIONS.find((item) => item.id === workflow);
+  const isDesktopProduct = productMode === 'desktop_code';
+  const isWebProduct = productMode === 'web_chat';
 
   useEffect(() => {
     let cancelled = false;
@@ -129,7 +133,7 @@ export default function SettingsPanel({ settingsCtx }: Props) {
     } else if (type === 'freebuff') {
       setBaseUrl('http://localhost:8080/v1');
       setApiKey('');
-      setModel('gpt-4.1');
+      setModel('deepseek-v4-flash');
       setIsCustomMode(true);
     } else {
       setBaseUrl('https://openrouter.ai/api/v1');
@@ -168,12 +172,52 @@ export default function SettingsPanel({ settingsCtx }: Props) {
           Aktiv konfiqurasiya
         </div>
         <div className="text-[11px] space-y-1" style={{ color: 'var(--fg-secondary)' }}>
+          <div>Məhsul: <span style={{ color: 'var(--fg-main)' }}>{isWebProduct ? 'BahAI Cloud' : 'BahAI Desktop'}</span></div>
+          <div>Rejim: <span style={{ color: 'var(--fg-main)' }}>{isWebProduct ? 'Cloud' : executionMode === 'local' ? 'Local' : 'Cloud'}</span></div>
           <div>Model: <span style={{ color: 'var(--fg-main)' }}>{selected?.name || model}</span></div>
           <div>Workflow: <span style={{ color: 'var(--fg-main)' }}>{orchestrationMode ? (activeWorkflow?.name || workflow) : 'Söndürülüb'}</span></div>
           <div>Browser: <span style={{ color: 'var(--fg-main)' }}>{guiBrowserMode}</span></div>
           <div>Endpoint: <span style={{ color: 'var(--fg-main)' }}>{baseUrl}</span></div>
         </div>
       </div>
+
+      {isDesktopProduct && (
+        <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+          <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+            Execution Source
+          </div>
+          <div className="flex rounded-lg p-0.5 bg-[var(--bg-main)] border border-[var(--border)]">
+            <button
+              onClick={() => setExecutionMode('cloud')}
+              className="flex-1 py-1.5 text-[11px] font-medium rounded-md transition-all"
+              style={{
+                background: executionMode === 'cloud' ? 'var(--bg-hover)' : 'transparent',
+                color: executionMode === 'cloud' ? 'var(--fg-main)' : 'var(--fg-muted)'
+              }}
+            >
+              Cloud
+            </button>
+            <button
+              onClick={() => setExecutionMode('local')}
+              className="flex-1 py-1.5 text-[11px] font-medium rounded-md transition-all"
+              style={{
+                background: executionMode === 'local' ? 'var(--bg-hover)' : 'transparent',
+                color: executionMode === 'local' ? 'var(--fg-main)' : 'var(--fg-muted)'
+              }}
+            >
+              Local
+            </button>
+          </div>
+          <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+            Model seçimi gizlidir. BahAI seçilən mənbəyə görə ən uyğun modeli özü seçir.
+          </div>
+          {executionMode === 'local' && (
+            <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+              Local rejimdə desktop routing əsasən Ollama / lokal modellər üzərindən işləyir.
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between gap-2">
@@ -234,7 +278,20 @@ export default function SettingsPanel({ settingsCtx }: Props) {
         )}
       </div>
 
+      {isWebProduct && (
+        <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+          <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+            BahAI Cloud
+          </div>
+          <div className="text-[11px]" style={{ color: 'var(--fg-secondary)' }}>
+            Web versiyada model və provider seçimi gizlidir. BahAI cloud routing qatında ən uyğun modeli özü seçir.
+          </div>
+        </div>
+      )}
+
       {/* Provider Selector Tab */}
+      {!isWebProduct && (
+      <>
       <div className="flex rounded-lg p-0.5 bg-[var(--bg-hover)] border border-[var(--border)]">
         <button
           onClick={() => {
@@ -449,6 +506,9 @@ export default function SettingsPanel({ settingsCtx }: Props) {
               <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
                 Freebuff2API proxy üçün tipik endpoint: `http://localhost:8080/v1`
               </div>
+              <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+                Siyahıda olmayan model varsa yuxarıdakı `Model ID` sahəsinə birbaşa yazmaq olar.
+              </div>
             </div>
           )}
 
@@ -468,6 +528,8 @@ export default function SettingsPanel({ settingsCtx }: Props) {
             </div>
           )}
         </div>
+      )}
+      </>
       )}
 
       {/* Performance mode */}

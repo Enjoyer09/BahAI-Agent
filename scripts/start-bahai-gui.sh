@@ -4,6 +4,19 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
+load_env_file() {
+  local env_file="$1"
+  if [ -f "$env_file" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$env_file"
+    set +a
+  fi
+}
+
+load_env_file "$ROOT_DIR/.env"
+load_env_file "$ROOT_DIR/.env.local"
+
 BACKEND_PORT="${PORT:-3001}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 CDP_PORT="${GUI_BROWSER_DEBUG_PORT:-9222}"
@@ -11,6 +24,8 @@ CHROME_PROFILE="${GUI_BROWSER_USER_DATA_DIR:-$HOME/.bahai/chrome-debug-profile}"
 LOG_DIR="${TMPDIR:-/tmp}/bahai-agent"
 
 mkdir -p "$LOG_DIR"
+
+bash "$ROOT_DIR/scripts/start-freebuff-proxy.sh" "$LOG_DIR" || true
 
 cleanup_port() {
   local port="$1"

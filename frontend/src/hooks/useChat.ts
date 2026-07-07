@@ -473,7 +473,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
           workflow: settings.workflow,
           guiBrowserMode: settings.guiBrowserMode,
           guiBrowserPath: settings.guiBrowserPath,
-          guiBrowserCdpUrl: settings.guiBrowserCdpUrl
+          guiBrowserCdpUrl: settings.guiBrowserCdpUrl,
+          productMode: settings.productMode,
+          executionMode: settings.executionMode
         },
         (event: any) => {
           if (event.type === 'task_plan') {

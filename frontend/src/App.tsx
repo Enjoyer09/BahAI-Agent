@@ -13,7 +13,7 @@ import { useTheme } from './hooks/useTheme';
 import { useSettings } from './hooks/useSettings';
 import { ToastProvider, useConfirm } from './components/common/Toast';
 import { trackAppOpen } from './lib/telemetry';
-import { API_BASE_URL, MODELS, WORKFLOW_OPTIONS } from './lib/constants';
+import { API_BASE_URL, WORKFLOW_OPTIONS } from './lib/constants';
 
 // P2-FIX: Code-split heavy components that are not needed on initial render
 const CodeEditor = lazy(() => import('./components/chat/CodeEditor'));
@@ -141,8 +141,11 @@ function AppContent() {
   }
 
   const autoPreview = chat.activeProject?.name?.match(/site|web|app|frontend|ui/i);
-  const selectedModel = MODELS.find((item) => item.id === settings.model);
   const selectedWorkflow = WORKFLOW_OPTIONS.find((item) => item.id === settings.workflow);
+  const isWebProduct = settings.productMode === 'web_chat';
+  const isDesktopProduct = settings.productMode === 'desktop_code';
+  const desktopIsLocal = isDesktopProduct && settings.executionMode === 'local';
+  const allowDesktopAuxPanels = isDesktopProduct;
   const browserModeLabel = settings.guiBrowserMode === 'persistent'
     ? 'Chrome Profile'
     : settings.guiBrowserMode === 'bundled'
@@ -228,7 +231,7 @@ function AppContent() {
                 <Menu size={18} />
               </button>
             )}
-            {autoPreview && (
+            {allowDesktopAuxPanels && autoPreview && (
               <button
                 onClick={() => setShowPreview(p => !p)}
                 className="p-2.5 rounded-lg transition-colors"
@@ -241,28 +244,32 @@ function AppContent() {
                 <PanelRight size={16} />
               </button>
             )}
-            <button
-              onClick={() => setShowTerminal(p => !p)}
-              className="p-2.5 rounded-lg transition-colors"
-              style={{
-                color: showTerminal ? 'var(--color-accent)' : 'var(--fg-muted)',
-                background: showTerminal ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
-              }}
-              title="Toggle Terminal (Ctrl+`)"
-            >
-              <TermIcon size={16} />
-            </button>
-            <button
-              onClick={() => setShowOps(p => !p)}
-              className="p-2.5 rounded-lg transition-colors"
-              style={{
-                color: showOps ? 'var(--color-accent)' : 'var(--fg-muted)',
-                background: showOps ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
-              }}
-              title="Toggle Ops"
-            >
-              <Settings size={16} />
-            </button>
+            {allowDesktopAuxPanels && (
+              <>
+                <button
+                  onClick={() => setShowTerminal(p => !p)}
+                  className="p-2.5 rounded-lg transition-colors"
+                  style={{
+                    color: showTerminal ? 'var(--color-accent)' : 'var(--fg-muted)',
+                    background: showTerminal ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
+                  }}
+                  title="Toggle Terminal (Ctrl+`)"
+                >
+                  <TermIcon size={16} />
+                </button>
+                <button
+                  onClick={() => setShowOps(p => !p)}
+                  className="p-2.5 rounded-lg transition-colors"
+                  style={{
+                    color: showOps ? 'var(--color-accent)' : 'var(--fg-muted)',
+                    background: showOps ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
+                  }}
+                  title="Toggle Ops"
+                >
+                  <Settings size={16} />
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -283,18 +290,20 @@ function AppContent() {
                 {chat.activeProject?.name || 'bahAI'}
               </div>
               <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
-                {selectedWorkflow?.name || settings.workflow}
+                {isWebProduct ? 'BahAI Cloud' : `${settings.executionMode === 'local' ? 'Local' : 'Cloud'} Desktop`}
               </div>
             </div>
             <div className="flex items-center shrink-0">
-              <button
-                onClick={() => setShowOps(true)}
-                className="p-2.5 rounded-lg transition-colors"
-                style={{ color: showOps ? 'var(--color-accent)' : 'var(--fg-main)' }}
-                aria-label="Open ops"
-              >
-                <Settings size={18} />
-              </button>
+              {allowDesktopAuxPanels && (
+                <button
+                  onClick={() => setShowOps(true)}
+                  className="p-2.5 rounded-lg transition-colors"
+                  style={{ color: showOps ? 'var(--color-accent)' : 'var(--fg-main)' }}
+                  aria-label="Open ops"
+                >
+                  <Settings size={18} />
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (chat.activeProject) chat.createConversation(chat.activeProject.id);
@@ -318,20 +327,26 @@ function AppContent() {
               className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
               style={{ background: 'var(--bg-hover)', color: 'var(--fg-main)', border: '1px solid var(--border)' }}
             >
-              {selectedModel?.name || settings.model}
+              {isWebProduct ? 'BahAI Cloud' : `Desktop • ${settings.executionMode === 'local' ? 'Local' : 'Cloud'}`}
             </span>
-            <span
-              className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
-              style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
-            >
-              {settings.orchestrationMode ? `Workflow: ${selectedWorkflow?.name || settings.workflow}` : 'Workflow off'}
-            </span>
-            <span
-              className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
-              style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
-            >
-              Browser: {browserModeLabel}
-            </span>
+            {isDesktopProduct && (
+              <>
+                <span
+                  className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
+                  style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
+                >
+                  {settings.orchestrationMode ? `Workflow: ${selectedWorkflow?.name || settings.workflow}` : 'Workflow off'}
+                </span>
+                {!desktopIsLocal && (
+                  <span
+                    className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
+                    style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
+                  >
+                    Browser: {browserModeLabel}
+                  </span>
+                )}
+              </>
+            )}
             <span
               className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
               style={{
@@ -369,14 +384,12 @@ function AppContent() {
           blockedByActionCenter={chat.actionCenterInteractions.length > 0}
           safeMode={chat.safeMode}
           onSafeModeToggle={() => chat.setSafeMode(!chat.safeMode)}
-          model={isMobile ? undefined : settings.model}
-          onModelChange={isMobile ? undefined : settings.setModel}
           isMobile={isMobile}
         />
       </main>
 
       {/* AUX PANELS — fixed overlay on mobile */}
-      {showEditor && (
+      {allowDesktopAuxPanels && showEditor && (
         <div
           className={isMobile
             ? 'fixed inset-0 z-30 flex flex-col animate-in-right'
@@ -410,7 +423,7 @@ function AppContent() {
         </div>
       )}
 
-      {showPreview && (
+      {allowDesktopAuxPanels && showPreview && (
         <div
           className={isMobile
             ? 'fixed inset-0 z-30 flex flex-col animate-in-right'
@@ -442,7 +455,7 @@ function AppContent() {
         </div>
       )}
 
-      {showOps && (
+      {allowDesktopAuxPanels && showOps && (
         <div
           className={isMobile
             ? 'fixed inset-0 z-30 flex flex-col animate-in-right'
@@ -481,7 +494,7 @@ function AppContent() {
       )}
 
       {/* TERMINAL */}
-      {showTerminal && (
+      {allowDesktopAuxPanels && showTerminal && (
         <div
           className={isMobile ? 'fixed inset-x-0 bottom-0 z-30 flex flex-col animate-in safe-bottom' : 'shrink-0 overflow-hidden animate-in'}
           style={{

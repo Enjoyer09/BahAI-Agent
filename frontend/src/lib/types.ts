@@ -101,6 +101,8 @@ export interface Conversation {
 }
 
 export interface Settings {
+  productMode: 'web_chat' | 'desktop_code';
+  executionMode: 'cloud' | 'local';
   apiKey: string;
   baseUrl: string;
   model: string;

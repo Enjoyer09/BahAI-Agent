@@ -15,6 +15,18 @@ function loadSetting(key: string, fallback: string): string {
 }
 
 export function useSettings() {
+  const [productMode] = useState<'web_chat' | 'desktop_code'>(() => {
+    try {
+      return window.navigator.userAgent.includes('Electron') ? 'desktop_code' : 'web_chat';
+    } catch {
+      return 'web_chat';
+    }
+  });
+  const [executionMode, setExecutionMode] = useState<'cloud' | 'local'>(() => {
+    const saved = localStorage.getItem('executionMode');
+    if (saved === 'cloud' || saved === 'local') return saved;
+    return 'cloud';
+  });
   const [apiKey, setApiKey] = useState(() => loadSetting('apiKey', ''));
   const [baseUrl, setBaseUrl] = useState(() => loadSetting('baseUrl', DEFAULT_BASE_URL));
   // FUNC-FIX: default model now uses DEFAULT_SETTINGS so it matches an actual
@@ -58,6 +70,7 @@ export function useSettings() {
   }, []);
 
   // Persist to localStorage
+  useEffect(() => { localStorage.setItem('executionMode', executionMode); }, [executionMode]);
   useEffect(() => { localStorage.setItem('apiKey', apiKey); }, [apiKey]);
   useEffect(() => { localStorage.setItem('baseUrl', baseUrl); }, [baseUrl]);
   useEffect(() => { localStorage.setItem('model', model); }, [model]);
@@ -70,10 +83,12 @@ export function useSettings() {
   useEffect(() => { localStorage.setItem('guiBrowserCdpUrl', guiBrowserCdpUrl); }, [guiBrowserCdpUrl]);
   useEffect(() => { localStorage.setItem('guiAutoStartBrowser', String(guiAutoStartBrowser)); }, [guiAutoStartBrowser]);
 
-  const settings: Settings = { apiKey, baseUrl, model, projectDir, performanceMode, orchestrationMode, workflow, guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser };
+  const settings: Settings = { productMode, executionMode, apiKey, baseUrl, model, projectDir, performanceMode, orchestrationMode, workflow, guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser };
 
   return {
     settings,
+    productMode,
+    executionMode, setExecutionMode,
     apiKey, setApiKey,
     baseUrl, setBaseUrl,
     model, setModel,
