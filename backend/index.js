@@ -44,10 +44,13 @@ const approvalsRouter = require('./routes/approvals');
 // ==========================================
 const PORT = process.env.PORT || 3001;
 const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../sandbox'));
+// SEC-FIX: By default only the sandbox directory is allowed. Previously the entire
+// project root was included which let the AI agent read/write .env, node_modules,
+// backend/ and frontend/ source files. On cloud deployments ALLOWED_DIRECTORIES
+// env must be set explicitly. In LOCAL_MODE isPathSafe bypasses this check.
 const ALLOWED_DIRS = process.env.ALLOWED_DIRECTORIES
   ? process.env.ALLOWED_DIRECTORIES.split(',').map(d => path.resolve(d.trim()))
   : [
-      path.resolve(__dirname, '..'),
       path.resolve(WORKSPACE_ROOT),
     ];
 

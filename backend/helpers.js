@@ -14,6 +14,7 @@ const fs_raw = require('fs');
 
 const execFileAsync = util.promisify(execFile);
 const pdfParse = require('pdf-parse');
+const { appendGuiRepairGuidance } = require('./gui/repairGuidance');
 
 // Module-level state for WORKSPACE_ROOT, ALLOWED_DIRS — set once at startup
 let WORKSPACE_ROOT = '';
@@ -1143,13 +1144,46 @@ async function buildApprovalMetadata(toolName, rawArgs, workingDirectory, user) 
 // Bash safety
 // ==========================================
 
-const ALLOWED_COMMANDS = ['npm', 'npx', 'yarn', 'git', 'node', 'python', 'python3', 'pip', 'ls', 'pwd', 'mkdir', 'touch', 'grep', 'find', 'cat', 'echo', 'cp', 'mv', 'rm', 'curl', 'which', 'env'];
+// SEC-FIX: Allowed commands for run_terminal_command. Destructive commands (rm, mv,
+// sudo, chmod, chown, dd, shutdown, reboot, mkfs, fdisk, dd, wget, curl with -o/-O)
+// are intentionally excluded. For file deletion the agent should use the file tool.
+const ALLOWED_COMMANDS = ['npm', 'npx', 'yarn', 'git', 'node', 'python', 'python3', 'pip', 'ls', 'pwd', 'mkdir', 'touch', 'grep', 'find', 'cat', 'echo', 'cp', 'curl', 'which', 'env'];
+
+// SEC-FIX: Dangerous patterns that are blocked regardless of base command.
+// Covers file destruction, privilege escalation, network pivots and fork bombs.
+const DENIED_PATTERNS = [
+  /\brm\s+-[rf]/i,           // rm -rf (recursive forced delete)
+  /\bsudo\b/i,                 // privilege escalation
+  /\bchmod\s+[0-7]{3,4}/i,     // permission changes
+  /\bchown\b/i,                // owner changes
+  /\bdd\s+if=/i,                // disk destroy
+  /\b(?:shutdown|reboot|halt|poweroff)\b/i,  // system control
+  /\bmkfs\./,                  // filesystem creation (destructive)
+  /\bfdisk\b/,                  // partition table
+  /\b>:\s*\//,                  // redirect to root
+  /\bwget\s+.*\s+-[a-z]*o\b/i,   // wget with output file
+  /\bcurl\s+.*\s+-[a-z]*o\b/i,   // curl with -o / -O (output file)
+  /\bcurl\b.*--output\b/i,       // curl with --output (no \s+ needed, -- has no word boundary before)
+  /:\s*\)\s*\{.*:\s*\)\s*\}/, // fork bomb
+  /\b(?:\/dev\/(?:null|zero|random|urandom))/, // device access
+];
 
 function isBashCommandSafe(command) {
-  const unsafeChars = /[;&|`$(){}><]/;
-  if (unsafeChars.test(command)) return false;
-  const baseCmd = command.trim().split(/\s+/)[0];
-  return ALLOWED_COMMANDS.includes(baseCmd) || command.startsWith('npm run') || command.startsWith('npx ');
+  const trimmed = String(command || '').trim();
+  if (!trimmed) return false;
+
+  // Block shell metacharacters that enable multi-command / injection
+  // Blocked: ; & | ` $ ( ) { } < > \n \r
+  const unsafeChars = /[;&|`$(){}<>\n\r]/;
+  if (unsafeChars.test(trimmed)) return false;
+
+  // Block dangerous patterns irrespective of base command
+  for (const pattern of DENIED_PATTERNS) {
+    if (pattern.test(trimmed)) return false;
+  }
+
+  const baseCmd = trimmed.split(/\s+/)[0];
+  return ALLOWED_COMMANDS.includes(baseCmd) || trimmed.startsWith('npm run') || trimmed.startsWith('npx ');
 }
 
 // ==========================================
