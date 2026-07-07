@@ -84,10 +84,22 @@ GUI smoke:
 npm run smoke:gui
 ```
 
+Desktop smoke:
+
+```bash
+npm run smoke:desktop
+```
+
 Prod smoke:
 
 ```bash
 npm run smoke:prod -- --checkpoint
+```
+
+Prod checkpoint smoke shortcut:
+
+```bash
+npm run smoke:prod:checkpoint
 ```
 
 Harness contract check:
@@ -101,6 +113,9 @@ npm run check:harness
 - Default behavior-də Chrome artıq app start zamanı avtomatik açılmır.
 - GUI sorğusu gələndə CDP mode üçün Chrome lazım olsa tələb zamanı başladılır.
 - `LOCAL_MODE=true` desktop development üçündür, hosted deployment üçün deyil.
+- `smoke:desktop` local backend və desktop-emulated shell üçün nəzərdə tutulub; default olaraq `http://127.0.0.1:3001` yoxlayır.
+- `smoke:prod` web cloud shell-in desktop surface göstərmədiyini də assert edir.
+- `smoke:prod:checkpoint` hosted GUI login-checkpoint axınını da yoxlayır.
 
 ## Oxuma sırası
 

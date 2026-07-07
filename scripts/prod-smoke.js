@@ -12,6 +12,7 @@ const HEADLESS = !process.argv.includes('--visible');
 const CHECKPOINT_MODE = process.argv.includes('--checkpoint');
 const SLOW_MO_ARG = process.argv.find((arg) => arg.startsWith('--slow-mo='));
 const SLOW_MO = SLOW_MO_ARG ? Number(SLOW_MO_ARG.split('=')[1]) : 0;
+const REQUIRE_CLOUD_UI = !process.argv.includes('--skip-cloud-ui');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -70,6 +71,19 @@ async function ensureAuthenticated(page) {
   return token;
 }
 
+async function assertCloudChatShell(page) {
+  await page.waitForFunction(() => {
+    const text = document.body.innerText || '';
+    return text.includes('BahAI Cloud');
+  }, { timeout: 15000 });
+
+  const body = await page.locator('body').innerText();
+  assert(body.includes('BahAI Cloud'), 'Web shell-də BahAI Cloud label görünmədi');
+  assert(!body.includes('Local Desktop aktivdir'), 'Web shell desktop local mətnini göstərir');
+  assert(!body.includes('Cloud Desktop aktivdir'), 'Web shell desktop cloud mətnini göstərir');
+  assert(!body.includes('Desktop Runtime Status'), 'Web shell desktop runtime panelini göstərir');
+}
+
 async function sendSmokeMessage(page) {
   const input = page.getByLabel('Message input', { exact: true });
   assert(await input.count() === 1, 'Message input tapılmadı');
@@ -89,6 +103,10 @@ async function sendSmokeMessage(page) {
     const text = document.body.innerText || '';
     return text.includes('Tool call') || text.includes('Salam') || text.includes('Cavab') || text.includes('bahAI');
   }, { timeout: 30000 });
+
+  const body = await page.locator('body').innerText();
+  assert(!body.includes('Qovluq aç'), 'Web chat shell desktop folder CTA göstərir');
+  assert(!body.includes('Qovluq və ya repo əlavə et'), 'Web chat shell desktop repo CTA göstərir');
 }
 
 async function createCheckpointFlow(token) {
@@ -180,6 +198,11 @@ async function main() {
   try {
     const token = await ensureAuthenticated(page);
     console.log('Auth ok');
+
+    if (REQUIRE_CLOUD_UI) {
+      await assertCloudChatShell(page);
+      console.log('Cloud chat shell ok');
+    }
 
     await sendSmokeMessage(page);
     console.log('Chat ok');

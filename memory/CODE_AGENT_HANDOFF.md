@@ -139,6 +139,11 @@ GUI grounding provider was made safer and more production-usable.
   - `npm run smoke:prod -- --checkpoint` also verifies GUI login checkpoint creation + resume SSE path.
   - Uses `auth-demo-fill` and `auth-login-submit` test ids in the auth modal.
   - Saves a full-page screenshot into `/artifacts`.
+- Added desktop execution smoke coverage:
+  - `scripts/desktop-smoke.js` validates desktop-emulated shell behavior against local backend.
+  - `npm run smoke:desktop`
+  - Covers settings modal, `Local`/`Cloud` execution switching, runtime panel visibility, settings close, and a real chat send flow.
+  - Saves a full-page screenshot into `/artifacts`.
 
 ## Next Best Coding Step
 

@@ -4682,6 +4682,13 @@ app.get('/api/admin/users', verifyToken, verifyAdmin, async (req, res) => {
 
 // Serve Static Frontend in Production
 const frontendDist = path.resolve(__dirname, '../frontend/dist');
+const frontendIndexPath = path.join(frontendDist, 'index.html');
+let frontendBundleAvailable = false;
+try {
+  frontendBundleAvailable = require('fs').existsSync(frontendIndexPath);
+} catch {
+  frontendBundleAvailable = false;
+}
 app.use(express.static(frontendDist));
 
 // Catch-all for 404s or SPA routing - return index.html for frontend, JSON for API
@@ -4689,10 +4696,18 @@ app.use((req, res) => {
     if (req.originalUrl.startsWith('/api')) {
         return res.status(404).json({ error: `Route ${req.originalUrl} not found` });
     }
-    res.sendFile(path.join(frontendDist, 'index.html'), (err) => {
+    if (!frontendBundleAvailable) {
+        return res
+          .status(503)
+          .type('text/plain; charset=utf-8')
+          .send("bahAI frontend bundle tapilmadi. Evvel `npm run build --prefix frontend` isledin, sonra yeniden yoxlayin.");
+    }
+    res.sendFile(frontendIndexPath, (err) => {
         if (err) {
-            console.error('Failed to send index.html:', err);
-            res.status(500).send("bahAI Frontend was not found or compiled. Please run 'npm run build' first!");
+            console.error('Failed to send index.html:', err?.message || err);
+            if (!res.headersSent) {
+              res.status(500).send('bahAI frontend bundle oxuna bilmedi.');
+            }
         }
     });
 });

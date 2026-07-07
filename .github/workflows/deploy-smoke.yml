@@ -1,0 +1,63 @@
+name: Deploy Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      smoke_base_url:
+        description: "Hosted BahAI URL"
+        required: false
+        default: "https://bahai-agent-production.up.railway.app"
+      checkpoint_mode:
+        description: "Run GUI checkpoint path too"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  hosted-smoke:
+    runs-on: ubuntu-latest
+    env:
+      BAHAI_SMOKE_BASE_URL: ${{ github.event.inputs.smoke_base_url || secrets.BAHAI_SMOKE_BASE_URL || 'https://bahai-agent-production.up.railway.app' }}
+      BAHAI_SMOKE_EMAIL: ${{ secrets.BAHAI_SMOKE_EMAIL }}
+      BAHAI_SMOKE_PASSWORD: ${{ secrets.BAHAI_SMOKE_PASSWORD }}
+      CHECKPOINT_MODE: ${{ github.event.inputs.checkpoint_mode }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Validate smoke credentials
+        run: |
+          test -n "$BAHAI_SMOKE_EMAIL" || { echo "BAHAI_SMOKE_EMAIL secret missing"; exit 1; }
+          test -n "$BAHAI_SMOKE_PASSWORD" || { echo "BAHAI_SMOKE_PASSWORD secret missing"; exit 1; }
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: backend
+
+      - name: Run hosted smoke
+        run: |
+          if [ "$CHECKPOINT_MODE" = "true" ]; then
+            npm run smoke:prod:checkpoint
+          else
+            npm run smoke:prod
+          fi
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-smoke-artifacts
+          path: artifacts/
+          if-no-files-found: ignore
