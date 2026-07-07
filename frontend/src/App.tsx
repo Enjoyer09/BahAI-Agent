@@ -287,7 +287,7 @@ function AppContent() {
             </button>
             <div className="min-w-0 flex-1 text-center px-1">
               <div className="text-sm font-medium truncate" style={{ color: 'var(--fg-main)' }}>
-                {chat.activeProject?.name || 'bahAI'}
+                {chat.activeProject?.name || (isWebProduct ? 'BahAI Cloud' : 'bahAI')}
               </div>
               <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
                 {isWebProduct ? 'Cloud Chat' : `${settings.executionMode === 'local' ? 'Local' : 'Cloud'} Desktop`}
@@ -376,6 +376,7 @@ function AppContent() {
           onSend={chat.sendMessage}
           onStop={chat.stop}
           workingDirectory={chat.activeProject?.path || ''}
+          productMode={settings.productMode}
         />
         <ChatInput
           onSend={chat.sendMessage}
@@ -385,6 +386,7 @@ function AppContent() {
           safeMode={chat.safeMode}
           onSafeModeToggle={() => chat.setSafeMode(!chat.safeMode)}
           isMobile={isMobile}
+          productMode={settings.productMode}
         />
       </main>
 
@@ -530,7 +532,7 @@ function AppContent() {
         onResolveCheckpoint={chat.resolveHumanCheckpoint}
         onApprove={chat.decideApproval}
       />
-      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} productMode={settings.productMode} />
       {ConfirmDialog}
       <Suspense fallback={null}>
         <ElevenLabsHelpModal isOpen={showElevenLabsHelp} onClose={() => setShowElevenLabsHelp(false)} />

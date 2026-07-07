@@ -10,9 +10,10 @@ interface Props {
   onSend: (msg: string) => void;
   onStop?: () => void;
   workingDirectory?: string;
+  productMode?: 'web_chat' | 'desktop_code';
 }
 
-export default function ChatArea({ messages, loading, onSend, workingDirectory }: Props) {
+export default function ChatArea({ messages, loading, onSend, workingDirectory, productMode = 'desktop_code' }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
 
@@ -41,17 +42,24 @@ export default function ChatArea({ messages, loading, onSend, workingDirectory }
 
         {/* Heading */}
         <h2 className="text-lg sm:text-2xl font-semibold mb-5 sm:mb-8 text-center" style={{ color: 'var(--fg-main)' }}>
-          Necə kömək edə bilərəm?
+          {productMode === 'web_chat' ? 'BahAI Cloud ilə nə etmək istəyirsiniz?' : 'Necə kömək edə bilərəm?'}
         </h2>
 
         {/* Suggestion cards */}
         <div className="grid grid-cols-1 sm:flex sm:flex-row sm:flex-wrap justify-center gap-2 sm:gap-3 max-w-2xl w-full">
-          {[
-            { label: 'React app yarat', prompt: 'Create a new React app with TypeScript and Tailwind CSS' },
-            { label: 'Səhv düzəlt', prompt: 'Help me fix a bug in my code' },
-            { label: 'Kodu izah et', prompt: 'Explain what this code does' },
-            { label: 'Funksiya əlavə et', prompt: 'Add a new feature to my project' },
-          ].map((item) => (
+          {(productMode === 'web_chat'
+            ? [
+                { label: 'Mətn yaz', prompt: 'Mənə bu ideyanı daha aydın və peşəkar formada yazmağa kömək et' },
+                { label: 'Plan qur', prompt: 'Bu iş üçün mənə qısa və praktik plan hazırla' },
+                { label: 'SEO fikri ver', prompt: 'Bu sayt üçün əsas SEO tövsiyələrini çıxart' },
+                { label: 'Audit et', prompt: 'Bu ideyanı və ya mətni qısa audit edib zəif tərəflərini de' },
+              ]
+            : [
+                { label: 'React app yarat', prompt: 'Create a new React app with TypeScript and Tailwind CSS' },
+                { label: 'Səhv düzəlt', prompt: 'Help me fix a bug in my code' },
+                { label: 'Kodu izah et', prompt: 'Explain what this code does' },
+                { label: 'Funksiya əlavə et', prompt: 'Add a new feature to my project' },
+              ]).map((item) => (
             <button
               key={item.label}
               onClick={() => onSend(item.prompt)}

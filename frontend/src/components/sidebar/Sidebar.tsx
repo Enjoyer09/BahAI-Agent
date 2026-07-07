@@ -261,7 +261,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
   };
 
   const handleDeleteConversation = async (id: string) => {
-    const ok = await confirm('Are you sure you want to delete this conversation?', 'Delete Conversation', 'danger');
+    const ok = await confirm('Bu söhbəti silmək istədiyinizə əminsiniz?', 'Söhbəti sil', 'danger');
     if (ok) chat.deleteConversation(id);
   };
 
@@ -294,7 +294,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
             <SquarePen size={18} />
-            Yeni söhbət
+            {isWebProduct ? 'Yeni chat' : 'Yeni söhbət'}
           </button>
           <button
             onClick={onToggle}
@@ -313,10 +313,10 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
               style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
             >
               <div className="text-[11px] font-semibold mb-1" style={{ color: 'var(--fg-main)' }}>
-                {chat.activeProject?.name || 'bahAI'}
+                {chat.activeProject?.name || (isWebProduct ? 'BahAI Cloud' : 'bahAI')}
               </div>
               <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
-                {chat.activeProject?.path || 'Layihə seçilməyib'}
+                {isWebProduct ? 'Cloud chat sessiyası' : (chat.activeProject?.path || 'Layihə seçilməyib')}
               </div>
             </div>
           </div>
@@ -438,8 +438,8 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
               {group.items.map(conv => {
                 const isActive = chat.activeConvId === conv.id;
                 const project = safeProjects.find((item) => item.id === conv.projectId) || null;
-                const projectLabel = project?.name || 'Workspace';
-                const isSandbox = projectLabel === 'bahAI Sandbox';
+                const projectLabel = isWebProduct ? 'BahAI Cloud' : (project?.name || 'Workspace');
+                const isSandbox = projectLabel === 'bahAI Sandbox' || projectLabel === 'BahAI Cloud';
                 return (
                   <div key={conv.id} className="group relative">
                     <button
@@ -454,7 +454,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm truncate">{conv.title || 'Adsız söhbət'}</div>
+                        <div className="text-sm truncate">{conv.title || (isWebProduct ? 'Adsız chat' : 'Adsız söhbət')}</div>
                         <div className="mt-1 flex items-center gap-2 min-w-0">
                           <span
                             className="text-[10px] px-2 py-0.5 rounded-md truncate"
@@ -488,7 +488,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
           {filteredConversations.length === 0 && (
             <div className="text-center py-8">
               <p className="text-xs" style={{ color: 'var(--fg-muted)' }}>
-                {searchQuery ? 'Nəticə tapılmadı' : 'Hələ söhbət yoxdur'}
+                {searchQuery ? 'Nəticə tapılmadı' : (isWebProduct ? 'Hələ chat yoxdur' : 'Hələ söhbət yoxdur')}
               </p>
             </div>
           )}

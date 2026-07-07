@@ -15,9 +15,10 @@ declare global {
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  productMode?: 'web_chat' | 'desktop_code';
 }
 
-export default function AuthModal({ isOpen, onClose }: Props) {
+export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code' }: Props) {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +120,9 @@ export default function AuthModal({ isOpen, onClose }: Props) {
     minHeight: '44px',
   };
 
+  const isWebProduct = productMode === 'web_chat';
+  const productName = isWebProduct ? 'BahAI Cloud' : 'BahAI Desktop';
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in"
@@ -150,10 +154,12 @@ export default function AuthModal({ isOpen, onClose }: Props) {
             <ShieldCheck size={28} className="text-white" />
           </div>
           <h2 id="auth-title" className="text-xl font-bold" style={{ color: 'var(--fg-main)' }}>
-            {isLogin ? 'Xoş gəlmisiniz' : 'Hesab yarat'}
+            {isLogin ? `${productName}-a xoş gəlmisiniz` : `${productName} hesabı yaradın`}
           </h2>
           <p className="text-sm mt-1" style={{ color: 'var(--fg-muted)' }}>
-            {isLogin ? 'bahAI-ya daxil olun' : 'bahAI ilə başlayın'}
+            {isLogin
+              ? (isWebProduct ? 'Cloud assistant söhbətinizə daxil olun' : 'Desktop code agent təcrübəsinə daxil olun')
+              : (isWebProduct ? 'BahAI Cloud ilə söhbətə başlayın' : 'BahAI Desktop ilə işə başlayın')}
           </p>
         </div>
 
@@ -223,7 +229,7 @@ export default function AuthModal({ isOpen, onClose }: Props) {
                 minHeight: '44px',
               }}
             >
-              Demo girişini doldur
+              {isWebProduct ? 'Demo cloud girişini doldur' : 'Demo desktop girişini doldur'}
             </button>
           )}
           {!isLogin && (
@@ -287,7 +293,7 @@ export default function AuthModal({ isOpen, onClose }: Props) {
               minHeight: '48px',
             }}
           >
-            {loading ? <Loader2 size={18} className="animate-spin" /> : (isLogin ? 'Daxil ol' : 'Qeydiyyat')}
+            {loading ? <Loader2 size={18} className="animate-spin" /> : (isLogin ? 'Daxil ol' : 'Hesab yarat')}
             {!loading && <ArrowRight size={18} />}
           </button>
         </form>
@@ -303,7 +309,7 @@ export default function AuthModal({ isOpen, onClose }: Props) {
           >
             {isLogin ? 'Hesabınız yoxdur? ' : 'Artıq hesabınız var? '}
             <span style={{ color: 'var(--color-accent)', fontWeight: 600 }}>
-              {isLogin ? 'Qeydiyyat' : 'Daxil ol'}
+              {isLogin ? 'Hesab yaradın' : 'Daxil olun'}
             </span>
           </button>
         </div>

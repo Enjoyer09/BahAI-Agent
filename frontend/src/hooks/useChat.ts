@@ -61,18 +61,37 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
-function buildConversationTitleFromInput(input: string): string {
+function getDefaultConversationTitle(productMode?: Settings['productMode']): string {
+  return productMode === 'web_chat' ? 'Yeni chat' : 'Yeni söhbət';
+}
+
+function getDefaultWorkspaceName(productMode?: Settings['productMode']): string {
+  return productMode === 'web_chat' ? 'BahAI Cloud' : 'bahAI Sandbox';
+}
+
+function getWelcomeMessage(productMode?: Settings['productMode'], serverBacked = false): string {
+  if (productMode === 'web_chat') {
+    return serverBacked
+      ? 'Salam! Mən BahAI Cloud asistentiəm. Bu söhbət sizə bağlı saxlanılır və buradan birbaşa davam edə bilərsiniz.'
+      : 'Salam! Mən BahAI Cloud asistentiəm. Hazırsınızsa sualınızı yazın, birlikdə davam edək.';
+  }
+  return serverBacked
+    ? 'Salam! Mən bahAI agentiyəm. Sizin üçün ayrıca şəxsi workspace yaratdım. Buradakı fayllar yalnız sizin hesabınıza bağlıdır.'
+    : 'Salam! Mən bahAI agentiyəm. Layihə seçilmədiyi üçün sizin üçün avtomatik olaraq bir "bahAI Sandbox" (Qaralama) iş sahəsi yaratdım. İndi bura nəsə yaza bilərsiniz, sizə kömək etməyə hazıram! 🚀';
+}
+
+function buildConversationTitleFromInput(input: string, productMode?: Settings['productMode']): string {
   const text = String(input || '')
     .replace(/\s+/g, ' ')
     .trim();
-  if (!text) return 'Yeni söhbət';
+  if (!text) return getDefaultConversationTitle(productMode);
 
   const cleaned = text
     .replace(/^["'`]+|["'`]+$/g, '')
     .replace(/^(zəhmət olmasa|zehmet olmasa|please)\s+/i, '')
     .trim();
 
-  if (!cleaned) return 'Yeni söhbət';
+  if (!cleaned) return getDefaultConversationTitle(productMode);
   if (cleaned.length <= 48) return cleaned;
 
   const sliced = cleaned.slice(0, 48);
@@ -147,14 +166,14 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
 
         if (state.projects.length === 0) {
           const created = await createProjectOnServer({
-            name: 'bahAI Sandbox',
+            name: getDefaultWorkspaceName(settings.productMode),
             path: 'workspace://default'
           });
           if (cancelled) return;
           const welcomeMessage: Message = {
             id: generateId(),
             role: 'assistant',
-            content: 'Salam! Mən bahAI agentiyəm. Sizin üçün ayrıca şəxsi workspace yaratdım. Buradakı fayllar yalnız sizin hesabınıza bağlıdır.',
+            content: getWelcomeMessage(settings.productMode, true),
             timestamp: Date.now()
           };
           setProjects([created.project]);
@@ -200,7 +219,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const defaultProjId = generateId();
       const defaultProj: Project = {
         id: defaultProjId,
-        name: 'bahAI Sandbox',
+        name: getDefaultWorkspaceName(settings.productMode),
         path: 'workspace://default',
         createdAt: Date.now()
       };
@@ -209,12 +228,12 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const defaultConv: Conversation = {
         id: defaultConvId,
         projectId: defaultProjId,
-        title: 'Xoş Gəlmisiniz!',
+        title: settings.productMode === 'web_chat' ? 'Yeni chat' : 'Xoş Gəlmisiniz!',
         messages: [
           {
             id: generateId(),
             role: 'assistant',
-            content: 'Salam! Mən bahAI agentiyəm. Layihə seçilmədiyi üçün sizin üçün avtomatik olaraq bir "bahAI Sandbox" (Qaralama) iş sahəsi yaratdım. İndi bura nəsə yaza bilərsiniz, sizə kömək etməyə hazıram! 🚀',
+            content: getWelcomeMessage(settings.productMode, false),
             timestamp: Date.now()
           }
         ],
@@ -309,7 +328,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       });
   }, [serverBacked, activeConvId]);
 
-  const createConversation = useCallback((projectId: string, title: string = 'Yeni söhbət') => {
+  const createConversation = useCallback((projectId: string, title: string = getDefaultConversationTitle(settings.productMode)) => {
     // Abort any running request when creating a new conversation
     if (abortController) {
       abortController.abort();
@@ -385,8 +404,12 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
 
     const enrichedAttachments = await extractAttachments(attachments);
     const userMsg: Message = { id: generateId(), role: 'user', content: input, attachments: enrichedAttachments, timestamp: Date.now() };
-    const shouldAutoRenameConversation = activeConv && (!activeConv.title || activeConv.title === 'Yeni söhbət');
-    const nextTitle = shouldAutoRenameConversation ? buildConversationTitleFromInput(input) : activeConv?.title;
+    const shouldAutoRenameConversation = activeConv && (
+      !activeConv.title ||
+      activeConv.title === 'Yeni söhbət' ||
+      activeConv.title === 'Yeni chat'
+    );
+    const nextTitle = shouldAutoRenameConversation ? buildConversationTitleFromInput(input, settings.productMode) : activeConv?.title;
     
     // Add user message to state
     let currentMsgs = [...messages, userMsg];
