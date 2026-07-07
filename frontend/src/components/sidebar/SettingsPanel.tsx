@@ -4,6 +4,7 @@ import { MODELS, WORKFLOW_OPTIONS } from '../../lib/constants';
 import { getDesktopRuntimeStatus, getGuiCapabilities, getInstalledBrowsers } from '../../lib/api';
 import type { GuiCapabilityStatus } from '../../lib/types';
 import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
+import { Button } from '../common/UI';
 
 interface Props {
   settingsCtx: ReturnTypeUseSettings;
@@ -146,6 +147,8 @@ export default function SettingsPanel({ settingsCtx }: Props) {
       : { icon: CircleOff, color: 'var(--fg-muted)', label: 'Missing' };
   const StatusIcon = statusMeta.icon;
   const installedBrowserCount = guiCapabilities?.browser.installedBrowsers.filter((item) => item.installed).length || 0;
+  const showLocalRuntimeGuidance = isDesktopProduct && executionMode === 'local' && !!desktopRuntime && !desktopRuntime.ready;
+  const showCloudRuntimeGuidance = isDesktopProduct && executionMode === 'cloud' && !!desktopRuntime && !apiKey;
 
   const handlePreset = (type: 'ollama' | 'lmstudio' | 'openrouter' | 'freemodel' | 'freebuff') => {
     if (type === 'ollama') {
@@ -321,6 +324,75 @@ export default function SettingsPanel({ settingsCtx }: Props) {
               Local rejimdə desktop routing əsasən Ollama / lokal modellər üzərindən işləyir.
             </div>
           )}
+        </div>
+      )}
+
+      {showLocalRuntimeGuidance && (
+        <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+          <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+            Local Fix Guidance
+          </div>
+          <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+            Local runtime hazır deyilsə adətən iki addım kifayətdir: əvvəl server-i qaldır, sonra modeli yüklə.
+          </div>
+          <div className="space-y-1.5">
+            <div className="rounded-md px-2.5 py-2 font-mono text-[10px]" style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}>
+              ollama serve
+            </div>
+            <div className="rounded-md px-2.5 py-2 font-mono text-[10px]" style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}>
+              ollama pull gemma4:12b
+            </div>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={() => {
+                setBaseUrl('http://localhost:11434/v1');
+                setApiKey('ollama');
+                setModel('gemma4:12b');
+              }}
+            >
+              Ollama preset et
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setExecutionMode('cloud');
+                setBaseUrl('https://api.freemodel.dev/v1');
+                setApiKey('');
+                setModel('gpt-5.5');
+              }}
+            >
+              Cloud-a keç
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {showCloudRuntimeGuidance && (
+        <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+          <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+            Cloud Fix Guidance
+          </div>
+          <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+            Cloud rejimdə ən rahat başlanğıc üçün FreeModel API key daxil edin. İstəsəniz bir kliklə local rejimə də keçə bilərsiniz.
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={() => handlePreset('freemodel')}
+            >
+              FreeModel preset et
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setExecutionMode('local')}
+            >
+              Local-a keç
+            </Button>
+          </div>
         </div>
       )}
 
