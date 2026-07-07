@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Code2, Zap, Search, Globe, Key, ShieldAlert, Workflow, MonitorCog, CheckCircle2, AlertTriangle, CircleOff } from 'lucide-react';
 import { MODELS, WORKFLOW_OPTIONS } from '../../lib/constants';
-import { getGuiCapabilities, getInstalledBrowsers } from '../../lib/api';
+import { getDesktopRuntimeStatus, getGuiCapabilities, getInstalledBrowsers } from '../../lib/api';
 import type { GuiCapabilityStatus } from '../../lib/types';
 import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
 
@@ -30,6 +30,16 @@ export default function SettingsPanel({ settingsCtx }: Props) {
   const [browserScanError, setBrowserScanError] = useState('');
   const [guiCapabilities, setGuiCapabilities] = useState<GuiCapabilityStatus | null>(null);
   const [guiCapabilityError, setGuiCapabilityError] = useState('');
+  const [desktopRuntime, setDesktopRuntime] = useState<{
+    mode: string;
+    baseUrl: string;
+    model: string;
+    ready: boolean;
+    status: 'ok' | 'degraded' | 'missing' | 'unknown';
+    summary: string;
+    checks: Array<{ key: string; ok: boolean; detail: string }>;
+  } | null>(null);
+  const [desktopRuntimeError, setDesktopRuntimeError] = useState('');
   const [isCustomMode, setIsCustomMode] = useState(() => {
     return baseUrl && !baseUrl.includes('openrouter.ai');
   });
@@ -85,6 +95,28 @@ export default function SettingsPanel({ settingsCtx }: Props) {
       cancelled = true;
     };
   }, [guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl]);
+
+  useEffect(() => {
+    if (!isDesktopProduct) return;
+    let cancelled = false;
+    const loadDesktopRuntime = async () => {
+      try {
+        setDesktopRuntimeError('');
+        const runtime = await getDesktopRuntimeStatus({
+          mode: executionMode,
+          baseUrl,
+          model
+        });
+        if (!cancelled) setDesktopRuntime(runtime);
+      } catch (error: any) {
+        if (!cancelled) setDesktopRuntimeError(error?.message || 'Desktop runtime status alınmadı');
+      }
+    };
+    loadDesktopRuntime();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDesktopProduct, executionMode, baseUrl, model]);
 
   const scanBrowsers = async () => {
     setBrowserScanError('');
@@ -274,9 +306,62 @@ export default function SettingsPanel({ settingsCtx }: Props) {
           <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
             Model seçimi gizlidir. BahAI seçilən mənbəyə görə ən uyğun modeli özü seçir.
           </div>
+          <div className="rounded-lg px-3 py-2" style={{ background: 'var(--bg-main)', border: '1px solid var(--border)' }}>
+            <div className="text-[10px] font-semibold mb-1" style={{ color: 'var(--fg-main)' }}>
+              {executionMode === 'local' ? 'Local Desktop aktivdir' : 'Cloud Desktop aktivdir'}
+            </div>
+            <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+              {executionMode === 'local'
+                ? 'Bu rejim lokal model, fayl sistemi və terminal axınlarına üstünlük verir. Gecikmə az, nəzarət yüksəkdir.'
+                : 'Bu rejim cloud provider qatına üstünlük verir. Daha güclü reasoning və geniş model routing istifadə olunur.'}
+            </div>
+          </div>
           {executionMode === 'local' && (
             <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
               Local rejimdə desktop routing əsasən Ollama / lokal modellər üzərindən işləyir.
+            </div>
+          )}
+        </div>
+      )}
+
+      {isDesktopProduct && (
+        <div className="rounded-lg p-3 space-y-2" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+              Desktop Runtime Status
+            </div>
+            <div className="text-[10px]" style={{ color: desktopRuntime?.ready ? 'var(--color-success, #22c55e)' : 'var(--fg-muted)' }}>
+              {desktopRuntime?.ready ? 'Hazır' : (desktopRuntime?.status === 'missing' ? 'Hazır deyil' : 'Yoxlanır')}
+            </div>
+          </div>
+          {desktopRuntimeError ? (
+            <div className="text-[10px]" style={{ color: 'var(--color-warning, #f59e0b)' }}>
+              {desktopRuntimeError}
+            </div>
+          ) : desktopRuntime ? (
+            <>
+              <div className="text-[10px]" style={{ color: 'var(--fg-secondary)' }}>
+                {desktopRuntime.summary}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {desktopRuntime.checks.map((check) => (
+                  <span
+                    key={`${check.key}-${check.detail}`}
+                    className="px-2 py-1 rounded-md text-[10px] font-mono"
+                    style={{
+                      background: 'var(--bg-main)',
+                      color: check.ok ? 'var(--color-success, #22c55e)' : 'var(--fg-muted)',
+                      border: '1px solid var(--border)'
+                    }}
+                  >
+                    {check.key}: {check.detail}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+              Yoxlanır...
             </div>
           )}
         </div>
@@ -588,6 +673,15 @@ export default function SettingsPanel({ settingsCtx }: Props) {
 
       {showDesktopControls && (
       <>
+      <div className="rounded-lg p-3 space-y-1.5" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+        <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+          Desktop Onboarding
+        </div>
+        <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+          Ən rahat başlanğıc axını: əvvəl `Execution Source` seç, sonra layihə qovluğunu aç, daha sonra agentə audit, fix və ya feature tapşırığı ver.
+        </div>
+      </div>
+
       {/* Performance mode */}
       <div className="space-y-2 pt-2">
         <button

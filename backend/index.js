@@ -3258,6 +3258,72 @@ app.get('/api/computer-use-status', async (req, res) => {
   }
 });
 
+app.get('/api/runtime-status', async (req, res) => {
+  const mode = String(req.query.mode || 'cloud');
+  const baseUrl = String(req.query.baseUrl || '').trim();
+  const model = String(req.query.model || '').trim();
+
+  const normalizedBaseUrl = baseUrl || (
+    mode === 'local'
+      ? (process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1')
+      : (process.env.OPENAI_BASE_URL || 'https://api.freemodel.dev/v1')
+  );
+
+  const status = {
+    mode,
+    baseUrl: normalizedBaseUrl,
+    model,
+    ready: false,
+    status: 'unknown',
+    summary: '',
+    checks: []
+  };
+
+  try {
+    if (mode === 'local') {
+      const tagsUrl = normalizedBaseUrl.replace(/\/v1\/?$/i, '/api/tags');
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2500);
+      try {
+        const response = await fetch(tagsUrl, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!response.ok) {
+          status.status = 'degraded';
+          status.summary = `Lokal model server cavab verdi, amma uğurlu deyil (${response.status}).`;
+          status.checks.push({ key: 'local_server', ok: false, detail: `HTTP ${response.status}` });
+          return res.json(status);
+        }
+        const data = await response.json().catch(() => ({}));
+        const models = Array.isArray(data?.models) ? data.models : [];
+        const hasRequestedModel = model ? models.some((item) => String(item?.name || '').includes(model)) : models.length > 0;
+        status.ready = hasRequestedModel || !model;
+        status.status = status.ready ? 'ok' : 'degraded';
+        status.summary = status.ready
+          ? `Lokal runtime hazırdır${model ? ` və ${model} görünür` : ''}.`
+          : `Lokal server işləyir, amma ${model || 'model'} tapılmadı.`;
+        status.checks.push({ key: 'local_server', ok: true, detail: `${models.length} model göründü` });
+        status.checks.push({ key: 'local_model', ok: status.ready, detail: model || 'model auto' });
+        return res.json(status);
+      } catch (error) {
+        clearTimeout(timeout);
+        status.status = 'missing';
+        status.summary = 'Lokal runtime hazır deyil. Ollama və ya uyğun OpenAI-compatible local server görünmür.';
+        status.checks.push({ key: 'local_server', ok: false, detail: error.message || 'connection failed' });
+        return res.json(status);
+      }
+    }
+
+    status.ready = true;
+    status.status = 'ok';
+    status.summary = 'Cloud routing hazırdır. Real provider seçimi sorğu zamanı BahAI tərəfindən idarə olunur.';
+    status.checks.push({ key: 'cloud_endpoint', ok: true, detail: normalizedBaseUrl });
+    status.checks.push({ key: 'cloud_model', ok: true, detail: model || 'auto' });
+    return res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Runtime status alınmadı' });
+  }
+});
+
 app.post('/api/task-plan', async (req, res) => {
   const { prompt, workingDirectory } = req.body;
   const resolvedWD = resolveWorkingDirectory(workingDirectory, req.user);
@@ -3700,7 +3766,8 @@ app.post('/api/chat', async (req, res) => {
       item.sessionId &&
       (!conversationId || !item.conversationId || String(item.conversationId) === String(conversationId))
     ));
-    const shouldForceGuiResume = isGuiLoginResumeRequest(latestUserText) && Boolean(pendingGuiLoginCheckpoint);
+    const isWebChatProduct = requestedProductMode === 'web_chat';
+    const shouldForceGuiResume = !isWebChatProduct && isGuiLoginResumeRequest(latestUserText) && Boolean(pendingGuiLoginCheckpoint);
     const autoIntent = classifyTaskComplexity({
       userMessage: lastUserMsg?.content || '',
       messageHistoryLen: messages.length,
@@ -3728,14 +3795,14 @@ app.post('/api/chat', async (req, res) => {
       }
     }
     const hasActiveGuiSession = Boolean(projectMemory?.activeGuiSession?.sessionId);
-    const shouldForceGuiContinuation = hasActiveGuiSession && isGuiContinuationRequest(latestUserText);
-    const requestedWorkflow = requestedProductMode === 'web_chat'
+    const shouldForceGuiContinuation = !isWebChatProduct && hasActiveGuiSession && isGuiContinuationRequest(latestUserText);
+    const requestedWorkflow = isWebChatProduct
       ? 'quick'
       : workflow;
-    const requestedOrchestrationMode = requestedProductMode === 'web_chat' ? false : orchestrationMode;
+    const requestedOrchestrationMode = isWebChatProduct ? false : orchestrationMode;
     const effectiveWorkflow = (shouldForceGuiResume || shouldForceGuiContinuation) ? 'gui' : requestedWorkflow;
     const earlyOrchestration = resolveOrchestrationConfig(requestedOrchestrationMode, effectiveWorkflow, latestUserText);
-    if (requestedProductMode === 'web_chat') {
+    if (isWebChatProduct) {
       earlyOrchestration.toolProfile = 'web-chat';
     }
 
@@ -3913,6 +3980,18 @@ app.post('/api/chat', async (req, res) => {
 
     const auditStyleRequest = isAuditStyleRequest(latestUserText);
 
+    const webChatNeedsDesktopRedirect =
+      isWebChatProduct &&
+      (
+        /\b(gui|browser automation|computer use|terminal|repo|repository|git|commit|push|clone|workspace|working directory|project folder|qovluq|layihə qovluğu|fayl yarat|fayli yarat|fayl redaktə|kodda dəyiş|codebase|server başlat|start server)\b/i.test(latestUserText) ||
+        isGuiLoginCheckpointRequest(latestUserText) ||
+        isGuiLoginResumeRequest(latestUserText) ||
+        isGuiContinuationRequest(latestUserText) ||
+        isComputerUseOpenRequest(latestUserText, effectiveWorkflow) ||
+        isComputerUseContinuationRequest(latestUserText, effectiveWorkflow) ||
+        isSeoGuiCheckpointRequest(latestUserText, effectiveWorkflow)
+      );
+
     let sysPrompt = `Sən BahAI Cloud-san. Azərbaycan dilində danışan, peşəkar və aydın chat-first AI assistentsən.
 İstifadəçi ilə düşünür, izah edir, plan qurur, mətn və kod nümunələri hazırlayırsan.
 
@@ -3922,6 +4001,8 @@ MƏHSUL QAYDASI:
 - Lazım olsa read-only alətlərlə fakt topla, amma özünü fayl dəyişən local operator kimi təqdim etmə.
 - İstifadəçi repo və ya layihə barədə soruşursa, əvvəl oxu, sonra danış. Uydurma finding yazma.
 - İstifadəçi coding sualı verirsə, izah, plan, snippet, refactor təklifi və risk analizi verə bilərsən.
+- Desktop-only əməliyyatlar etmir: GUI/browser idarəsi, terminal icrası, git push/commit, lokal fayl yazma, qovluq seçimi, server başlatma.
+- Belə istəklərdə əməliyyatı etməyə çalışma; qısa şəkildə bunun BahAI Desktop üçün nəzərdə tutulduğunu de və burada plan/təlimat ver.
 - İstifadəçiyə daxili tool formatları və JSON təlimatı vermə.
 
 CAVAB TƏRZİ:
@@ -3929,6 +4010,15 @@ CAVAB TƏRZİ:
 - dəqiq
 - səmimi, amma peşəkar
 - nəticə yönümlü`;
+
+    if (webChatNeedsDesktopRedirect) {
+      sysPrompt += `
+
+WEB CHAT MƏHDUDİYYƏTİ:
+- İstifadəçinin son istəyi desktop-səviyyəli icra tələb edir.
+- Bu sorğuda tool çağırmadan, əməliyyat icra etmədən cavab ver.
+- Cavab formatı: 1) niyə bu əməliyyatın desktop üçün uyğun olduğunu de, 2) burada nəyi izah/plana çevirə biləcəyini de, 3) istəsə desktop-da hansı qısa promptla davam edə biləcəyini yaz.`;
+    }
     
     if (requestedProductMode !== 'web_chat') {
       sysPrompt = `Sən bahAI Desktop üçün peşəkar AI Kodlaşdırma Agentisən. Project Root: ${resolvedWD}.
@@ -4072,7 +4162,7 @@ AUDIT REJİMİ:
       
     const hasAttachmentInRequest = Array.isArray(messages) && messages.some((m) => Array.isArray(m?.attachments) && m.attachments.length > 0);
     const orchestration = resolveOrchestrationConfig(requestedOrchestrationMode, requestedWorkflow, latestUserText);
-    if (requestedProductMode === 'web_chat') {
+    if (isWebChatProduct) {
       orchestration.toolProfile = 'web-chat';
       orchestration.enabled = false;
       orchestration.mode = 'manager_direct';

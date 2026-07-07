@@ -316,7 +316,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                 {chat.activeProject?.name || (isWebProduct ? 'BahAI Cloud' : 'bahAI')}
               </div>
               <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
-                {isWebProduct ? 'Cloud chat sessiyası' : (chat.activeProject?.path || 'Layihə seçilməyib')}
+                {isWebProduct ? 'Chat history və assistant ayarları' : (chat.activeProject?.path || 'Layihə seçilməyib')}
               </div>
             </div>
           </div>
@@ -427,6 +427,22 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
           </div>
         )}
 
+        {!isWebProduct && !isDesktopLocal && (
+          <div className="px-3 pb-2 shrink-0">
+            <div
+              className="rounded-xl px-3 py-2.5"
+              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
+            >
+              <div className="text-[11px] font-semibold mb-1" style={{ color: 'var(--fg-main)' }}>
+                Cloud Desktop
+              </div>
+              <div className="text-[11px]" style={{ color: 'var(--fg-muted)' }}>
+                Desktop səthindəsiniz, amma reasoning və cavab keyfiyyəti üçün cloud model qatına üstünlük verilir.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Conversation list grouped by date */}
         <div className="flex-1 overflow-y-auto premium-scroll px-2 space-y-1">
           {grouped.map(group => (
@@ -455,18 +471,20 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                     >
                       <div className="min-w-0 flex-1">
                         <div className="text-sm truncate">{conv.title || (isWebProduct ? 'Adsız chat' : 'Adsız söhbət')}</div>
-                        <div className="mt-1 flex items-center gap-2 min-w-0">
-                          <span
-                            className="text-[10px] px-2 py-0.5 rounded-md truncate"
-                            style={{
-                              color: isSandbox ? 'var(--fg-muted)' : 'var(--color-accent)',
-                              background: isSandbox ? 'var(--bg-surface)' : 'var(--color-accent-muted)',
-                              border: '1px solid var(--border)'
-                            }}
-                          >
-                            {projectLabel}
-                          </span>
-                        </div>
+                        {!isWebProduct && (
+                          <div className="mt-1 flex items-center gap-2 min-w-0">
+                            <span
+                              className="text-[10px] px-2 py-0.5 rounded-md truncate"
+                              style={{
+                                color: isSandbox ? 'var(--fg-muted)' : 'var(--color-accent)',
+                                background: isSandbox ? 'var(--bg-surface)' : 'var(--color-accent-muted)',
+                                border: '1px solid var(--border)'
+                              }}
+                            >
+                              {projectLabel}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </button>
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 mobile-visible" style={{ opacity: isMobile ? 1 : undefined }}>

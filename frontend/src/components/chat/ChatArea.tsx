@@ -42,7 +42,7 @@ export default function ChatArea({ messages, loading, onSend, workingDirectory, 
 
         {/* Heading */}
         <h2 className="text-lg sm:text-2xl font-semibold mb-5 sm:mb-8 text-center" style={{ color: 'var(--fg-main)' }}>
-          {productMode === 'web_chat' ? 'BahAI Cloud ilə nə etmək istəyirsiniz?' : 'Necə kömək edə bilərəm?'}
+          {productMode === 'web_chat' ? 'BahAI Cloud ilə nə etmək istəyirsiniz?' : 'BahAI Desktop ilə nə qururuq?'}
         </h2>
 
         {/* Suggestion cards */}
@@ -55,10 +55,10 @@ export default function ChatArea({ messages, loading, onSend, workingDirectory, 
                 { label: 'Audit et', prompt: 'Bu ideyanı və ya mətni qısa audit edib zəif tərəflərini de' },
               ]
             : [
-                { label: 'React app yarat', prompt: 'Create a new React app with TypeScript and Tailwind CSS' },
-                { label: 'Səhv düzəlt', prompt: 'Help me fix a bug in my code' },
-                { label: 'Kodu izah et', prompt: 'Explain what this code does' },
-                { label: 'Funksiya əlavə et', prompt: 'Add a new feature to my project' },
+                { label: 'Repo audit et', prompt: 'Bu layihəni senior engineer kimi audit et, əsas riskləri və prioritet düzəlişləri çıxart' },
+                { label: 'Səhv düzəlt', prompt: 'Bu layihədəki bug-u tap və düzəlt, sonra yoxla' },
+                { label: 'Feature qur', prompt: 'Bu layihəyə yeni bir funksiya əlavə et və uyğun faylları yenilə' },
+                { label: 'Refactor et', prompt: 'Bu kod hissəsini daha təmiz və maintainable şəkildə refactor et' },
               ]).map((item) => (
             <button
               key={item.label}

@@ -357,7 +357,7 @@ function AppContent() {
             >
               {chat.safeMode ? 'Safe Mode' : 'Auto Execute'}
             </span>
-            {chat.activeProject && (
+            {!isWebProduct && chat.activeProject && (
               <span
                 className="text-[11px] px-2.5 py-1 rounded-md truncate max-w-[180px] shrink-0"
                 style={{ background: 'var(--bg-hover)', color: 'var(--fg-muted)', border: '1px solid var(--border)' }}

@@ -72,7 +72,7 @@ function getDefaultWorkspaceName(productMode?: Settings['productMode']): string 
 function getWelcomeMessage(productMode?: Settings['productMode'], serverBacked = false): string {
   if (productMode === 'web_chat') {
     return serverBacked
-      ? 'Salam! Mən BahAI Cloud asistentiəm. Bu söhbət sizə bağlı saxlanılır və buradan birbaşa davam edə bilərsiniz.'
+      ? 'Salam! Mən BahAI Cloud asistentiəm. Bu chat tarixçəniz sizə bağlı saxlanılır və buradan birbaşa davam edə bilərsiniz.'
       : 'Salam! Mən BahAI Cloud asistentiəm. Hazırsınızsa sualınızı yazın, birlikdə davam edək.';
   }
   return serverBacked

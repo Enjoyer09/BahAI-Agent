@@ -248,6 +248,28 @@ export async function getComputerUseStatus(): Promise<GuiCapabilityStatus['compu
   return await response.json();
 }
 
+export async function getDesktopRuntimeStatus(input: {
+  mode: 'cloud' | 'local';
+  baseUrl?: string;
+  model?: string;
+}): Promise<{
+  mode: string;
+  baseUrl: string;
+  model: string;
+  ready: boolean;
+  status: 'ok' | 'degraded' | 'missing' | 'unknown';
+  summary: string;
+  checks: Array<{ key: string; ok: boolean; detail: string }>;
+}> {
+  const params = new URLSearchParams();
+  params.set('mode', input.mode);
+  if (input.baseUrl) params.set('baseUrl', input.baseUrl);
+  if (input.model) params.set('model', input.model);
+  const response = await apiFetch(`${API_BASE_URL}/api/runtime-status?${params.toString()}`);
+  if (!response.ok) throw new Error('Desktop runtime status yüklənmədi');
+  return await response.json();
+}
+
 export async function getInteractions(): Promise<ActionCenterInteraction[]> {
   const response = await apiFetch(`${API_BASE_URL}/api/interactions`);
   if (!response.ok) throw new Error('Interaction-lar yüklənmədi');
