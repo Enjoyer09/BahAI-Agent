@@ -41,6 +41,7 @@ import {
   mergeEvidenceSummaryIntoMemory,
   mergeGuiCapabilitiesIntoMemory,
   resolveActiveGuiSessionInMemory,
+  isToolCallLikeText,
 } from '../lib/chatRuntime';
 import type { SendMessageContext } from '../store/chatService';
 
@@ -259,6 +260,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     updateAssistantMessage: (content: string) => {
       const convId = activeConvIdRef.current;
       if (!convId) return;
+      if (isToolCallLikeText(content)) return;
       const now = Date.now();
       if (!streamThrottleRef.current || now - streamThrottleRef.current > 33) {
         streamThrottleRef.current = now;
@@ -284,6 +286,14 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const lastMsg = msgs[msgs.length - 1];
       const normalizedIncoming = String(msg.content || '').trim();
       const normalizedLast = String(lastMsg?.content || '').trim();
+      if (!normalizedIncoming && lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
+        msgs.pop();
+        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
+        if (serverBackedRef.current) {
+          updateConversationOnServer(convId, { messages: msgs }).catch(console.error);
+        }
+        return;
+      }
       if (
         msg.role === 'assistant' &&
         normalizedIncoming &&

@@ -30,6 +30,7 @@ import {
   normalizeAssistantText,
   chooseAssistantContent,
   normalizeUiErrorMessage,
+  isToolCallLikeText,
   extractRepoProfileFromToolResult,
   mergeRepoProfileIntoMemory,
   mergePlannerArtifactIntoMemory,
@@ -386,6 +387,10 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
 
   if (event.type === 'assistant_message') {
     const content = chooseAssistantContent(streamBufferRef.current || '', event.message.content || '');
+    if (isWebChat && isToolCallLikeText(content)) {
+      streamBufferRef.current = '';
+      return;
+    }
     const assistantMsg: Message = {
       id: generateId(),
       role: 'assistant',

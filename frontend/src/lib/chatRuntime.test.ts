@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   normalizeAssistantText,
+  isToolCallLikeText,
   chooseAssistantContent,
   normalizeUiErrorMessage,
   extractRepoProfileFromToolResult,
@@ -45,6 +46,28 @@ describe('normalizeAssistantText', () => {
   it('returns empty string for non-string input', () => {
     expect(normalizeAssistantText(null as any)).toBe('');
     expect(normalizeAssistantText(undefined as any)).toBe('');
+  });
+
+  it('strips raw tool call json blocks', () => {
+    expect(normalizeAssistantText('{"name":"web_search","arguments":{"query":"Baku weather today"}}')).toBe('');
+  });
+
+  it('strips leaked tool argument fragments', () => {
+    expect(normalizeAssistantText('"arguments": { "url": "https://wttr.in/Baku?format=3" }')).toBe('');
+  });
+});
+
+describe('isToolCallLikeText', () => {
+  it('detects raw tool call json', () => {
+    expect(isToolCallLikeText('{"name":"web_search","arguments":{"query":"Baku weather today"}}')).toBe(true);
+  });
+
+  it('detects leaked arguments fragment', () => {
+    expect(isToolCallLikeText('"arguments": { "url": "https://wttr.in/Baku?format=3" }')).toBe(true);
+  });
+
+  it('does not flag normal prose', () => {
+    expect(isToolCallLikeText('Bakida hava bu gun serindir.')).toBe(false);
   });
 });
 

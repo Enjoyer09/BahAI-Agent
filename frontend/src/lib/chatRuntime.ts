@@ -1,12 +1,24 @@
 import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GateReceipt, GovernanceEntryPath, GuiCapabilityStatus, HumanCheckpoint, PlannerArtifact, RuntimeArtifact } from './types';
 
+export function isToolCallLikeText(content: string): boolean {
+  const text = String(content || '').trim();
+  if (!text) return false;
+  return (
+    /^```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
+    /^\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
+    /^(?:```(?:json)?\s*)?"arguments"\s*:\s*\{/is.test(text) ||
+    /^(?:```(?:json)?\s*)?\{\s*"arguments"\s*:\s*\{/is.test(text) ||
+    /^(?:```(?:json)?\s*)?"url"\s*:\s*"https?:\/\/[^\s"]+/is.test(text) ||
+    /^(?:```(?:json)?\s*)?\{\s*"url"\s*:\s*"https?:\/\/[^\s"]+/is.test(text) ||
+    /^```json\s*$/i.test(text) ||
+    /^```\s*$/i.test(text)
+  );
+}
+
 export function normalizeAssistantText(content: string): string {
   if (typeof content !== 'string') return '';
   const trimmed = content.trim();
-  if (
-    /^\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*\}\s*\}$/.test(trimmed) ||
-    /^```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"/i.test(trimmed)
-  ) {
+  if (isToolCallLikeText(trimmed)) {
     return '';
   }
   const match = trimmed.match(/^\{\s*"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*\}$/);
