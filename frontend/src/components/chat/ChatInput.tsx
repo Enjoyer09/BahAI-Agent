@@ -236,7 +236,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
             }}
-            placeholder={blockedByActionCenter ? 'Əvvəl Action Center-də login və ya təsdiq addımını tamamlayın...' : (productMode === 'web_chat' ? 'BahAI Cloud-a yazın...' : 'bahAI-ya yazın...')}
+            placeholder={blockedByActionCenter ? 'Əvvəl Action Center-də login və ya təsdiq addımını tamamlayın...' : (productMode === 'web_chat' ? 'Mesajınızı yazın...' : 'bahAI-ya yazın...')}
             className="flex-1 bg-transparent border-none outline-none resize-none min-h-[24px] leading-relaxed px-1.5"
             style={{
               color: 'var(--fg-main)',

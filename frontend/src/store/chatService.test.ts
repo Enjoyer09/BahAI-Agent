@@ -35,7 +35,7 @@ describe('getDefaultWorkspaceName', () => {
   });
 
   it('returns cloud session for web_chat mode', () => {
-    expect(getDefaultWorkspaceName('web_chat')).toBe('BahAI Cloud Session');
+    expect(getDefaultWorkspaceName('web_chat')).toBe('BahAI Session');
   });
 });
 

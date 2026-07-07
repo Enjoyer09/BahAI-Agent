@@ -223,6 +223,11 @@ async function handleToolCall(toolCall, workingDirectory, user) {
         if (!query) return 'Axtarış sorğusu daxil edin.';
         const lowerQuery = query.toLowerCase();
         const isWeatherQuery = /\b(hava|weather|temperature|temp|derece|dərəcə)\b/i.test(lowerQuery);
+        const cityDisplayName = {
+          Baku: 'Bakıda',
+          Sumqayit: 'Sumqayıtda',
+          Ganja: 'Gəncədə'
+        };
         const cityMatch = query.match(/\b(baku|bakı|baki|sumqayit|sumqayıt|ganja|gence|gəncə)\b/i);
         const normalizedCity = cityMatch
           ? ({
@@ -243,7 +248,13 @@ async function handleToolCall(toolCall, workingDirectory, user) {
             const wttrRes = await fetch(wttrUrl, { timeout: 10000, headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
             if (wttrRes.ok) {
               const weatherLine = (await wttrRes.text()).trim();
-              if (weatherLine) return weatherLine;
+              if (weatherLine) {
+                const cleaned = weatherLine
+                  .replace(/\s+/g, ' ')
+                  .replace(/\+([0-9])/g, '$1')
+                  .trim();
+                return `${cityDisplayName[normalizedCity] || normalizedCity} hava belə görünür: ${cleaned}`;
+              }
             }
           } catch { /* weather fallback failed; continue to normal search */ }
         }
@@ -321,11 +332,11 @@ async function handleToolCall(toolCall, workingDirectory, user) {
 
         const isSportsScheduleQuery = /\b(dünya çempionatı|world championship|oyunlar|games|fixture|schedule|match|matç)\b/i.test(lowerQuery);
         if (isSportsScheduleQuery) {
-          return `Bu sorğu hələ kifayət qədər konkret deyil. Hansı dünya çempionatını nəzərdə tutduğunuzu yazın: məsələn futbol, voleybol, basketbol, şahmat və ya başqa turnir.`;
+          return `Daha dəqiq deyin: hansı dünya çempionatını nəzərdə tutursunuz? Məsələn futbol, voleybol, basketbol, şahmat və ya başqa turnir.`;
         }
 
         if (isWeatherQuery) {
-          return `Hazırda bu hava sorğusu üçün dəqiq nəticə çıxara bilmədim. Şəhərin adını bir az daha dəqiq yazın; məsələn: "Bakıda hava necədir?" və ya "Sumqayıtda hava necədir?"`;
+          return `Bu hava sorğusu üçün şəhərin adını daha dəqiq yazın; məsələn: "Bakıda hava necədir?" və ya "Sumqayıtda hava necədir?"`;
         }
 
         return `"${query}" üçün dəqiq nəticə çıxara bilmədim. Sorğunu bir az daha konkret yazın və ya mövzunu daraldın.`;

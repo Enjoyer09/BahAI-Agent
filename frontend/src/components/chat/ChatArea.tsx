@@ -42,7 +42,7 @@ export default function ChatArea({ messages, loading, onSend, onStop, workingDir
 
         {/* Heading */}
         <h2 className="text-lg sm:text-2xl font-semibold mb-5 sm:mb-8 text-center" style={{ color: 'var(--fg-main)' }}>
-          {productMode === 'web_chat' ? 'BahAI Cloud ilə nə etmək istəyirsiniz?' : 'BahAI Desktop ilə nə qururuq?'}
+          {productMode === 'web_chat' ? 'Bu gün nə etmək istəyirsiniz?' : 'BahAI Desktop ilə nə qururuq?'}
         </h2>
 
         {/* Suggestion cards */}

@@ -30,9 +30,6 @@ async function collectStreamOutput({
 
       if (chunk.type === 'response.reasoning_text.delta' || chunk.type === 'response.reasoning_summary_text.delta') {
         accumulatedReasoning += chunk.delta;
-        if (accumulatedReasoning.length <= 5) {
-          writeSse(res, { type: 'assistant_delta', content: '🤔 *Düşünürəm...*\n\n' });
-        }
       }
 
       if (chunk.type === 'response.output_item.added' && chunk.item?.type === 'function_call') {
@@ -71,9 +68,6 @@ async function collectStreamOutput({
 
     if (delta.reasoning_content) {
       accumulatedReasoning += delta.reasoning_content;
-      if (accumulatedReasoning.length <= 5) {
-        writeSse(res, { type: 'assistant_delta', content: '🤔 *Düşünürəm...*\n\n' });
-      }
     }
 
     if (delta.tool_calls) {

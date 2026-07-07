@@ -240,6 +240,10 @@ export default function SettingsPanel({ settingsCtx }: Props) {
     );
   }
 
+  if (isWebProduct) {
+    return null;
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg p-3" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
@@ -247,16 +251,12 @@ export default function SettingsPanel({ settingsCtx }: Props) {
           Aktiv konfiqurasiya
         </div>
         <div className="text-[11px] space-y-1" style={{ color: 'var(--fg-secondary)' }}>
-          <div>Məhsul: <span style={{ color: 'var(--fg-main)' }}>{isWebProduct ? 'BahAI Cloud' : 'BahAI Desktop'}</span></div>
-          <div>Rejim: <span style={{ color: 'var(--fg-main)' }}>{isWebProduct ? 'Cloud' : executionMode === 'local' ? 'Local' : 'Cloud'}</span></div>
-          {!isWebProduct && (
-            <>
-              <div>Model: <span style={{ color: 'var(--fg-main)' }}>{selected?.name || model}</span></div>
-              <div>Workflow: <span style={{ color: 'var(--fg-main)' }}>{orchestrationMode ? (activeWorkflow?.name || workflow) : 'Söndürülüb'}</span></div>
-              <div>Browser: <span style={{ color: 'var(--fg-main)' }}>{guiBrowserMode}</span></div>
-              <div>Endpoint: <span style={{ color: 'var(--fg-main)' }}>{baseUrl}</span></div>
-            </>
-          )}
+          <div>Məhsul: <span style={{ color: 'var(--fg-main)' }}>BahAI Desktop</span></div>
+          <div>Rejim: <span style={{ color: 'var(--fg-main)' }}>{executionMode === 'local' ? 'Local' : 'Cloud'}</span></div>
+          <div>Model: <span style={{ color: 'var(--fg-main)' }}>{selected?.name || model}</span></div>
+          <div>Workflow: <span style={{ color: 'var(--fg-main)' }}>{orchestrationMode ? (activeWorkflow?.name || workflow) : 'Söndürülüb'}</span></div>
+          <div>Browser: <span style={{ color: 'var(--fg-main)' }}>{guiBrowserMode}</span></div>
+          <div>Endpoint: <span style={{ color: 'var(--fg-main)' }}>{baseUrl}</span></div>
         </div>
       </div>
 
