@@ -217,16 +217,83 @@ async function handleToolCall(toolCall, workingDirectory, user) {
       }
 
       case "web_search": {
+        // Tries multiple search backends in order of quality. Google Custom Search
+        // (if configured via env) returns the best results. Falls back to DuckDuckGo.
+        const query = String(args.query || '').trim();
+        if (!query) return 'Axtarış sorğusu daxil edin.';
+
+        const googKey = process.env.GOOGLE_API_KEY || '';
+        const googCx = process.env.GOOGLE_CSE_ID || '';
+
+        // 1) Google Custom Search (best quality, requires API key)
+        if (googKey && googCx) {
+          try {
+            const gUrl = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(googKey)}&cx=${encodeURIComponent(googCx)}&q=${encodeURIComponent(query)}&hl=az`;
+            const gRes = await fetch(gUrl, { timeout: 10000 });
+            if (gRes.ok) {
+              const gData = await gRes.json();
+              if (gData.items && gData.items.length > 0) {
+                const results = gData.items.slice(0, 6).map(item => {
+                  const snippet = (item.snippet || '').slice(0, 250);
+                  return `• ${item.title}\n  ${item.link}\n  ${snippet}`;
+                });
+                return `🔍 Google "${query}" üçün nəticələr:\n\n${results.join('\n\n')}`;
+              }
+            }
+          } catch { /* fall through to next backend */ }
+        }
+
+        // 2) DuckDuckGo Instant Answer API (free, no key needed, limited coverage)
         try {
-          const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(args.query)}&format=json&no_html=1`;
-          const response = await fetch(ddgUrl, { timeout: 10000 });
-          const data = await response.json();
-          const results = [];
-          if (data.Abstract) results.push(`📋 ${data.Abstract}`);
-          if (data.Answer) results.push(`✅ ${data.Answer}`);
-          if (data.RelatedTopics) { data.RelatedTopics.slice(0, 5).forEach(topic => { if (topic.Text) results.push(`• ${topic.Text}`); }); }
-          return results.length > 0 ? `🔍 "${args.query}" üçün nəticələr:\n${results.join('\n')}` : `"${args.query}" üçün birbaşa nəticə tapılmadı. Daha spesifik axtarış edin.`;
-        } catch (e) { return `Web search error: ${e.message}`; }
+          const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
+          const ddgRes = await fetch(ddgUrl, { timeout: 10000 });
+          if (ddgRes.ok) {
+            const data = await ddgRes.json();
+            const ddgResults = [];
+            if (data.Abstract) ddgResults.push(`📋 ${data.Abstract.slice(0, 600)}`);
+            if (data.Answer) ddgResults.push(`✅ ${data.Answer}`);
+            if (data.Infobox && data.Infobox.content) {
+              data.Infobox.content.slice(0, 6).forEach(item => {
+                if (item.label && item.value) ddgResults.push(`• ${item.label}: ${item.value}`);
+              });
+            }
+            if (data.RelatedTopics) {
+              data.RelatedTopics.slice(0, 5).forEach(topic => {
+                if (topic.Text) ddgResults.push(`• ${topic.Text.slice(0, 300)}`);
+                // Handle sub-topics
+                if (topic.Topics) topic.Topics.slice(0, 3).forEach(sub => {
+                  if (sub.Text) ddgResults.push(`  • ${sub.Text.slice(0, 200)}`);
+                });
+              });
+            }
+            if (data.Results) {
+              data.Results.slice(0, 4).forEach(item => {
+                if (item.Text) ddgResults.push(`• ${item.Text.slice(0, 300)}`);
+              });
+            }
+            if (ddgResults.length > 0) {
+              return `🔍 "${query}" üçün nəticələr:\n${ddgResults.join('\n')}`;
+            }
+
+            // If DDG returned nothing useful, try a Wikipedia search as extra fallback
+            try {
+              const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=3`;
+              const wikiRes = await fetch(wikiUrl, { timeout: 8000 });
+              if (wikiRes.ok) {
+                const wikiData = await wikiRes.json();
+                const wikiHits = wikiData?.query?.search || [];
+                if (wikiHits.length > 0) {
+                  const wikiResults = wikiHits.map(h => 
+                    `• ${h.title}\n  https://en.wikipedia.org/wiki/${encodeURIComponent(h.title.replace(/ /g, '_'))}\n  ${(h.snippet || '').replace(/<[^>]+>/g, '').slice(0, 200)}`
+                  );
+                  return `🔍 "${query}" üçün nəticələr (Wikipedia):\n\n${wikiResults.join('\n\n')}`;
+                }
+              }
+            } catch { /* no wiki fallback */ }
+          }
+        } catch { /* ddg failed */ }
+
+        return `"${query}" üçün nəticə tapılmadı.\n\n📌 Axtarışı təkmilləşdirmək üçün:\n• Daha qısa və spesifik açar sözlər istifadə edin\n• _GOOGLE_API_KEY_ və _GOOGLE_CSE_ID_ env dəyişənlərini təyin edin (Google Custom Search üçün)\n• Birbaşa URL verilibsə browser_open ilə yoxlayın`;
       }
 
       case "web_fetch": {

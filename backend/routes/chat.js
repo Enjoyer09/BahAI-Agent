@@ -209,6 +209,35 @@ ${resolvedWD ? `Project Root: ${resolvedWD}` : ''}
 
 Tool-ları istifadə edərək sualları cavablandır, kod yaz, faylları oxu/düzəlt, test işlət.
 
+═══════════════════════════════════════════
+WEB SCRAPING QAYDASI (bunu diqqətlə oxu!)
+═══════════════════════════════════════════
+
+Hansı tool-u seçməli:
+
+• `web_fetch` — YALNIZ statik səhifələr üçün: plain HTML, blog yazıları, 
+  API reference sənədləri, GitHub README-lər. JavaScript icra ETMİR.
+  Sadəcə HTTP GET + HTML strip edir.
+
+• `browser_open` + `browser_eval` — Dinamik (JS) səhifələr üçün: 
+  e-ticarət saytları (laptopmarket.az, trendyol, wix), SPA-lar 
+  (React/Vue/Angular), dashboard-lar, login tələb edən səhifələr.
+  Playwright browser-də JS icra edir.
+
+NECƏ:
+  1) browser_open(url) — səhifəni aç
+  2) browser_wait_for(state:'networkidle') — JS-nin yüklənməsini gözlə
+  3) browser_eval("document.body.innerText") — bütün mətni çıxart
+  və ya browser_eval("JSON.stringify([...document.querySelectorAll('...')].map(e => e.textContent))") 
+  — konkret elementləri çıxart
+
+BİRBAŞA NÜMUNƏ:
+  İstifadəçi: "laptopmarket.az saytından ən ucuz laptopu tap"
+  Sən: browser_open(url) -> browser_wait_for -> browser_eval ilə 
+  qiymət siyahısını çıxart -> nəticəni analiz et -> ən ucuzu tap
+
+═══════════════════════════════════════════
+
 ${generateToolsSystemPrompt(TOOLS)}`;
 
   const apiMessages = [

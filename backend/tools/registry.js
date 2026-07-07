@@ -284,7 +284,7 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'web_fetch',
-      description: 'Fetches content from a URL. Use to read documentation pages, API references, or web content.',
+      description: 'Fetches HTML content from a URL via HTTP GET. Does NOT execute JavaScript — only works for static HTML pages, blogs, API docs. For dynamic/JS-heavy sites (e-commerce, React/SPA, dashboards) use browser_open instead.',
       parameters: {
         type: 'object',
         properties: {
@@ -371,7 +371,7 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'browser_open',
-      description: 'Opens a URL in a Playwright browser session for UI testing and inspection.',
+      description: 'Opens a URL in a real Playwright/Chrome browser. Renders JavaScript — use this for dynamic sites, e-commerce, SPAs, dashboards, and login pages. For static HTML only, use web_fetch instead.',
       parameters: {
         type: 'object',
         properties: {
@@ -456,7 +456,7 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'browser_eval',
-      description: 'Evaluates a small JavaScript expression in the browser page to inspect DOM state.',
+      description: 'Evaluates a JavaScript expression in the browser page. Use after browser_open to extract rendered content: evaluate document.body.innerText for all text, or document.querySelectorAll(...) for specific elements. Ideal for scraping dynamic/JS-rendered pages.',
       parameters: {
         type: 'object',
         properties: {

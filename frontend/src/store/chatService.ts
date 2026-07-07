@@ -2,7 +2,7 @@
 // Chat Service — Async Operations & SSE Handling
 // ==========================================
 
-import type { Message, Conversation, Project, Settings, SSEEvent, PlannerArtifact, ExecutionArtifact, ApprovalRequest } from '../lib/types';
+import type { Message, Conversation, Project, Settings, PlannerArtifact, ExecutionArtifact, ApprovalRequest } from '../lib/types';
 import {
   sendChatMessage as apiSendChatMessage,
   loadWorkspaceState,
@@ -38,13 +38,10 @@ import {
   mergeRuntimeArtifactIntoMemory,
   buildValidationSnapshot,
   mergeValidationIntoMemory,
-  mergeApprovalDecisionIntoMemory,
   mergeEvidenceSummaryIntoMemory,
   mergeGovernanceIntoMemory,
-  mergeGuiCapabilitiesIntoMemory,
   mergeHumanCheckpointIntoMemory,
   mergeGuiObservationIntoMemory,
-  resolveActiveGuiSessionInMemory
 } from '../lib/chatRuntime';
 
 // ==========================================
@@ -127,8 +124,6 @@ export async function handleSendMessage(
   ctx: SendMessageContext
 ): Promise<void> {
   const { settings, activeConvId, activeProject, messages, projectMemory, serverBacked, safeMode, sink } = ctx;
-  const conversation = null; // Will be looked up from state by the hook
-
   // Process attachments
   const enrichedAttachments = await extractAttachments(attachments);
 
@@ -267,7 +262,7 @@ interface SSEEventContext {
 }
 
 function handleSSEEvent(event: any, ctx: SSEEventContext): void {
-  const { convId, projectMemory, activeProject, serverBacked, settings, sink, currentMsgs, streamBufferRef } = ctx;
+  const { projectMemory, activeProject, serverBacked, sink, currentMsgs, streamBufferRef } = ctx;
 
   if (event.type === 'task_plan') {
     sink.setTaskPlan(Array.isArray(event.items) ? event.items : []);
@@ -514,7 +509,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
 
   if (event.type === 'workspace_updated') {
     if (activeProject) {
-      sink.updateProjectPort(0); // signal workspace update
+      sink.updateProjectPort(activeProject?.id || '', 0); // signal workspace update
     }
     sink.incrementPreviewKey();
   }

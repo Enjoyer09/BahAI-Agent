@@ -4,7 +4,7 @@
 
 import type {
   Project, Conversation, Message, ApprovalRequest, HumanCheckpoint,
-  ActionCenterInteraction, PlannerArtifact, ExecutionArtifact, Settings
+  ActionCenterInteraction, PlannerArtifact, ExecutionArtifact
 } from '../lib/types';
 
 export interface ChatState {

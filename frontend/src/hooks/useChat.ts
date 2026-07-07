@@ -3,14 +3,14 @@
 // ==========================================
 
 import { useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { Message, Conversation, Project, Settings, ApprovalRequest, HumanCheckpoint, ActionCenterInteraction, PlannerArtifact, ExecutionArtifact } from '../lib/types';
-import { trackChatMessage, trackChatError } from '../lib/telemetry';
+import type { Message, Conversation, Project, Settings, ApprovalRequest, PlannerArtifact, ExecutionArtifact } from '../lib/types';
+import { trackChatMessage } from '../lib/telemetry';
 import {
   loadFromStorage,
   createInitialState,
 } from '../store/chatState';
 import { chatReducer } from '../store/chatReducer';
-import type { ChatState } from '../store/chatState';
+
 import {
   handleSendMessage,
   loadWorkspace,
@@ -35,11 +35,8 @@ import {
   runTerminalStream,
   previewDiff,
   applyDiff,
-  normalizeUiErrorMessage,
 } from '../store/chatService';
 import {
-  mergePlannerArtifactIntoMemory,
-  mergeExecutionArtifactsIntoMemory,
   mergeApprovalDecisionIntoMemory,
   mergeEvidenceSummaryIntoMemory,
   mergeGuiCapabilitiesIntoMemory,
@@ -382,8 +379,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
     }
 
-    const convId = state.activeConvId;
-    const activeConv = state.conversations.find(c => c.id === convId) || null;
+    const activeConv = state.conversations.find(c => c.id === state.activeConvId) || null;
     const userMsg: Message = { id: generateId(), role: 'user', content: input, attachments, timestamp: Date.now() };
     const shouldAutoRenameConversation = activeConv && (
       !activeConv.title ||
