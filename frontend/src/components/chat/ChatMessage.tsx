@@ -2,6 +2,14 @@ import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2, Thumbs
 import { useState, useCallback, useRef, lazy, Suspense } from 'react';
 import ToolCallCard from './ToolCallCard';
 import type { Message } from '../../lib/types';
+import { trackEvent } from '../../lib/telemetry';
+import { useToast } from '../common/Toast';
+
+const TelemetryEvents = {
+  FEEDBACK_POSITIVE: 'message_feedback_positive',
+  FEEDBACK_NEGATIVE: 'message_feedback_negative',
+  REGENERATE: 'message_regenerate',
+} as const;
 
 const MarkdownRenderer = lazy(() => import('../common/MarkdownRenderer'));
 
@@ -120,6 +128,31 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
     // Fallback: Use browser Web Speech Synthesis
     speakWithBrowser(cleanText);
   }, [isPlaying, message.content, speakWithBrowser]);
+
+  const toast = useToast();
+
+  const handleThumbsUp = useCallback(() => {
+    trackEvent(TelemetryEvents.FEEDBACK_POSITIVE, {
+      messageId: message.id,
+      contentLength: (message.content || '').length,
+    });
+    toast.success('Rəy qeydə alındı');
+  }, [message.id, message.content, toast]);
+
+  const handleThumbsDown = useCallback(() => {
+    trackEvent(TelemetryEvents.FEEDBACK_NEGATIVE, {
+      messageId: message.id,
+      contentLength: (message.content || '').length,
+    });
+    toast.info('Rəy qeydə alındı. Daha ətraflı yazsanız kömək edər.');
+  }, [message.id, message.content, toast]);
+
+  const handleRegenerate = useCallback(() => {
+    trackEvent(TelemetryEvents.REGENERATE, {
+      messageId: message.id,
+    });
+    toast.info('Yenidən yazma üçün yeni mesaj göndərin');
+  }, [message.id, toast]);
 
   if (message.role === 'tool') return null;
 
@@ -265,6 +298,7 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
                 <span className="text-[11px] sm:hidden">{copied ? 'Kopyalandı' : 'Kopyala'}</span>
               </button>
               <button
+                onClick={handleThumbsUp}
                 className="p-2 rounded-md transition-colors"
                 style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Good response"
@@ -272,6 +306,7 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
                 <ThumbsUp size={14} />
               </button>
               <button
+                onClick={handleThumbsDown}
                 className="p-2 rounded-md transition-colors"
                 style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Bad response"
@@ -293,6 +328,7 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
                 {isPlaying ? <VolumeX size={14} className="animate-pulse" /> : <Volume2 size={14} />}
               </button>
               <button
+                onClick={handleRegenerate}
                 className="p-2 rounded-md transition-colors"
                 style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Regenerate"

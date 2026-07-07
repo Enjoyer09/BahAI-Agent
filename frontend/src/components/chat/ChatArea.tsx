@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Square } from 'lucide-react';
 import type { Message } from '../../lib/types';
 import ChatMessage from './ChatMessage';
 import { Spinner } from '../common/UI';
@@ -13,7 +13,7 @@ interface Props {
   productMode?: 'web_chat' | 'desktop_code';
 }
 
-export default function ChatArea({ messages, loading, onSend, workingDirectory, productMode = 'desktop_code' }: Props) {
+export default function ChatArea({ messages, loading, onSend, onStop, workingDirectory, productMode = 'desktop_code' }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
 
@@ -104,10 +104,27 @@ export default function ChatArea({ messages, loading, onSend, workingDirectory, 
             >
               <Spinner size={14} className="text-white" />
             </div>
-            <div className="flex-1 pt-0.5">
+            <div className="flex-1 pt-0.5 flex items-center gap-3">
               <div className="typing-indicator">
                 <span /><span /><span />
               </div>
+              {onStop && (
+                <button
+                  onClick={onStop}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={{
+                    color: '#ef4444',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+                  aria-label="Stop generating"
+                >
+                  <Square size={12} fill="currentColor" />
+                  Dayandır
+                </button>
+              )}
             </div>
           </div>
         )}

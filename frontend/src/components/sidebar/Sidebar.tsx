@@ -600,7 +600,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
       {/* Add Project Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'var(--bg-overlay, rgba(0,0,0,0.5))' }} />
           <div
             className="relative w-full max-w-md rounded-2xl p-6 animate-scale-in"
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
@@ -687,7 +687,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowSettings(false)}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'var(--bg-overlay, rgba(0,0,0,0.5))' }} />
           <div
             className={`relative w-full ${isMobile ? 'max-w-none self-end rounded-t-2xl rounded-b-none p-4 max-h-[88vh]' : 'max-w-md rounded-2xl p-6 max-h-[85vh]'} animate-scale-in flex flex-col`}
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}

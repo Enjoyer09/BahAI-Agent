@@ -6,6 +6,29 @@ import type { GuiCapabilityStatus } from '../../lib/types';
 import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
 import { Button } from '../common/UI';
 
+// Static style objects — defined once outside the component to avoid recreation on every render
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  background: 'var(--bg-hover)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-md)',
+  padding: '8px 12px',
+  fontSize: '13px',
+  outline: 'none',
+  color: 'var(--fg-main)',
+  transition: 'border-color 0.2s',
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: '11px',
+  fontWeight: 500,
+  color: 'var(--fg-muted)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  marginBottom: '4px',
+};
+
 interface Props {
   settingsCtx: ReturnTypeUseSettings;
 }
@@ -179,27 +202,7 @@ export default function SettingsPanel({ settingsCtx }: Props) {
     }
   };
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    background: 'var(--bg-hover)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    padding: '8px 12px',
-    fontSize: '13px',
-    outline: 'none',
-    color: 'var(--fg-main)',
-    transition: 'border-color 0.2s',
-  };
 
-  const labelStyle: React.CSSProperties = {
-    fontSize: '11px',
-    fontWeight: 500,
-    color: 'var(--fg-muted)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    marginBottom: '4px',
-  };
 
   if (isWebProduct) {
     return (
