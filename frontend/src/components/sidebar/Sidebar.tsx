@@ -318,7 +318,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                 {isWebProduct ? 'BahAI Cloud' : (chat.activeProject?.name || 'bahAI')}
               </div>
               <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
-                {isWebProduct ? 'Chat history və assistant ayarları' : (chat.activeProject?.path || 'Layihə seçilməyib')}
+                {isWebProduct ? 'Chat history və assistant ayarları' : (chat.activeProject?.path || 'Hələ qovluq açılmayıb')}
               </div>
             </div>
           </div>
@@ -339,7 +339,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
               <FolderOpen size={18} />
-              Projects
+              Qovluq aç
             </button>
           </div>
         )}
@@ -375,7 +375,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
               onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
-              <PlusCircle size={16} /> Layihə əlavə et
+              <PlusCircle size={16} /> Qovluq və ya repo əlavə et
             </button>
 
             {showAddMenu && (
@@ -456,7 +456,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
               {group.items.map(conv => {
                 const isActive = chat.activeConvId === conv.id;
                 const project = safeProjects.find((item) => item.id === conv.projectId) || null;
-                const projectLabel = isWebProduct ? 'BahAI Cloud' : (project?.name || 'Workspace');
+                const projectLabel = isWebProduct ? 'BahAI Cloud' : (project?.name || 'Desktop Workspace');
                 const isSandbox = projectLabel === 'bahAI Sandbox' || projectLabel === 'BahAI Cloud';
                 return (
                   <div key={conv.id} className="group relative">
