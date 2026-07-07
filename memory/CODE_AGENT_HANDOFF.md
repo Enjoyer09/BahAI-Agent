@@ -144,6 +144,11 @@ GUI grounding provider was made safer and more production-usable.
   - `npm run smoke:desktop`
   - Covers settings modal, `Local`/`Cloud` execution switching, runtime panel visibility, settings close, and a real chat send flow.
   - Saves a full-page screenshot into `/artifacts`.
+- Added Electron shell smoke coverage:
+  - `scripts/electron-smoke.js` launches the real Electron app shell.
+  - `npm run smoke:electron`
+  - Verifies Electron user agent, desktop shell identity, settings modal, settings close, and a real chat send flow.
+  - Saves a full-page screenshot into `/artifacts`.
 
 ## Next Best Coding Step
 

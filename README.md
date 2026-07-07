@@ -90,6 +90,12 @@ Desktop smoke:
 npm run smoke:desktop
 ```
 
+Electron smoke:
+
+```bash
+npm run smoke:electron
+```
+
 Prod smoke:
 
 ```bash
@@ -114,6 +120,7 @@ npm run check:harness
 - GUI sorğusu gələndə CDP mode üçün Chrome lazım olsa tələb zamanı başladılır.
 - `LOCAL_MODE=true` desktop development üçündür, hosted deployment üçün deyil.
 - `smoke:desktop` local backend və desktop-emulated shell üçün nəzərdə tutulub; default olaraq `http://127.0.0.1:3001` yoxlayır.
+- `smoke:electron` real Electron app qabığını açır və desktop shell + settings + chat axınını yoxlayır.
 - `smoke:prod` web cloud shell-in desktop surface göstərmədiyini də assert edir.
 - `smoke:prod:checkpoint` hosted GUI login-checkpoint axınını da yoxlayır.
 

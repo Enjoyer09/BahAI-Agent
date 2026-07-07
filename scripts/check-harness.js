@@ -46,7 +46,7 @@ function main() {
   mustExist('docs/ai/harness/evidence.md');
   mustExist('docs/ai/harness/workflow-capabilities.md');
 
-  mustContain('package.json', ['smoke:gui', 'smoke:prod', 'smoke:desktop', 'smoke:prod:checkpoint']);
+  mustContain('package.json', ['smoke:gui', 'smoke:prod', 'smoke:desktop', 'smoke:electron', 'smoke:prod:checkpoint']);
   mustContain('backend/gui/browserPolicy.js', ['resolveGuiBrowserPolicy', 'getRecommendedGuiBrowserMode']);
   mustContain('backend/orchestrator/workflowCapabilities.js', ['WORKFLOW_CAPABILITIES', 'getWorkflowCapabilities']);
   mustContain('memory/CODE_AGENT_HANDOFF.md', ['scripts/prod-smoke.js', 'scripts/desktop-smoke.js']);
