@@ -492,11 +492,24 @@ function normalizeFinalAssistantReport(content = '', context = {}) {
   }
 
   const {
+    productMode = 'desktop_code',
     auditStyleRequest = false,
     plannerArtifact = null,
     executionArtifacts = [],
     executionMemory = null
   } = context;
+
+  const isWebChatProduct = productMode === 'web_chat';
+  const hasPlannerMaterial = Boolean(
+    plannerArtifact?.summary ||
+    (Array.isArray(plannerArtifact?.implementationSteps) && plannerArtifact.implementationSteps.length > 0) ||
+    (Array.isArray(plannerArtifact?.verificationSteps) && plannerArtifact.verificationSteps.length > 0) ||
+    (Array.isArray(plannerArtifact?.suspectedRisks) && plannerArtifact.suspectedRisks.length > 0)
+  );
+  const hasExecutionMaterial = Array.isArray(executionArtifacts) && executionArtifacts.length > 0;
+  if (isWebChatProduct || (!auditStyleRequest && !hasPlannerMaterial && !hasExecutionMaterial)) {
+    return text;
+  }
 
   const lines = [];
   const summary = text.split('\n').map((line) => line.trim()).filter(Boolean);
@@ -4258,6 +4271,7 @@ AUDIT REJİMİ:
         resolvedWD,
         latestUserText,
         auditStyleRequest,
+        productMode: requestedProductMode,
         projectMemory,
         apiMessages,
         emitTaskPlan,

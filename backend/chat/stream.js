@@ -8,6 +8,7 @@ async function collectStreamOutput({
   buildToolCallCacheKey,
   flattenResponseJsonText,
   normalizeFinalAssistantReport,
+  productMode,
   auditStyleRequest,
   plannerArtifact,
   executionArtifacts,
@@ -140,6 +141,7 @@ async function collectStreamOutput({
   accumulatedContent = flattenResponseJsonText(accumulatedContent || '');
   if (!normalizedToolCalls.length && accumulatedContent.trim()) {
     accumulatedContent = normalizeFinalAssistantReport(accumulatedContent, {
+      productMode,
       auditStyleRequest,
       plannerArtifact,
       executionArtifacts,

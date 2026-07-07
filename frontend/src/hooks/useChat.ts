@@ -671,9 +671,23 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
           if (event.type === 'assistant_message') {
             const finalContent = normalizeAssistantText(event.message.content || '');
             const streamedContent = normalizeAssistantText(streamBufferRef.current || '');
-            const content = streamedContent.length > finalContent.length && finalContent.length < 120
+            const finalLooksTruncated = Boolean(
+              streamedContent &&
+              finalContent &&
+              streamedContent.length > finalContent.length + 40 &&
+              (
+                finalContent.length < 160 ||
+                streamedContent.startsWith(finalContent) ||
+                finalContent.endsWith(':') ||
+                finalContent.endsWith('...') ||
+                /^(\*\*Problem\*\*|\*\*Findings\*\*)/i.test(finalContent)
+              )
+            );
+            const content = finalLooksTruncated
               ? streamedContent
-              : finalContent;
+              : (streamedContent.length > finalContent.length && finalContent.length < 120
+                  ? streamedContent
+                  : finalContent);
             const assistantMsg: Message = {
               id: generateId(),
               role: 'assistant',
