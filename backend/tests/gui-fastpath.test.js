@@ -28,7 +28,7 @@ beforeAll(async () => {
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Server boot timeout')), 12000);
     server.stdout.on('data', (chunk) => {
-      if (chunk.toString().includes('Backend running')) {
+      if (chunk.toString().includes('server running')) {
         clearTimeout(timer);
         resolve();
       }

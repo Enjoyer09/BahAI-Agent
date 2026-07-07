@@ -9,12 +9,12 @@ import path from 'node:path';
 // Load extractTextToolCalls + classifyTaskComplexity from the main module by
 // reading the file and eval'ing the helpers in isolation. This avoids booting
 // the Express app for unit tests.
-const SRC = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
+const SRC = fs.readFileSync(path.join(__dirname, '..', 'helpers.js'), 'utf8');
 
 function loadHelper(name) {
   const re = new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`, '');
   const m = SRC.match(re);
-  if (!m) throw new Error(`Could not locate ${name} in index.js`);
+  if (!m) throw new Error(`Could not locate ${name} in helpers.js`);
   return m[0];
 }
 
@@ -35,26 +35,26 @@ const { extractTextToolCalls, classifyTaskComplexity } = ctx;
 
 describe('extractTextToolCalls', () => {
   it('parses a single fenced JSON tool call', () => {
-    const r = extractTextToolCalls('```json\n{"name":"list_directory","arguments":{"path":"./"}}\n```');
+    const r = extractTextToolCalls('```json\n{"name":"list_directory","arguments":{"path":"./"}}\n```', ctx.TOOLS);
     expect(r.toolCalls).toHaveLength(1);
     expect(r.toolCalls[0].name).toBe('list_directory');
   });
 
   it('parses a bare top-level JSON tool call', () => {
-    const r = extractTextToolCalls('{"name":"read_file","arguments":{"path":"/foo"}}');
+    const r = extractTextToolCalls('{"name":"read_file","arguments":{"path":"/foo"}}', ctx.TOOLS);
     expect(r.toolCalls).toHaveLength(1);
     expect(r.toolCalls[0].name).toBe('read_file');
   });
 
   it('keeps prose around the tool call', () => {
-    const r = extractTextToolCalls('Salam! İndi oxuyacağam:\n```json\n{"name":"list_directory","arguments":{"path":"./"}}\n```\nNəticə.');
+    const r = extractTextToolCalls('Salam! İndi oxuyacağam:\n```json\n{"name":"list_directory","arguments":{"path":"./"}}\n```\nNəticə.', ctx.TOOLS);
     expect(r.toolCalls).toHaveLength(1);
     expect(r.cleanedText).toContain('Salam');
     expect(r.cleanedText).toContain('Nəticə');
   });
 
   it('returns only the FIRST of multiple tool calls (prevents hallucination loops)', () => {
-    const r = extractTextToolCalls('```json\n{"name":"list_directory","arguments":{"path":"./"}}\n```\n```json\n{"name":"read_file","arguments":{"path":"./x"}}\n```');
+    const r = extractTextToolCalls('```json\n{"name":"list_directory","arguments":{"path":"./"}}\n```\n```json\n{"name":"read_file","arguments":{"path":"./x"}}\n```', ctx.TOOLS);
     expect(r.toolCalls).toHaveLength(1);
     expect(r.toolCalls[0].name).toBe('list_directory');
   });
@@ -65,7 +65,7 @@ describe('extractTextToolCalls', () => {
   });
 
   it('handles escaped quotes inside arguments', () => {
-    const r = extractTextToolCalls('{"name":"grep_search","arguments":{"query":"test\\"quoted","cwd":"./"}}');
+    const r = extractTextToolCalls('{"name":"grep_search","arguments":{"query":"test\\"quoted","cwd":"./"}}', ctx.TOOLS);
     expect(r.toolCalls).toHaveLength(1);
     expect(JSON.parse(r.toolCalls[0].arguments).query).toBe('test"quoted');
   });
@@ -76,7 +76,7 @@ describe('extractTextToolCalls', () => {
   });
 
   it('handles mixed local-model output (prose + json keyword + JSON object)', () => {
-    const r = extractTextToolCalls('bizim agent. json\n{"name":"list_directory","arguments":{"path":"/Users/x"}}\nİndi baxaq.');
+    const r = extractTextToolCalls('bizim agent. json\n{"name":"list_directory","arguments":{"path":"/Users/x"}}\nİndi baxaq.', ctx.TOOLS);
     expect(r.toolCalls).toHaveLength(1);
     expect(JSON.parse(r.toolCalls[0].arguments).path).toBe('/Users/x');
   });

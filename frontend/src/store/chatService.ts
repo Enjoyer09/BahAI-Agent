@@ -1,0 +1,608 @@
+// ==========================================
+// Chat Service — Async Operations & SSE Handling
+// ==========================================
+
+import type { Message, Conversation, Project, Settings, SSEEvent, PlannerArtifact, ExecutionArtifact, ApprovalRequest } from '../lib/types';
+import {
+  sendChatMessage as apiSendChatMessage,
+  loadWorkspaceState,
+  createProjectOnServer,
+  updateProjectOnServer,
+  deleteProjectOnServer,
+  createConversationOnServer,
+  updateConversationOnServer,
+  deleteConversationOnServer,
+  extractAttachments,
+  getProjectMemory,
+  getInteractions,
+  getGuiCapabilities,
+  getTaskPlan,
+  previewDiff,
+  applyDiff,
+  resolveCheckpoint as resolveCheckpointRequest,
+  runProjectHealthCheck,
+  runTerminalStream,
+  saveProjectMemory,
+  submitApproval
+} from '../lib/api';
+import { trackToolUse, trackChatError } from '../lib/telemetry';
+import {
+  normalizeAssistantText,
+  chooseAssistantContent,
+  normalizeUiErrorMessage,
+  extractRepoProfileFromToolResult,
+  mergeRepoProfileIntoMemory,
+  mergePlannerArtifactIntoMemory,
+  mergeExecutionArtifactsIntoMemory,
+  extractRuntimeArtifact,
+  mergeRuntimeArtifactIntoMemory,
+  buildValidationSnapshot,
+  mergeValidationIntoMemory,
+  mergeApprovalDecisionIntoMemory,
+  mergeEvidenceSummaryIntoMemory,
+  mergeGovernanceIntoMemory,
+  mergeGuiCapabilitiesIntoMemory,
+  mergeHumanCheckpointIntoMemory,
+  mergeGuiObservationIntoMemory,
+  resolveActiveGuiSessionInMemory
+} from '../lib/chatRuntime';
+
+// ==========================================
+// Helpers
+// ==========================================
+
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function getDefaultConversationTitle(productMode?: Settings['productMode']): string {
+  return productMode === 'web_chat' ? 'Yeni chat' : 'Yeni söhbət';
+}
+
+function getDefaultWorkspaceName(productMode?: Settings['productMode']): string {
+  return productMode === 'web_chat' ? 'BahAI Cloud Session' : 'bahAI Sandbox';
+}
+
+function getWelcomeMessage(productMode?: Settings['productMode'], serverBacked = false): string {
+  if (productMode === 'web_chat') {
+    return serverBacked
+      ? 'Salam! Mən BahAI Cloud asistentiəm. Bu chat tarixçəniz sizə bağlı saxlanılır və buradan birbaşa davam edə bilərsiniz.'
+      : 'Salam! Mən BahAI Cloud asistentiəm. Hazırsınızsa sualınızı yazın, birlikdə davam edək.';
+  }
+  return serverBacked
+    ? 'Salam! Mən bahAI agentiyəm. Sizin üçün ayrıca şəxsi workspace yaratdım. Buradakı fayllar yalnız sizin hesabınıza bağlıdır.'
+    : 'Salam! Mən bahAI agentiyəm. Layihə seçilmədiyi üçün sizin üçün avtomatik olaraq bir "bahAI Sandbox" (Qaralama) iş sahəsi yaratdım. İndi bura nəsə yaza bilərsiniz, sizə kömək etməyə hazıram! 🚀';
+}
+
+function buildConversationTitleFromInput(input: string, productMode?: Settings['productMode']): string {
+  const text = String(input || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return getDefaultConversationTitle(productMode);
+  const cleaned = text.replace(/^["'`]+|["'`]+$/g, '').replace(/^(zəhmət olmasa|zehmet olmasa|please)\s+/i, '').trim();
+  if (!cleaned) return getDefaultConversationTitle(productMode);
+  if (cleaned.length <= 48) return cleaned;
+  const sliced = cleaned.slice(0, 48);
+  const lastSpace = sliced.lastIndexOf(' ');
+  return `${(lastSpace > 20 ? sliced.slice(0, lastSpace) : sliced).trim()}...`;
+}
+
+// ==========================================
+// SSE Event Handler (dispatches to an event sink)
+// ==========================================
+
+interface EventSink {
+  setTaskPlan(items: string[]): void;
+  addSystemMessage(content: string): void;
+  updateAssistantMessage(content: string): void;
+  finalizeAssistantMessage(msg: Message): void;
+  updateToolExecution(toolCallId: string | undefined, tool: string): void;
+  addToolResult(toolMsg: Message, updatedToolCallId: string): void;
+  addApproval(approval: ApprovalRequest): void;
+  removeApproval(approvalId: string): void;
+  setHumanCheckpoint(checkpoint: any): void;
+  setPlannerArtifact(artifact: PlannerArtifact): void;
+  setExecutionArtifacts(artifacts: ExecutionArtifact[]): void;
+  mergeProjectMemory(memory: Record<string, unknown>): void;
+  updateProjectPort(projectId: string, port: number): void;
+  incrementPreviewKey(): void;
+}
+
+export interface SendMessageContext {
+  settings: Settings;
+  activeConvId: string;
+  activeProject: Project | null;
+  messages: Message[];
+  projectMemory: Record<string, unknown>;
+  plannerArtifact: PlannerArtifact | null;
+  executionArtifacts: ExecutionArtifact[];
+  serverBacked: boolean;
+  safeMode: boolean;
+  sink: EventSink;
+}
+
+export async function handleSendMessage(
+  input: string,
+  attachments: any[],
+  ctx: SendMessageContext
+): Promise<void> {
+  const { settings, activeConvId, activeProject, messages, projectMemory, serverBacked, safeMode, sink } = ctx;
+  const conversation = null; // Will be looked up from state by the hook
+
+  // Process attachments
+  const enrichedAttachments = await extractAttachments(attachments);
+
+  const userMsg: Message = {
+    id: generateId(),
+    role: 'user',
+    content: input,
+    attachments: enrichedAttachments,
+    timestamp: Date.now(),
+  };
+
+  // Initial state for the message flow
+  let currentMsgs = [...messages, userMsg];
+  const convId = activeConvId;
+  const streamBufferRef = { current: '' };
+
+  // Dispatch user message to store
+  sink.incrementPreviewKey();
+
+  try {
+    // Background task plan fetch
+    getTaskPlan(input, activeProject?.path || settings.projectDir)
+      .then(plan => sink.setTaskPlan(plan.items))
+      .catch(() => sink.setTaskPlan([]));
+
+    const isLikelyLocalModel = !settings.model.includes('/') || settings.baseUrl.includes('localhost') || settings.baseUrl.includes('127.0.0.1');
+    const MAX_HISTORY_MESSAGES = isLikelyLocalModel ? 8 : 16;
+    const historySlice = currentMsgs.slice(-MAX_HISTORY_MESSAGES);
+    const preparedMessagesCore = historySlice.map((m, idx) => {
+      const isRecent = idx >= historySlice.length - 6;
+      const trimmedToolCalls = isRecent
+        ? m.tool_calls?.map((tc: any) => ({
+            id: tc.id,
+            type: tc.type || 'function',
+            function: {
+              name: tc.function?.name || tc.name || '',
+              arguments: String(tc.function?.arguments || tc.args || '').slice(0, 2000),
+            },
+          }))
+        : undefined;
+      return {
+        role: m.role,
+        content: String(m.content || '').slice(0, 8000),
+        attachments: m.attachments?.map((at: any) => {
+          const hasText = at.extractedText && at.extractedText.trim();
+          return {
+            id: at.id,
+            name: at.name,
+            type: at.type,
+            mimeType: at.mimeType,
+            extractedText: at.extractedText || '',
+            extractionError: at.extractionError,
+            url: (!hasText && idx === historySlice.length - 1 && m.role === 'user') ? (at.url || '') : '',
+          };
+        }),
+        tool_calls: trimmedToolCalls,
+        tool_call_id: m.tool_call_id,
+      };
+    });
+
+    const activeGuiSession = projectMemory?.activeGuiSession as any;
+    const preparedMessages = activeGuiSession?.sessionId && settings.workflow === 'gui'
+      ? [{
+          role: 'system' as const,
+          content: `Active GUI session: ${activeGuiSession.sessionId}. Cari visible browser sessiyası açıqdır.`,
+        }, ...preparedMessagesCore]
+      : preparedMessagesCore;
+
+    await apiSendChatMessage(
+      preparedMessages,
+      settings.apiKey, settings.baseUrl, settings.model,
+      activeProject?.path || settings.projectDir,
+      {
+        safeMode,
+        projectId: activeProject?.id,
+        conversationId: convId,
+        orchestrationMode: settings.orchestrationMode,
+        workflow: settings.workflow,
+        guiBrowserMode: settings.guiBrowserMode,
+        guiBrowserPath: settings.guiBrowserPath,
+        guiBrowserCdpUrl: settings.guiBrowserCdpUrl,
+        productMode: settings.productMode,
+        executionMode: settings.executionMode,
+      },
+      (event: any) => handleSSEEvent(event, {
+        convId,
+        projectMemory,
+        activeProject,
+        serverBacked,
+        settings,
+        sink,
+        currentMsgs: { current: currentMsgs },
+        streamBufferRef,
+      }),
+      undefined
+    );
+
+    // Save project memory after successful completion
+    if (activeProject?.id && serverBacked) {
+      const inferredMemory = {
+        ...projectMemory,
+        language: 'az',
+        model: settings.model,
+        latestPrompt: input,
+        workspace: activeProject.path,
+      };
+      sink.mergeProjectMemory(inferredMemory);
+      saveProjectMemory(activeProject.id, inferredMemory).catch(console.error);
+    }
+  } catch (err: any) {
+    if (err.name !== 'AbortError') {
+      const errMsg: Message = {
+        id: generateId(),
+        role: 'assistant',
+        content: `❌ Xəta: ${normalizeUiErrorMessage(err.message)}`,
+        timestamp: Date.now(),
+      };
+      sink.finalizeAssistantMessage(errMsg);
+    }
+  }
+}
+
+// ==========================================
+// SSE Event Handler
+// ==========================================
+
+interface SSEEventContext {
+  convId: string;
+  projectMemory: Record<string, unknown>;
+  activeProject: Project | null;
+  serverBacked: boolean;
+  settings: Settings;
+  sink: EventSink;
+  currentMsgs: { current: Message[] };
+  streamBufferRef: { current: string };
+}
+
+function handleSSEEvent(event: any, ctx: SSEEventContext): void {
+  const { convId, projectMemory, activeProject, serverBacked, settings, sink, currentMsgs, streamBufferRef } = ctx;
+
+  if (event.type === 'task_plan') {
+    sink.setTaskPlan(Array.isArray(event.items) ? event.items : []);
+    return;
+  }
+
+  if (event.type === 'orchestration_state') {
+    const routingLine = event.routing?.reason
+      ? `\nMarşrut: ${event.routing.primaryAgent}${event.routing.secondaryAgents?.length ? ` -> ${event.routing.secondaryAgents.join(' -> ')}` : ''}\nSəbəb: ${event.routing.reason}`
+      : '';
+    sink.addSystemMessage(
+      `Workflow: **${event.workflow}** | Rejim: **${event.mode}** | Agentlər: ${Array.isArray(event.agents) ? event.agents.join(', ') : ''}${routingLine}`
+    );
+    return;
+  }
+
+  if (event.type === 'orchestration_phase') {
+    if (event.currentRole === 'Manager') return;
+    const phaseSummary = Array.isArray(event.phases)
+      ? event.phases.map((p: any) => `${p.role}: ${p.status}`).join(' | ')
+      : '';
+    sink.addSystemMessage(`Faza: **${event.currentRole}**${phaseSummary ? ` | ${phaseSummary}` : ''}`);
+    return;
+  }
+
+  if (event.type === 'auto_route') {
+    const isCloud = event.providerId?.includes('cloud') || /\//.test(event.chosenModel || '');
+    const icon = isCloud ? '☁️' : '🦙';
+    const tier = event.intent === 'smart' ? 'Mürəkkəb iş' : 'Sürətli sual';
+    sink.addSystemMessage(`${icon} Auto → **${event.chosenModel}** (${tier})`);
+    return;
+  }
+
+  if (event.type === 'error') {
+    trackChatError(ctx.settings.model, event.message);
+    sink.addSystemMessage(`❌ Xəta: ${normalizeUiErrorMessage(event.message)}`);
+    return;
+  }
+
+  if (event.type === 'debug') {
+    if (event.info?.plannerArtifact) {
+      const artifact = event.info.plannerArtifact as PlannerArtifact;
+      sink.setPlannerArtifact(artifact);
+      if (activeProject?.id) {
+        const mergedMemory = mergePlannerArtifactIntoMemory(projectMemory, artifact, '');
+        sink.mergeProjectMemory(mergedMemory);
+        if (serverBacked) saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+      }
+    }
+    if (Array.isArray(event.info?.executionArtifacts)) {
+      const artifacts = event.info.executionArtifacts as ExecutionArtifact[];
+      sink.setExecutionArtifacts(artifacts);
+      if (activeProject?.id) {
+        const mergedMemory = mergeExecutionArtifactsIntoMemory(projectMemory, artifacts);
+        sink.mergeProjectMemory(mergedMemory);
+        if (serverBacked) saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+      }
+    }
+    return;
+  }
+
+  if (event.type === 'governance_state') {
+    if (activeProject?.id) {
+      const mergedMemory = mergeGovernanceIntoMemory(projectMemory, event.entryPath, event.gateReceipt);
+      sink.mergeProjectMemory(mergedMemory);
+      if (serverBacked) saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+    }
+    return;
+  }
+
+  if (event.type === 'approval_request') {
+    const approval = {
+      approvalId: event.approvalId,
+      tool: event.tool,
+      args: event.args,
+      conversationId: event.conversationId,
+      runId: event.runId,
+      phaseRole: event.phaseRole,
+      expiresAt: event.expiresAt,
+      meta: event.meta,
+    };
+    sink.addApproval(approval);
+    sink.incrementPreviewKey();
+    return;
+  }
+
+  if (event.type === 'approval_resolved') {
+    sink.removeApproval(event.approvalId);
+    sink.incrementPreviewKey();
+    return;
+  }
+
+  if (event.type === 'human_checkpoint') {
+    sink.setHumanCheckpoint(event.checkpoint);
+    if (activeProject?.id) {
+      const mergedMemory = mergeHumanCheckpointIntoMemory(projectMemory, event.checkpoint);
+      sink.mergeProjectMemory(mergedMemory);
+      if (serverBacked) saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+    }
+    return;
+  }
+
+  if (event.type === 'assistant_delta') {
+    const deltaText = normalizeAssistantText(String(event.content || ''));
+    streamBufferRef.current = normalizeAssistantText((streamBufferRef.current || '') + deltaText);
+    sink.updateAssistantMessage(streamBufferRef.current);
+    return;
+  }
+
+  if (event.type === 'assistant_message') {
+    const content = chooseAssistantContent(streamBufferRef.current || '', event.message.content || '');
+    const assistantMsg: Message = {
+      id: generateId(),
+      role: 'assistant',
+      content,
+      tool_calls: event.message.tool_calls?.map((tc: any) => ({ ...tc, status: 'done' })),
+      timestamp: Date.now(),
+    };
+    streamBufferRef.current = '';
+    sink.finalizeAssistantMessage(assistantMsg);
+
+    // Auto-port detection
+    const msgContent = typeof event.message === 'string' ? event.message : (event.message.content || '');
+    if (msgContent.includes('http://localhost:') && activeProject?.id) {
+      const match = msgContent.match(/http:\/\/localhost:(\d+)/);
+      if (match && match[1]) {
+        sink.updateProjectPort(activeProject.id, parseInt(match[1]));
+      }
+    }
+    sink.incrementPreviewKey();
+    return;
+  }
+
+  if (event.type === 'tool_execution') {
+    trackToolUse(event.tool);
+    // Update currentMsgs ref to track the running tool
+    const current = currentMsgs.current;
+    const lastIdx = current.length - 1;
+    if (lastIdx >= 0 && current[lastIdx].role === 'assistant' && current[lastIdx].tool_calls) {
+      currentMsgs.current = current.map((m, idx) => {
+        if (idx === lastIdx && m.role === 'assistant' && m.tool_calls) {
+          return {
+            ...m,
+            tool_calls: m.tool_calls.map((tc: any) =>
+              (event.tool_call_id && tc.id === event.tool_call_id) || (!event.tool_call_id && tc.function?.name === event.tool)
+                ? { ...tc, status: 'running' as const }
+                : tc
+            ),
+          };
+        }
+        return m;
+      });
+    }
+    sink.updateToolExecution(event.tool_call_id, event.tool);
+    sink.incrementPreviewKey();
+    return;
+  }
+
+  if (event.type === 'tool_result') {
+    // Find the running tool from the current messages (updated by tool_execution handler)
+    const allToolCalls = currentMsgs.current.flatMap(m => m.tool_calls || []);
+    const runningTool = allToolCalls.find((tc: any) => tc.status === 'running');
+    const updatedToolCallId = runningTool?.id || event.tool_call_id || '';
+
+    // Update currentMsgs ref: mark running tool as done
+    const current = currentMsgs.current;
+    const lastIdx = current.length - 1;
+    if (lastIdx >= 0 && current[lastIdx].role === 'assistant' && current[lastIdx].tool_calls) {
+      currentMsgs.current = current.map((m, idx) => {
+        if (idx === lastIdx && m.role === 'assistant' && m.tool_calls) {
+          return {
+            ...m,
+            tool_calls: m.tool_calls.map((tc: any) =>
+              tc.status === 'running' ? { ...tc, status: 'done' as const, result: event.result } : tc
+            ),
+          };
+        }
+        return m;
+      });
+    }
+
+    // Create tool result message
+    const toolMsg: Message = {
+      id: generateId(),
+      role: 'tool',
+      content: typeof event.result === 'string' ? event.result : JSON.stringify(event.result),
+      tool_call_id: updatedToolCallId,
+      timestamp: Date.now(),
+    };
+    currentMsgs.current = [...currentMsgs.current, toolMsg];
+
+    // Handle repo profile extraction
+    const repoProfile = typeof event.result === 'string'
+      ? extractRepoProfileFromToolResult(event.result)
+      : null;
+    if (repoProfile && activeProject?.id) {
+      const mergedMemory = mergeRepoProfileIntoMemory(projectMemory, repoProfile);
+      sink.mergeProjectMemory(mergedMemory);
+      if (serverBacked) saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+    }
+
+    // Handle tool result tracking
+    if (runningTool?.function?.name && typeof event.result === 'string' && activeProject?.id) {
+      const runtimeArtifact = extractRuntimeArtifact(
+        runningTool.function.name,
+        runningTool.function.arguments || '{}',
+        event.result
+      );
+      if (runtimeArtifact) {
+        const withRuntime = mergeRuntimeArtifactIntoMemory(projectMemory, runtimeArtifact);
+        const withGuiSession = runtimeArtifact.kind === 'gui'
+          ? mergeGuiObservationIntoMemory(withRuntime, runtimeArtifact)
+          : withRuntime;
+        const mergedMemory = mergeEvidenceSummaryIntoMemory(withGuiSession);
+        sink.mergeProjectMemory(mergedMemory);
+        if (serverBacked) saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+      }
+    }
+
+    // Handle test validation
+    if (runningTool?.function?.name === 'run_tests' && typeof event.result === 'string' && activeProject?.id) {
+      const validation = buildValidationSnapshot(event.result);
+      if (validation) {
+        const mergedMemory = mergeEvidenceSummaryIntoMemory(
+          mergeValidationIntoMemory(projectMemory, validation)
+        );
+        sink.mergeProjectMemory(mergedMemory);
+        if (serverBacked) saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+      }
+    }
+
+    // Auto-port detection from terminal output
+    if (typeof event.result === 'string' && event.result.includes('http://localhost:') && activeProject?.id) {
+      const match = event.result.match(/http:\/\/localhost:(\d+)/);
+      if (match && match[1]) {
+        sink.updateProjectPort(activeProject.id, parseInt(match[1]));
+      }
+    }
+
+    sink.addToolResult(toolMsg, updatedToolCallId);
+    sink.incrementPreviewKey();
+    return;
+  }
+
+  if (event.type === 'workspace_updated') {
+    if (activeProject) {
+      sink.updateProjectPort(0); // signal workspace update
+    }
+    sink.incrementPreviewKey();
+  }
+}
+
+// ==========================================
+// Workspace Loading
+// ==========================================
+
+export interface WorkspaceLoadResult {
+  projects: Project[];
+  conversations: Conversation[];
+  serverBacked: boolean;
+  activeConvId: string | null;
+}
+
+export async function loadWorkspace(
+  userKey: string | number | null | undefined,
+  settings: Settings
+): Promise<WorkspaceLoadResult> {
+  if (!userKey) {
+    return { projects: [], conversations: [], serverBacked: false, activeConvId: null };
+  }
+
+  try {
+    const state = await loadWorkspaceState();
+    if (state.projects.length === 0) {
+      const created = await createProjectOnServer({
+        name: getDefaultWorkspaceName(settings.productMode),
+        path: 'workspace://default',
+      });
+      const welcomeMessage: Message = {
+        id: generateId(),
+        role: 'assistant',
+        content: getWelcomeMessage(settings.productMode, true),
+        timestamp: Date.now(),
+      };
+      const newConv = {
+        ...created.conversation,
+        messages: [welcomeMessage],
+      };
+      await updateConversationOnServer(created.conversation.id, { messages: [welcomeMessage] });
+      return {
+        projects: [created.project],
+        conversations: [newConv],
+        serverBacked: true,
+        activeConvId: created.conversation.id,
+      };
+    }
+    return {
+      projects: state.projects,
+      conversations: state.conversations,
+      serverBacked: true,
+      activeConvId: state.conversations[0]?.id || null,
+    };
+  } catch {
+    return { projects: [], conversations: [], serverBacked: false, activeConvId: null };
+  }
+}
+
+// ==========================================
+// Simple service functions
+// ==========================================
+
+export {
+  generateId,
+  getDefaultConversationTitle,
+  getDefaultWorkspaceName,
+  getWelcomeMessage,
+  buildConversationTitleFromInput,
+  loadWorkspaceState,
+  createProjectOnServer,
+  updateProjectOnServer,
+  deleteProjectOnServer,
+  createConversationOnServer,
+  updateConversationOnServer,
+  deleteConversationOnServer,
+  extractAttachments,
+  getProjectMemory,
+  getInteractions,
+  getGuiCapabilities,
+  getTaskPlan,
+  previewDiff,
+  applyDiff,
+  resolveCheckpointRequest,
+  runProjectHealthCheck,
+  runTerminalStream,
+  saveProjectMemory,
+  submitApproval,
+  normalizeUiErrorMessage,
+};

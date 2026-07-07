@@ -1,341 +1,448 @@
 // ==========================================
-// useChat Hook — Fully Immutable & Audit-Safe
+// useChat Hook — Refactored (Reducer + Service)
 // ==========================================
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { Message, Conversation, Project, Settings, PlannerArtifact, ExecutionArtifact, ApprovalRequest, HumanCheckpoint, ActionCenterInteraction } from '../lib/types';
-import { trackChatMessage, trackChatError, trackToolUse } from '../lib/telemetry';
+import { useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { Message, Conversation, Project, Settings, ApprovalRequest, HumanCheckpoint, ActionCenterInteraction, PlannerArtifact, ExecutionArtifact } from '../lib/types';
+import { trackChatMessage, trackChatError } from '../lib/telemetry';
 import {
-  applyDiff,
-  createConversationOnServer,
+  loadFromStorage,
+  createInitialState,
+} from '../store/chatState';
+import { chatReducer } from '../store/chatReducer';
+import type { ChatState } from '../store/chatState';
+import {
+  handleSendMessage,
+  loadWorkspace,
+  generateId,
+  getDefaultConversationTitle,
+  getDefaultWorkspaceName,
+  getWelcomeMessage,
+  buildConversationTitleFromInput,
   createProjectOnServer,
-  deleteConversationOnServer,
+  updateProjectOnServer,
   deleteProjectOnServer,
-  extractAttachments,
+  createConversationOnServer,
+  updateConversationOnServer,
+  deleteConversationOnServer,
   getProjectMemory,
   getInteractions,
   getGuiCapabilities,
-  getTaskPlan,
-  loadWorkspaceState,
-  previewDiff,
-  resolveCheckpoint as resolveCheckpointRequest,
+  saveProjectMemory,
+  submitApproval,
+  resolveCheckpointRequest,
   runProjectHealthCheck,
   runTerminalStream,
-  saveProjectMemory,
-  sendChatMessage,
-  submitApproval,
-  updateConversationOnServer,
-  updateProjectOnServer
-} from '../lib/api';
-import {
-  normalizeAssistantText,
-  chooseAssistantContent,
+  previewDiff,
+  applyDiff,
   normalizeUiErrorMessage,
-  extractRepoProfileFromToolResult,
-  mergeRepoProfileIntoMemory,
+} from '../store/chatService';
+import {
   mergePlannerArtifactIntoMemory,
   mergeExecutionArtifactsIntoMemory,
-  extractRuntimeArtifact,
-  mergeRuntimeArtifactIntoMemory,
-  buildValidationSnapshot,
-  mergeValidationIntoMemory,
   mergeApprovalDecisionIntoMemory,
   mergeEvidenceSummaryIntoMemory,
-  mergeGovernanceIntoMemory,
   mergeGuiCapabilitiesIntoMemory,
   mergeHumanCheckpointIntoMemory,
-  mergeGuiObservationIntoMemory,
-  resolveActiveGuiSessionInMemory
+  resolveActiveGuiSessionInMemory,
 } from '../lib/chatRuntime';
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
-
-function loadFromStorage<T>(key: string, fallback: T): T {
-  try {
-    const saved = localStorage.getItem(key);
-    if (!saved) return fallback;
-    return JSON.parse(saved);
-  } catch {
-    return fallback;
-  }
-}
-
-function getDefaultConversationTitle(productMode?: Settings['productMode']): string {
-  return productMode === 'web_chat' ? 'Yeni chat' : 'Yeni söhbət';
-}
-
-function getDefaultWorkspaceName(productMode?: Settings['productMode']): string {
-  return productMode === 'web_chat' ? 'BahAI Cloud Session' : 'bahAI Sandbox';
-}
-
-function getWelcomeMessage(productMode?: Settings['productMode'], serverBacked = false): string {
-  if (productMode === 'web_chat') {
-    return serverBacked
-      ? 'Salam! Mən BahAI Cloud asistentiəm. Bu chat tarixçəniz sizə bağlı saxlanılır və buradan birbaşa davam edə bilərsiniz.'
-      : 'Salam! Mən BahAI Cloud asistentiəm. Hazırsınızsa sualınızı yazın, birlikdə davam edək.';
-  }
-  return serverBacked
-    ? 'Salam! Mən bahAI agentiyəm. Sizin üçün ayrıca şəxsi workspace yaratdım. Buradakı fayllar yalnız sizin hesabınıza bağlıdır.'
-    : 'Salam! Mən bahAI agentiyəm. Layihə seçilmədiyi üçün sizin üçün avtomatik olaraq bir "bahAI Sandbox" (Qaralama) iş sahəsi yaratdım. İndi bura nəsə yaza bilərsiniz, sizə kömək etməyə hazıram! 🚀';
-}
-
-function buildConversationTitleFromInput(input: string, productMode?: Settings['productMode']): string {
-  const text = String(input || '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!text) return getDefaultConversationTitle(productMode);
-
-  const cleaned = text
-    .replace(/^["'`]+|["'`]+$/g, '')
-    .replace(/^(zəhmət olmasa|zehmet olmasa|please)\s+/i, '')
-    .trim();
-
-  if (!cleaned) return getDefaultConversationTitle(productMode);
-  if (cleaned.length <= 48) return cleaned;
-
-  const sliced = cleaned.slice(0, 48);
-  const lastSpace = sliced.lastIndexOf(' ');
-  return `${(lastSpace > 20 ? sliced.slice(0, lastSpace) : sliced).trim()}...`;
-}
+import type { SendMessageContext } from '../store/chatService';
 
 export function useChat(settings: Settings, userKey?: string | number | null) {
-  const [projects, setProjects] = useState<Project[]>(() => loadFromStorage('projects', []));
-  const [conversations, setConversations] = useState<Conversation[]>(() => loadFromStorage('conversations', []));
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-  const [serverBacked, setServerBacked] = useState(false);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [previewKey, setPreviewKey] = useState(0);
-  // FUNC-FIX: Safe Mode default off — for a personal coding agent the constant
-  // approval prompts were the #1 friction point. Power users can still flip
-  // it on from ChatInput (now exposed) or OpsPanel.
-  const [safeMode, setSafeMode] = useState(() => localStorage.getItem('safeMode') === '1');
-  useEffect(() => { localStorage.setItem('safeMode', safeMode ? '1' : '0'); }, [safeMode]);
-  const [taskPlan, setTaskPlan] = useState<string[]>([]);
-  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequest[]>([]);
-  const [humanCheckpoint, setHumanCheckpoint] = useState<HumanCheckpoint | null>(null);
-  const [actionCenterInteractions, setActionCenterInteractions] = useState<ActionCenterInteraction[]>([]);
-  const [actionCenterHistory, setActionCenterHistory] = useState<ActionCenterInteraction[]>([]);
-  const [projectMemory, setProjectMemory] = useState<Record<string, unknown>>({});
-  const [plannerArtifact, setPlannerArtifact] = useState<PlannerArtifact | null>(null);
-  const [executionArtifacts, setExecutionArtifacts] = useState<ExecutionArtifact[]>([]);
-
-  // Ref to track current active conversation (avoids stale closure in sendMessage)
+  const [state, dispatch] = useReducer(chatReducer, undefined, createInitialState);
   const activeConvIdRef = useRef<string | null>(null);
-  // FUNC-FIX: throttle ref for streaming delta updates (see below).
   const streamThrottleRef = useRef<number>(0);
   const streamBufferRef = useRef<string>('');
-  useEffect(() => {
-    activeConvIdRef.current = activeConvId;
-  }, [activeConvId]);
+  const storageTimeout = useRef<any>(null);
 
   useEffect(() => {
-    // Prevent cross-account bleed in the same browser session.
-    setProjects([]);
-    setConversations([]);
-    setActiveConvId(null);
-    setHydrated(false);
-    setServerBacked(false);
+    activeConvIdRef.current = state.activeConvId;
+  }, [state.activeConvId]);
+
+  // Reset on userKey change (cross-account bleed prevention)
+  useEffect(() => {
+    dispatch({ type: 'RESET_CHAT' });
+    dispatch({ type: 'SET_SAFE_MODE', safeMode: loadFromStorage('safeMode', false) });
   }, [userKey]);
 
-  // PERF-1: Debounced Persistence
-  const storageTimeout = useRef<any>(null);
+  // De-dupe safeMode persistence
   useEffect(() => {
-    if (serverBacked) return;
+    localStorage.setItem('safeMode', state.safeMode ? '1' : '0');
+  }, [state.safeMode]);
+
+  // ==========================================
+  // Debounced Persistence
+  // ==========================================
+  useEffect(() => {
+    if (state.serverBacked) return;
     if (storageTimeout.current) clearTimeout(storageTimeout.current);
     storageTimeout.current = setTimeout(() => {
-      localStorage.setItem('projects', JSON.stringify(projects));
-      localStorage.setItem('conversations', JSON.stringify(conversations));
+      localStorage.setItem('projects', JSON.stringify(state.projects));
+      localStorage.setItem('conversations', JSON.stringify(state.conversations));
     }, 500);
     return () => { if (storageTimeout.current) clearTimeout(storageTimeout.current); };
-  }, [projects, conversations, serverBacked]);
+  }, [state.projects, state.conversations, state.serverBacked]);
 
+  // ==========================================
+  // Workspace Hydration
+  // ==========================================
   useEffect(() => {
     if (!userKey) {
-      setHydrated(true);
+      dispatch({ type: 'SET_HYDRATED', hydrated: true });
       return;
     }
     let cancelled = false;
-
-    const loadServerState = async () => {
-      try {
-        const state = await loadWorkspaceState();
-        if (cancelled) return;
-
-        if (state.projects.length === 0) {
-          const created = await createProjectOnServer({
-            name: getDefaultWorkspaceName(settings.productMode),
-            path: 'workspace://default'
-          });
-          if (cancelled) return;
-          const welcomeMessage: Message = {
-            id: generateId(),
-            role: 'assistant',
-            content: getWelcomeMessage(settings.productMode, true),
-            timestamp: Date.now()
-          };
-          setProjects([created.project]);
-          setConversations([{
-            ...created.conversation,
-            messages: [welcomeMessage]
-          }]);
-          setActiveConvId(created.conversation.id);
-          await updateConversationOnServer(created.conversation.id, {
-            messages: [welcomeMessage]
-          });
-        } else {
-          setProjects(state.projects);
-          setConversations(state.conversations);
-          setActiveConvId(state.conversations[0]?.id || null);
-        }
-        setServerBacked(true);
-      } catch {
-        setServerBacked(false);
+    const init = async () => {
+      const result = await loadWorkspace(userKey, settings);
+      if (cancelled) return;
+      if (result.serverBacked) {
+        dispatch({ type: 'SET_PROJECTS', projects: result.projects });
+        dispatch({ type: 'SET_CONVERSATIONS', conversations: result.conversations });
+        dispatch({ type: 'SET_ACTIVE_CONV_ID', id: result.activeConvId });
+        dispatch({ type: 'SET_SERVER_BACKED', backed: true });
+      } else {
         const localProjects = loadFromStorage<Project[]>('projects', []);
         const localConvs = loadFromStorage<Conversation[]>('conversations', []);
-        setProjects(localProjects);
-        setConversations(localConvs);
+        dispatch({ type: 'SET_PROJECTS', projects: localProjects });
+        dispatch({ type: 'SET_CONVERSATIONS', conversations: localConvs });
         if (localConvs.length > 0) {
-          setActiveConvId(localConvs[0].id);
+          dispatch({ type: 'SET_ACTIVE_CONV_ID', id: localConvs[0].id });
         }
-      } finally {
-        if (!cancelled) setHydrated(true);
       }
+      if (!cancelled) dispatch({ type: 'SET_HYDRATED', hydrated: true });
     };
-
-    loadServerState();
-
-    return () => {
-      cancelled = true;
-    };
+    init();
+    return () => { cancelled = true; };
   }, [userKey]);
 
-  // Auto-initialize default project & conversation if empty, or select active one
+  // ==========================================
+  // Auto-init Default Project & Conversation
+  // ==========================================
   useEffect(() => {
-    if (!hydrated || serverBacked) return;
-    if (projects.length === 0) {
+    if (!state.hydrated || state.serverBacked) return;
+    if (state.projects.length === 0) {
       const defaultProjId = generateId();
       const defaultProj: Project = {
         id: defaultProjId,
         name: getDefaultWorkspaceName(settings.productMode),
         path: 'workspace://default',
-        createdAt: Date.now()
+        createdAt: Date.now(),
       };
-      
       const defaultConvId = generateId();
       const defaultConv: Conversation = {
         id: defaultConvId,
         projectId: defaultProjId,
         title: settings.productMode === 'web_chat' ? 'Yeni chat' : 'Xoş Gəlmisiniz!',
-        messages: [
-          {
-            id: generateId(),
-            role: 'assistant',
-            content: getWelcomeMessage(settings.productMode, false),
-            timestamp: Date.now()
-          }
-        ],
+        messages: [{
+          id: generateId(),
+          role: 'assistant',
+          content: getWelcomeMessage(settings.productMode, false),
+          timestamp: Date.now(),
+        }],
         createdAt: Date.now(),
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
       };
-      
-      setProjects([defaultProj]);
-      setConversations([defaultConv]);
-      setActiveConvId(defaultConvId);
-    } else if (!activeConvId && conversations.length > 0) {
-      setActiveConvId(conversations[0].id);
+      dispatch({ type: 'SET_PROJECTS', projects: [defaultProj] });
+      dispatch({ type: 'SET_CONVERSATIONS', conversations: [defaultConv] });
+      dispatch({ type: 'SET_ACTIVE_CONV_ID', id: defaultConvId });
+    } else if (!state.activeConvId && state.conversations.length > 0) {
+      dispatch({ type: 'SET_ACTIVE_CONV_ID', id: state.conversations[0].id });
     }
-  }, [projects, conversations, activeConvId, hydrated, serverBacked]);
+  }, [state.hydrated, state.serverBacked, state.projects.length, state.conversations.length, state.activeConvId]);
 
-  const activeConversation = useMemo(() => 
-    conversations.find(c => c.id === activeConvId) || null
-  , [conversations, activeConvId]);
-
+  // ==========================================
+  // Computed Values
+  // ==========================================
+  const activeConversation = useMemo(() =>
+    state.conversations.find(c => c.id === state.activeConvId) || null,
+    [state.conversations, state.activeConvId]
+  );
   const messages = useMemo(() => activeConversation?.messages || [], [activeConversation]);
+  const activeProject = useMemo(() =>
+    state.projects.find(p => p.id === activeConversation?.projectId) || null,
+    [state.projects, activeConversation]
+  );
 
-  const activeProject = useMemo(() => 
-    projects.find(p => p.id === activeConversation?.projectId) || null
-  , [projects, activeConversation]);
-
+  // ==========================================
+  // Project Memory Loading
+  // ==========================================
   useEffect(() => {
     const loadMemory = async () => {
-      if (!activeProject?.id || !serverBacked) {
-        setProjectMemory({});
-        setPlannerArtifact(null);
-        setExecutionArtifacts([]);
+      if (!activeProject?.id || !state.serverBacked) {
+        dispatch({ type: 'SET_PROJECT_MEMORY', memory: {} });
+        dispatch({ type: 'SET_PLANNER_ARTIFACT', artifact: null });
+        dispatch({ type: 'SET_EXECUTION_ARTIFACTS', artifacts: [] });
         return;
       }
       try {
         const memory = await getProjectMemory(activeProject.id);
-        setProjectMemory(memory);
+        dispatch({ type: 'SET_PROJECT_MEMORY', memory });
         const savedArtifact = memory?.plannerArtifact;
         if (savedArtifact && typeof savedArtifact === 'object') {
-          setPlannerArtifact(savedArtifact as PlannerArtifact);
+          dispatch({ type: 'SET_PLANNER_ARTIFACT', artifact: savedArtifact as PlannerArtifact });
         } else {
-          setPlannerArtifact(null);
+          dispatch({ type: 'SET_PLANNER_ARTIFACT', artifact: null });
         }
         const savedExecutionArtifacts = Array.isArray(memory?.executionArtifacts) ? memory.executionArtifacts : [];
-        setExecutionArtifacts(savedExecutionArtifacts as ExecutionArtifact[]);
+        dispatch({ type: 'SET_EXECUTION_ARTIFACTS', artifacts: savedExecutionArtifacts as ExecutionArtifact[] });
       } catch {
-        setProjectMemory({});
-        setPlannerArtifact(null);
-        setExecutionArtifacts([]);
+        dispatch({ type: 'SET_PROJECT_MEMORY', memory: {} });
+        dispatch({ type: 'SET_PLANNER_ARTIFACT', artifact: null });
+        dispatch({ type: 'SET_EXECUTION_ARTIFACTS', artifacts: [] });
       }
     };
     loadMemory();
-  }, [activeProject?.id, serverBacked]);
+  }, [activeProject?.id, state.serverBacked]);
 
+  // ==========================================
+  // GUI Capabilities Loading
+  // ==========================================
   useEffect(() => {
     let cancelled = false;
-    const loadGuiCapabilityStatus = async () => {
+    const loadGuiCapabilities = async () => {
       try {
         const guiCapabilities = await getGuiCapabilities({
           mode: settings.guiBrowserMode,
           browserPath: settings.guiBrowserPath,
-          cdpUrl: settings.guiBrowserCdpUrl
+          cdpUrl: settings.guiBrowserCdpUrl,
         });
         if (cancelled) return;
-        setProjectMemory((prev) => mergeGuiCapabilitiesIntoMemory(prev, guiCapabilities));
-      } catch {
-        // keep silent in UI state; ops panel will simply show nothing
-      }
+        const merged = mergeGuiCapabilitiesIntoMemory(state.projectMemory, guiCapabilities);
+        dispatch({ type: 'MERGE_PROJECT_MEMORY', memory: merged });
+      } catch { /* silent */ }
     };
-    loadGuiCapabilityStatus();
-    return () => {
-      cancelled = true;
-    };
+    loadGuiCapabilities();
+    return () => { cancelled = true; };
   }, [settings.guiBrowserMode, settings.guiBrowserPath, settings.guiBrowserCdpUrl]);
 
+  // ==========================================
+  // Interactions Polling
+  // ==========================================
   useEffect(() => {
-    if (!serverBacked) {
-      setActionCenterInteractions([]);
+    if (!state.serverBacked) {
+      dispatch({ type: 'SET_INTERACTIONS', interactions: [] });
       return;
     }
     getInteractions()
       .then((items) => {
-        setActionCenterInteractions(items);
+        dispatch({ type: 'SET_INTERACTIONS', interactions: items });
         const approvals = items
-          .filter((item) => item.kind === 'approval' && item.approval)
-          .map((item) => item.approval!) as ApprovalRequest[];
-        const checkpoint = items.find((item) => item.kind === 'checkpoint')?.checkpoint || null;
-        setPendingApprovals(approvals);
-        setHumanCheckpoint(checkpoint);
+          .filter(item => item.kind === 'approval' && item.approval)
+          .map(item => item.approval!) as ApprovalRequest[];
+        const checkpoint = items.find(item => item.kind === 'checkpoint')?.checkpoint || null;
+        dispatch({ type: 'SET_APPROVALS', approvals });
+        dispatch({ type: 'SET_HUMAN_CHECKPOINT', checkpoint });
       })
-      .catch(() => {
-        setActionCenterInteractions([]);
-      });
-  }, [serverBacked, activeConvId]);
+      .catch(() => dispatch({ type: 'SET_INTERACTIONS', interactions: [] }));
+  }, [state.serverBacked, state.activeConvId]);
 
-  const createConversation = useCallback((projectId: string, title: string = getDefaultConversationTitle(settings.productMode)) => {
-    // Abort any running request when creating a new conversation
-    if (abortController) {
-      abortController.abort();
-      setAbortController(null);
+  // ==========================================
+  // Event Sink (bridge between SSE handler and reducer)
+  // ==========================================
+  const eventSink = useMemo(() => ({
+    setTaskPlan: (items: string[]) => dispatch({ type: 'SET_TASK_PLAN', plan: items }),
+
+    addSystemMessage: (content: string) => {
+      const msg: Message = { id: generateId(), role: 'system', content, timestamp: Date.now() };
+      dispatch({ type: 'ADD_MESSAGE_TO_CONVERSATION', id: state.activeConvId!, message: msg });
+    },
+
+    updateAssistantMessage: (content: string) => {
+      const now = Date.now();
+      if (!streamThrottleRef.current || now - streamThrottleRef.current > 33) {
+        streamThrottleRef.current = now;
+        const conv = state.conversations.find(c => c.id === state.activeConvId);
+        if (!conv) return;
+        const msgs = [...conv.messages];
+        const lastMsg = msgs[msgs.length - 1];
+        if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.tool_calls) {
+          msgs[msgs.length - 1] = { ...lastMsg, content };
+        } else {
+          msgs.push({ id: 'streaming_' + now, role: 'assistant', content, timestamp: now });
+        }
+        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: state.activeConvId!, messages: msgs });
+      }
+    },
+
+    finalizeAssistantMessage: (msg: Message) => {
+      const conv = state.conversations.find(c => c.id === state.activeConvId);
+      if (!conv) return;
+      const msgs = [...conv.messages];
+      const lastMsg = msgs[msgs.length - 1];
+      if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
+        msgs[msgs.length - 1] = msg;
+      } else {
+        msgs.push(msg);
+      }
+      dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: state.activeConvId!, messages: msgs });
+      if (state.serverBacked && state.activeConvId) {
+        updateConversationOnServer(state.activeConvId, { messages: msgs }).catch(console.error);
+      }
+    },
+
+    updateToolExecution: (toolCallId: string | undefined, tool: string) => {
+      const conv = state.conversations.find(c => c.id === state.activeConvId);
+      if (!conv) return;
+      const msgs = conv.messages.map((m, idx) => {
+        if (idx === conv.messages.length - 1 && m.role === 'assistant' && m.tool_calls) {
+          return {
+            ...m,
+            tool_calls: m.tool_calls.map((tc: any) =>
+              (toolCallId && tc.id === toolCallId) || (!toolCallId && tc.function?.name === tool)
+                ? { ...tc, status: 'running' as const }
+                : tc
+            ),
+          };
+        }
+        return m;
+      });
+      dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: state.activeConvId!, messages: msgs });
+      if (state.serverBacked) {
+        updateConversationOnServer(state.activeConvId!, { messages: msgs }).catch(console.error);
+      }
+    },
+
+    addToolResult: (toolMsg: Message, _updatedToolCallId: string) => {
+      const conv = state.conversations.find(c => c.id === state.activeConvId);
+      if (!conv) return;
+      const msgs = conv.messages.map((m, idx) => {
+        if (idx === conv.messages.length - 1 && m.role === 'assistant' && m.tool_calls) {
+          return {
+            ...m,
+            tool_calls: m.tool_calls.map((tc: any) =>
+              tc.status === 'running' ? { ...tc, status: 'done' as const, result: toolMsg.content } : tc
+            ),
+          };
+        }
+        return m;
+      });
+      dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: state.activeConvId!, messages: [...msgs, toolMsg] });
+      if (state.serverBacked) {
+        updateConversationOnServer(state.activeConvId!, { messages: [...msgs, toolMsg] }).catch(console.error);
+      }
+    },
+
+    addApproval: (approval: ApprovalRequest) => {
+      dispatch({ type: 'ADD_APPROVAL', approval });
+      dispatch({
+        type: 'ADD_INTERACTION',
+        interaction: { id: approval.approvalId, kind: 'approval', approval },
+      });
+    },
+
+    removeApproval: (approvalId: string) => {
+      const interaction = state.actionCenterInteractions.find(i => i.id === approvalId);
+      if (interaction) {
+        dispatch({ type: 'ADD_INTERACTION_HISTORY', interaction });
+      }
+      dispatch({ type: 'REMOVE_APPROVAL', approvalId });
+      dispatch({ type: 'REMOVE_INTERACTION', id: approvalId });
+    },
+
+    setHumanCheckpoint: (checkpoint: any) => {
+      dispatch({ type: 'SET_HUMAN_CHECKPOINT', checkpoint });
+      dispatch({
+        type: 'ADD_INTERACTION',
+        interaction: { id: checkpoint.id, kind: 'checkpoint', checkpoint },
+      });
+    },
+
+    setPlannerArtifact: (artifact: PlannerArtifact) => {
+      dispatch({ type: 'SET_PLANNER_ARTIFACT', artifact });
+    },
+
+    setExecutionArtifacts: (artifacts: ExecutionArtifact[]) => {
+      dispatch({ type: 'SET_EXECUTION_ARTIFACTS', artifacts });
+    },
+
+    mergeProjectMemory: (memory: Record<string, unknown>) => {
+      dispatch({ type: 'MERGE_PROJECT_MEMORY', memory });
+    },
+
+    updateProjectPort: (_projectId: string, port: number) => {
+      if (activeProject) {
+        dispatch({ type: 'UPDATE_PROJECT', id: activeProject.id, updates: { lastPort: port } });
+      }
+    },
+
+    incrementPreviewKey: () => {
+      dispatch({ type: 'INCREMENT_PREVIEW_KEY' });
+    },
+  }), [state.activeConvId, state.conversations, state.serverBacked, activeProject]);
+
+  // ==========================================
+  // sendMessage
+  // ==========================================
+  const sendMessageFn = useCallback(async (input: string, attachments: any[] = []) => {
+    if (!input.trim() && attachments.length === 0) return;
+    if (!state.activeConvId) return;
+
+    if (state.abortController) {
+      state.abortController.abort();
+      dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
     }
-    setLoading(false);
+
+    const convId = state.activeConvId;
+    const activeConv = state.conversations.find(c => c.id === convId) || null;
+    const userMsg: Message = { id: generateId(), role: 'user', content: input, attachments, timestamp: Date.now() };
+    const shouldAutoRenameConversation = activeConv && (
+      !activeConv.title ||
+      activeConv.title === 'Yeni söhbət' ||
+      activeConv.title === 'Yeni chat'
+    );
+    const nextTitle = shouldAutoRenameConversation ? buildConversationTitleFromInput(input, settings.productMode) : activeConv?.title;
+
+    // Add user message to conversation
+    const currentMsgs = [...messages, userMsg];
+    dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: currentMsgs });
+    if (shouldAutoRenameConversation && nextTitle) {
+      dispatch({ type: 'UPDATE_CONVERSATION', id: convId, updates: { title: nextTitle } });
+      if (state.serverBacked) {
+        updateConversationOnServer(convId, { title: nextTitle, messages: currentMsgs }).catch(console.error);
+      }
+    }
+
+    dispatch({ type: 'SET_LOADING', loading: true });
+    dispatch({ type: 'SET_TASK_PLAN', plan: [] });
+    dispatch({ type: 'SET_PLANNER_ARTIFACT', artifact: null });
+    dispatch({ type: 'SET_EXECUTION_ARTIFACTS', artifacts: [] });
+    streamBufferRef.current = '';
+
+    const controller = new AbortController();
+    dispatch({ type: 'SET_ABORT_CONTROLLER', controller });
+
+    const ctx: SendMessageContext = {
+      settings,
+      activeConvId: convId,
+      activeProject,
+      messages: currentMsgs,
+      projectMemory: state.projectMemory,
+      plannerArtifact: state.plannerArtifact,
+      executionArtifacts: state.executionArtifacts,
+      serverBacked: state.serverBacked,
+      safeMode: state.safeMode,
+      sink: eventSink,
+    };
+
+    try {
+      await handleSendMessage(input, attachments, ctx);
+    } finally {
+      dispatch({ type: 'SET_LOADING', loading: false });
+      dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
+      const responseTime = Date.now() - userMsg.timestamp;
+      trackChatMessage(settings.model, responseTime);
+    }
+  }, [state.activeConvId, state.conversations, state.abortController, state.projectMemory, state.plannerArtifact, state.executionArtifacts, state.serverBacked, state.safeMode, messages, activeProject, settings, eventSink]);
+
+  // ==========================================
+  // Callbacks
+  // ==========================================
+  const createConversation = useCallback((projectId: string, title: string = getDefaultConversationTitle(settings.productMode)) => {
+    if (state.abortController) {
+      state.abortController.abort();
+      dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
+    }
+    dispatch({ type: 'SET_LOADING', loading: false });
 
     const newConv: Conversation = {
       id: generateId(),
@@ -345,18 +452,18 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    setConversations(prev => [newConv, ...prev]);
-    setActiveConvId(newConv.id);
-    if (serverBacked) {
+    dispatch({ type: 'ADD_CONVERSATION', conversation: newConv });
+    dispatch({ type: 'SET_ACTIVE_CONV_ID', id: newConv.id });
+    if (state.serverBacked) {
       createConversationOnServer(projectId, title)
         .then(serverConv => {
-          setConversations(prev => prev.map(c => c.id === newConv.id ? serverConv : c));
-          setActiveConvId(serverConv.id);
+          dispatch({ type: 'UPDATE_CONVERSATION', id: newConv.id, updates: serverConv });
+          dispatch({ type: 'SET_ACTIVE_CONV_ID', id: serverConv.id });
         })
         .catch(console.error);
     }
     return newConv.id;
-  }, [serverBacked, abortController]);
+  }, [state.serverBacked, state.abortController]);
 
   const createProject = useCallback((name: string, path: string, repoUrl?: string) => {
     const newProj: Project = { id: generateId(), name, path, createdAt: Date.now(), repoUrl };
@@ -368,650 +475,55 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    setProjects(prev => [...prev, newProj]);
-    setConversations(prev => [localConv, ...prev]);
-    setActiveConvId(localConv.id);
-
-    if (serverBacked) {
+    dispatch({ type: 'ADD_PROJECT', project: newProj });
+    dispatch({ type: 'ADD_CONVERSATION', conversation: localConv });
+    dispatch({ type: 'SET_ACTIVE_CONV_ID', id: localConv.id });
+    if (state.serverBacked) {
       createProjectOnServer({ name, path, repoUrl })
         .then(({ project, conversation }) => {
-          setProjects(prev => prev.map(p => p.id === newProj.id ? project : p));
-          setConversations(prev => prev.map(c => c.id === localConv.id ? conversation : c));
-          setActiveConvId(conversation.id);
+          dispatch({ type: 'UPDATE_PROJECT', id: newProj.id, updates: project });
+          dispatch({ type: 'UPDATE_CONVERSATION', id: localConv.id, updates: conversation });
+          dispatch({ type: 'SET_ACTIVE_CONV_ID', id: conversation.id });
         })
         .catch(console.error);
     }
-
     return localConv.id;
-  }, [serverBacked]);
+  }, [state.serverBacked]);
 
   const updateProject = useCallback((id: string, updates: Partial<Project>) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-    if (serverBacked) updateProjectOnServer(id, updates).catch(console.error);
-  }, [serverBacked]);
-
-  const sendMessage = useCallback(async (input: string, attachments: any[] = []) => {
-    if (!input.trim() && attachments.length === 0) return;
-    if (!activeConvId) return;
-
-    if (abortController) {
-      abortController.abort();
-      setAbortController(null);
-    }
-
-    // Capture the conversation ID at the time of sending
-    const convId = activeConvId;
-    const activeConv = conversations.find(c => c.id === convId) || null;
-
-    const enrichedAttachments = await extractAttachments(attachments);
-    const userMsg: Message = { id: generateId(), role: 'user', content: input, attachments: enrichedAttachments, timestamp: Date.now() };
-    const shouldAutoRenameConversation = activeConv && (
-      !activeConv.title ||
-      activeConv.title === 'Yeni söhbət' ||
-      activeConv.title === 'Yeni chat'
-    );
-    const nextTitle = shouldAutoRenameConversation ? buildConversationTitleFromInput(input, settings.productMode) : activeConv?.title;
-    
-    // Add user message to state
-    let currentMsgs = [...messages, userMsg];
-    setConversations(prev => prev.map(c => c.id === convId ? {
-      ...c,
-      title: c.id === convId && shouldAutoRenameConversation ? (nextTitle || c.title) : c.title,
-      messages: currentMsgs,
-      updatedAt: Date.now()
-    } : c));
-    if (serverBacked && shouldAutoRenameConversation && nextTitle) {
-      updateConversationOnServer(convId, { title: nextTitle, messages: currentMsgs }).catch(console.error);
-    }
-    
-    setLoading(true);
-    setTaskPlan([]);
-    setPlannerArtifact(null);
-    setExecutionArtifacts([]);
-    streamBufferRef.current = '';
-    const controller = new AbortController();
-    setAbortController(controller);
-
-    try {
-      // Task plan arxa planda — chat-i bloklamır
-      getTaskPlan(input, activeProject?.path || settings.projectDir)
-        .then(plan => setTaskPlan(plan.items))
-        .catch(() => setTaskPlan([]));
-
-      const isLikelyLocalModel = !settings.model.includes('/') || settings.baseUrl.includes('localhost') || settings.baseUrl.includes('127.0.0.1');
-      const MAX_HISTORY_MESSAGES = isLikelyLocalModel ? 8 : 16;
-      const historySlice = currentMsgs.slice(-MAX_HISTORY_MESSAGES);
-      const preparedMessagesCore = historySlice.map((m, idx) => {
-        const isRecent = idx >= historySlice.length - 6;
-        const trimmedToolCalls = isRecent
-          ? m.tool_calls?.map((tc: any) => ({
-              id: tc.id,
-              type: tc.type || 'function',
-              function: {
-                name: tc.function?.name || tc.name || '',
-                arguments: String(tc.function?.arguments || tc.args || '').slice(0, 2000)
-              }
-            }))
-          : undefined;
-
-        return ({
-        role: m.role,
-        content: String(m.content || '').slice(0, 8000),
-        // Keep extracted text. If extraction failed on last user message, send URL for backend retry.
-        attachments: m.attachments?.map((at: any) => {
-          const hasText = at.extractedText && at.extractedText.trim();
-          return {
-            id: at.id,
-            name: at.name,
-            type: at.type,
-            mimeType: at.mimeType,
-            extractedText: at.extractedText || '',
-            extractionError: at.extractionError,
-            url: (!hasText && idx === historySlice.length - 1 && m.role === 'user')
-              ? (at.url || '')
-              : ''
-          };
-        }),
-        tool_calls: trimmedToolCalls,
-        tool_call_id: m.tool_call_id
-      })});
-
-      const activeGuiSession = projectMemory?.activeGuiSession as any;
-      const preparedMessages = (
-        activeGuiSession?.sessionId && settings.workflow === 'gui'
-          ? [{
-              role: 'system',
-              content: `Active GUI session: ${activeGuiSession.sessionId}. Cari visible browser sessiyası açıqdır. İstifadəçi yeni URL açmağı açıq deməyibsə, browser_* və gui_* addımlarında bu session üstündə davam et.`
-            }, ...preparedMessagesCore]
-          : preparedMessagesCore
-      );
-
-      await sendChatMessage(
-        preparedMessages,
-        settings.apiKey, settings.baseUrl, settings.model, activeProject?.path || settings.projectDir,
-        {
-          safeMode,
-          projectId: activeProject?.id,
-          conversationId: convId,
-          orchestrationMode: settings.orchestrationMode,
-          workflow: settings.workflow,
-          guiBrowserMode: settings.guiBrowserMode,
-          guiBrowserPath: settings.guiBrowserPath,
-          guiBrowserCdpUrl: settings.guiBrowserCdpUrl,
-          productMode: settings.productMode,
-          executionMode: settings.executionMode
-        },
-        (event: any) => {
-          if (event.type === 'task_plan') {
-            const items = Array.isArray(event.items) ? event.items : [];
-            setTaskPlan(items);
-            return;
-          }
-          if (event.type === 'orchestration_state') {
-            const routingLine = event.routing?.reason ? `\nMarşrut: ${event.routing.primaryAgent}${event.routing.secondaryAgents?.length ? ` -> ${event.routing.secondaryAgents.join(' -> ')}` : ''}\nSəbəb: ${event.routing.reason}` : '';
-            const note: Message = {
-              id: generateId(),
-              role: 'system',
-              content: `Workflow: **${event.workflow}** | Rejim: **${event.mode}** | Agentlər: ${Array.isArray(event.agents) ? event.agents.join(', ') : ''}${routingLine}`,
-              timestamp: Date.now()
-            };
-            currentMsgs = [...currentMsgs, note];
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-            return;
-          }
-          if (event.type === 'orchestration_phase') {
-            if ((event as any).currentRole === 'Manager') {
-              return;
-            }
-            const phaseSummary = Array.isArray(event.phases)
-              ? event.phases.map((phase) => `${phase.role}: ${phase.status}`).join(' | ')
-              : '';
-            const note: Message = {
-              id: generateId(),
-              role: 'system',
-              content: `Faza: **${event.currentRole}**${phaseSummary ? ` | ${phaseSummary}` : ''}`,
-              timestamp: Date.now()
-            };
-            currentMsgs = [...currentMsgs, note];
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-            return;
-          }
-          // FUNC-FIX: surface the Auto router's decision as a small system
-          // message at the top of the assistant turn ("Auto → ...").
-          if (event.type === 'auto_route') {
-            const isCloud = event.providerId?.includes('cloud') || /\//.test(event.chosenModel || '');
-            const icon = isCloud ? '☁️' : '🦙';
-            const tier = event.intent === 'smart' ? 'Mürəkkəb iş' : 'Sürətli sual';
-            const note: Message = {
-              id: generateId(),
-              role: 'system',
-              content: `${icon} Auto → **${event.chosenModel}** (${tier})`,
-              timestamp: Date.now()
-            } as Message;
-            currentMsgs = [...currentMsgs, note];
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-            return;
-          }
-          if (event.type === 'error') {
-            const errMsg: Message = { id: generateId(), role: 'assistant', content: `❌ Xəta: ${normalizeUiErrorMessage(event.message)}`, timestamp: Date.now() };
-            currentMsgs = [...currentMsgs, errMsg];
-            trackChatError(settings.model, event.message);
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-            return;
-          }
-          if (event.type === 'debug') {
-            if (event.info?.plannerArtifact) {
-              const artifact = event.info.plannerArtifact as PlannerArtifact;
-              setPlannerArtifact(artifact);
-              if (activeProject?.id) {
-                const mergedMemory = mergePlannerArtifactIntoMemory(projectMemory, artifact, input);
-                setProjectMemory(mergedMemory);
-                if (serverBacked) {
-                  saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
-                }
-              }
-            }
-            if (Array.isArray(event.info?.executionArtifacts)) {
-              const artifacts = event.info.executionArtifacts as ExecutionArtifact[];
-              setExecutionArtifacts(artifacts);
-              if (activeProject?.id) {
-                const mergedMemory = mergeExecutionArtifactsIntoMemory(projectMemory, artifacts);
-                setProjectMemory(mergedMemory);
-                if (serverBacked) {
-                  saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
-                }
-              }
-            }
-            return;
-          }
-          if (event.type === 'governance_state') {
-            if (activeProject?.id) {
-              const mergedMemory = mergeGovernanceIntoMemory(projectMemory, event.entryPath, event.gateReceipt);
-              setProjectMemory(mergedMemory);
-              if (serverBacked) {
-                saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
-              }
-            }
-            return;
-          }
-          if (event.type === 'approval_request') {
-            const approval = {
-              approvalId: event.approvalId,
-              tool: event.tool,
-              args: event.args,
-              conversationId: event.conversationId,
-              runId: event.runId,
-              phaseRole: event.phaseRole,
-              expiresAt: event.expiresAt,
-              meta: event.meta
-            };
-            setPendingApprovals(prev => [...prev, approval]);
-            setActionCenterInteractions(prev => [
-              ...prev.filter(item => item.id !== event.approvalId),
-              { id: event.approvalId, kind: 'approval', approval }
-            ]);
-            return;
-          }
-          if (event.type === 'approval_resolved') {
-            setPendingApprovals(prev => prev.filter(item => item.approvalId !== event.approvalId));
-            setActionCenterInteractions(prev => {
-              const resolved = prev.find(item => item.id === event.approvalId);
-              if (resolved) {
-                setActionCenterHistory(history => [resolved, ...history].slice(0, 12));
-              }
-              return prev.filter(item => item.id !== event.approvalId);
-            });
-            return;
-          }
-          if (event.type === 'human_checkpoint') {
-            setHumanCheckpoint(event.checkpoint);
-            setActionCenterInteractions(prev => [
-              ...prev.filter(item => item.kind !== 'checkpoint'),
-              { id: event.checkpoint.id, kind: 'checkpoint', checkpoint: event.checkpoint }
-            ]);
-            if (activeProject?.id) {
-              const mergedMemory = mergeHumanCheckpointIntoMemory(projectMemory, event.checkpoint);
-              setProjectMemory(mergedMemory);
-              if (serverBacked) {
-                saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
-              }
-            }
-            return;
-          }
-          if (event.type === 'assistant_delta') {
-            const deltaText = normalizeAssistantText(String(event.content || ''));
-            streamBufferRef.current = normalizeAssistantText((streamBufferRef.current || '') + deltaText);
-            // Streaming — real-time mətn yeniləməsi
-            const lastMsg = currentMsgs[currentMsgs.length - 1];
-            if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.tool_calls) {
-              // Mövcud streaming mesajını yenilə
-              const updatedMsg = { ...lastMsg, content: streamBufferRef.current };
-              currentMsgs = [...currentMsgs.slice(0, -1), updatedMsg];
-            } else {
-              // Yeni streaming mesajı yarat
-              const streamMsg: Message = {
-                id: 'streaming_' + Date.now(),
-                role: 'assistant',
-                content: streamBufferRef.current,
-                timestamp: Date.now()
-              };
-              currentMsgs = [...currentMsgs, streamMsg];
-            }
-            // FUNC-FIX: throttle re-renders to ~30fps. Previously every single
-            // token triggered a full setConversations -> sidebar+list rerender,
-            // which made the UI feel sluggish on local models. Sufficient
-            // for human-visible smoothness.
-            const now = Date.now();
-            if (!streamThrottleRef.current || now - streamThrottleRef.current > 33) {
-              streamThrottleRef.current = now;
-              const snapshot = currentMsgs;
-              setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: snapshot, updatedAt: now } : c));
-            }
-            return;
-          }
-          if (event.type === 'assistant_message') {
-            const content = chooseAssistantContent(streamBufferRef.current || '', event.message.content || '');
-            const assistantMsg: Message = {
-              id: generateId(),
-              role: 'assistant',
-              content,
-              tool_calls: event.message.tool_calls?.map((tc: any) => ({ ...tc, status: 'done' })),
-              timestamp: Date.now()
-            };
-            streamBufferRef.current = '';
-            // Streaming mesajı varsa əvəz et, yoxsa əlavə et
-            const lastMsg = currentMsgs[currentMsgs.length - 1];
-            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
-              currentMsgs = [...currentMsgs.slice(0, -1), assistantMsg];
-            } else {
-              currentMsgs = [...currentMsgs, assistantMsg];
-            }
-            
-            // AUTO PORT DETECTION: Scan assistant message for new localhost URLs
-            const msgContent = typeof event.message === 'string' ? event.message : (event.message.content || '');
-            if (msgContent.includes('http://localhost:')) {
-              const match = msgContent.match(/http:\/\/localhost:(\d+)/);
-              if (match && match[1]) {
-                const newPort = parseInt(match[1]);
-                if (activeProject) {
-                   setProjects(prev => prev.map(p => 
-                     p.id === activeProject.id ? { ...p, lastPort: newPort } : p
-                   ));
-                }
-              }
-            }
-            
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-            if (serverBacked) updateConversationOnServer(convId, { messages: currentMsgs }).catch(console.error);
-          } else if (event.type === 'tool_execution') {
-            trackToolUse(event.tool);
-            // IMMUTABLE UPDATE: Create a NEW messages array and NEW objects
-            currentMsgs = currentMsgs.map((m, idx) => {
-              if (idx === currentMsgs.length - 1 && m.role === 'assistant' && m.tool_calls) {
-                return {
-                  ...m,
-                  tool_calls: m.tool_calls.map((tc: any) =>
-                    (event.tool_call_id && tc.id === event.tool_call_id) || (!event.tool_call_id && tc.function.name === event.tool)
-                      ? { ...tc, status: 'running' }
-                      : tc
-                  )
-                };
-              }
-              return m;
-            });
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-            if (serverBacked) updateConversationOnServer(convId, { messages: currentMsgs }).catch(console.error);
-          } else if (event.type === 'tool_result') {
-            // IMMUTABLE UPDATE: Enrich the tool_call and add a NEW tool message
-            let updatedToolCallId = '';
-            currentMsgs = currentMsgs.map((m, idx) => {
-              if (idx === currentMsgs.length - 1 && m.role === 'assistant' && m.tool_calls) {
-                const updatedToolCalls = m.tool_calls.map((tc: any) => {
-                  if (tc.status === 'running') {
-                    updatedToolCallId = tc.id;
-                    return { ...tc, status: 'done', result: event.result };
-                  }
-                  return tc;
-                });
-                return { ...m, tool_calls: updatedToolCalls };
-              }
-              return m;
-            });
-
-            const toolMsg: Message = {
-              id: generateId(),
-              role: 'tool',
-              content: typeof event.result === 'string' ? event.result : JSON.stringify(event.result),
-              tool_call_id: updatedToolCallId,
-              timestamp: Date.now()
-            };
-
-            const repoProfile = typeof event.result === 'string'
-              ? extractRepoProfileFromToolResult(event.result)
-              : null;
-            if (repoProfile && activeProject?.id) {
-              const mergedMemory = mergeRepoProfileIntoMemory(projectMemory, repoProfile);
-              setProjectMemory(mergedMemory);
-              if (serverBacked) {
-                saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
-              }
-            }
-
-            const runningTool = currentMsgs
-              .flatMap((message) => message.tool_calls || [])
-              .find((toolCall: any) => toolCall.id === updatedToolCallId);
-            if (runningTool?.function?.name && typeof event.result === 'string' && activeProject?.id) {
-              const runtimeArtifact = extractRuntimeArtifact(
-                runningTool.function.name,
-                runningTool.function.arguments || '{}',
-                event.result
-              );
-              if (runtimeArtifact) {
-                const withRuntime = mergeRuntimeArtifactIntoMemory(projectMemory, runtimeArtifact);
-                const withGuiSession = runtimeArtifact.kind === 'gui'
-                  ? mergeGuiObservationIntoMemory(withRuntime, runtimeArtifact)
-                  : withRuntime;
-                const mergedMemory = mergeEvidenceSummaryIntoMemory(withGuiSession);
-                setProjectMemory(mergedMemory);
-                if (serverBacked) {
-                  saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
-                }
-              }
-            }
-            if (runningTool?.function?.name === 'run_tests' && typeof event.result === 'string' && activeProject?.id) {
-              const validation = buildValidationSnapshot(event.result);
-              if (validation) {
-                const mergedMemory = mergeEvidenceSummaryIntoMemory(
-                  mergeValidationIntoMemory(projectMemory, validation)
-                );
-                setProjectMemory(mergedMemory);
-                if (serverBacked) {
-                  saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
-                }
-              }
-            }
-
-            // AUTO PORT DETECTION: If terminal output contains a URL, update the project port
-            if (typeof event.result === 'string' && event.result.includes('http://localhost:')) {
-              const match = event.result.match(/http:\/\/localhost:(\d+)/);
-              if (match && match[1]) {
-                const newPort = parseInt(match[1]);
-                // FIX: Use functional update to avoid stale projects state
-                setProjects(prev => prev.map(p => 
-                  p.id === activeProject?.id ? { ...p, lastPort: newPort } : p
-                ));
-              }
-            }
-
-            currentMsgs = [...currentMsgs, toolMsg];
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-            if (serverBacked) updateConversationOnServer(convId, { messages: currentMsgs }).catch(console.error);
-            setPreviewKey(prev => prev + 1);
-          } else if (event.type === 'workspace_updated') {
-            // SEC-Audit: Safe null check for activeProject
-            if (activeProject) {
-              updateProject(activeProject.id, { path: event.path });
-            }
-            setPreviewKey(k => k + 1);
-          }
-        },
-        controller.signal
-      );
-
-      if (activeProject?.id && serverBacked) {
-        const inferredMemory = {
-          ...projectMemory,
-          language: 'az',
-          model: settings.model,
-          latestPrompt: input,
-          workspace: activeProject.path,
-          ...(plannerArtifact ? { plannerArtifact } : {}),
-          ...(executionArtifacts.length > 0 ? { executionArtifacts, lastExecutionArtifact: executionArtifacts[executionArtifacts.length - 1] } : {})
-        };
-        setProjectMemory(inferredMemory);
-        saveProjectMemory(activeProject.id, inferredMemory).catch(console.error);
-      }
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        const errMsg: Message = { id: generateId(), role: 'assistant', content: `❌ Xəta: ${normalizeUiErrorMessage(err.message)}`, timestamp: Date.now() };
-        setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: [...c.messages, errMsg], updatedAt: Date.now() } : c));
-      }
-    } finally { 
-      setLoading(false); 
-      setAbortController(null);
-      // Track response time
-      const responseTime = Date.now() - userMsg.timestamp;
-      trackChatMessage(settings.model, responseTime);
-    }
-  }, [activeConvId, conversations, messages, settings, activeProject, updateProject, serverBacked, projectMemory, safeMode, plannerArtifact, executionArtifacts, abortController]);
+    dispatch({ type: 'UPDATE_PROJECT', id, updates });
+    if (state.serverBacked) updateProjectOnServer(id, updates).catch(console.error);
+  }, [state.serverBacked]);
 
   const decideApproval = useCallback(async (approvalId: string, decision: 'approve' | 'reject') => {
     await submitApproval(approvalId, decision);
-    const targetApproval = pendingApprovals.find(item => item.approvalId === approvalId);
+    const targetApproval = state.pendingApprovals.find(item => item.approvalId === approvalId);
     if (targetApproval && activeProject?.id) {
       const mergedMemory = mergeEvidenceSummaryIntoMemory(
-        mergeApprovalDecisionIntoMemory(projectMemory, targetApproval, decision)
+        mergeApprovalDecisionIntoMemory(state.projectMemory, targetApproval, decision)
       );
-      setProjectMemory(mergedMemory);
-      if (serverBacked) {
+      dispatch({ type: 'MERGE_PROJECT_MEMORY', memory: mergedMemory });
+      if (state.serverBacked) {
         saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
       }
     }
-    // approval UI removal now comes from backend `approval_resolved` event
-  }, [activeProject?.id, pendingApprovals, projectMemory, serverBacked]);
-
-  const applySseEvent = useCallback((event: any, convId: string, currentMsgsRef: { current: Message[] }) => {
-    let currentMsgs = currentMsgsRef.current;
-    if (event.type === 'approval_request') {
-      const approval = {
-        approvalId: event.approvalId,
-        tool: event.tool,
-        args: event.args,
-        conversationId: event.conversationId,
-        runId: event.runId,
-        phaseRole: event.phaseRole,
-        expiresAt: event.expiresAt,
-        meta: event.meta
-      };
-      setPendingApprovals(prev => [...prev, approval]);
-      setActionCenterInteractions(prev => [
-        ...prev.filter(item => item.id !== event.approvalId),
-        { id: event.approvalId, kind: 'approval', approval }
-      ]);
-      return;
-    }
-    if (event.type === 'approval_resolved') {
-      setPendingApprovals(prev => prev.filter(item => item.approvalId !== event.approvalId));
-      setActionCenterInteractions(prev => {
-        const resolved = prev.find(item => item.id === event.approvalId);
-        if (resolved) {
-          setActionCenterHistory(history => [resolved, ...history].slice(0, 12));
-        }
-        return prev.filter(item => item.id !== event.approvalId);
-      });
-      return;
-    }
-    if (event.type === 'human_checkpoint') {
-      setHumanCheckpoint(event.checkpoint);
-      setActionCenterInteractions(prev => [
-        ...prev.filter(item => item.kind !== 'checkpoint'),
-        { id: event.checkpoint.id, kind: 'checkpoint', checkpoint: event.checkpoint }
-      ]);
-      if (activeProject?.id) {
-        const mergedMemory = mergeHumanCheckpointIntoMemory(projectMemory, event.checkpoint);
-        setProjectMemory(mergedMemory);
-        if (serverBacked) {
-          saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
-        }
-      }
-      return;
-    }
-    if (event.type === 'governance_state') {
-      if (activeProject?.id) {
-        const mergedMemory = mergeGovernanceIntoMemory(projectMemory, event.entryPath, event.gateReceipt);
-        setProjectMemory(mergedMemory);
-        if (serverBacked) {
-          saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
-        }
-      }
-      return;
-    }
-    if (event.type === 'assistant_message') {
-      const assistantMsg: Message = {
-        id: generateId(),
-        role: 'assistant',
-        content: normalizeAssistantText(event.message.content || ''),
-        tool_calls: event.message.tool_calls?.map((tc: any) => ({ ...tc, status: 'done' })),
-        timestamp: Date.now()
-      };
-      currentMsgs = [...currentMsgs, assistantMsg];
-      currentMsgsRef.current = currentMsgs;
-      setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-      return;
-    }
-    if (event.type === 'tool_execution') {
-      currentMsgs = currentMsgs.map((m, idx) => {
-        if (idx === currentMsgs.length - 1 && m.role === 'assistant' && m.tool_calls) {
-          return {
-            ...m,
-            tool_calls: m.tool_calls.map((tc: any) =>
-              (event.tool_call_id && tc.id === event.tool_call_id) || (!event.tool_call_id && tc.function.name === event.tool)
-                ? { ...tc, status: 'running' }
-                : tc
-            )
-          };
-        }
-        return m;
-      });
-      currentMsgsRef.current = currentMsgs;
-      setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-      return;
-    }
-    if (event.type === 'tool_result') {
-      let updatedToolCallId = '';
-      currentMsgs = currentMsgs.map((m, idx) => {
-        if (idx === currentMsgs.length - 1 && m.role === 'assistant' && m.tool_calls) {
-          return {
-            ...m,
-            tool_calls: m.tool_calls.map((tc: any) => {
-              if (tc.status === 'running') {
-                updatedToolCallId = tc.id;
-                return { ...tc, status: 'done', result: event.result };
-              }
-              return tc;
-            })
-          };
-        }
-        return m;
-      });
-      currentMsgs = [...currentMsgs, {
-        id: generateId(),
-        role: 'tool',
-        content: typeof event.result === 'string' ? event.result : JSON.stringify(event.result),
-        tool_call_id: updatedToolCallId,
-        timestamp: Date.now()
-      }];
-      const runningTool = currentMsgs
-        .flatMap((message) => message.tool_calls || [])
-        .find((toolCall: any) => toolCall.id === updatedToolCallId);
-      if (runningTool?.function?.name && typeof event.result === 'string' && activeProject?.id) {
-        const runtimeArtifact = extractRuntimeArtifact(
-          runningTool.function.name,
-          runningTool.function.arguments || '{}',
-          event.result
-        );
-        if (runtimeArtifact?.kind === 'gui') {
-          const mergedMemory = mergeGuiObservationIntoMemory(
-            mergeRuntimeArtifactIntoMemory(projectMemory, runtimeArtifact),
-            runtimeArtifact
-          );
-          setProjectMemory(mergedMemory);
-          if (serverBacked) {
-            saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
-          }
-        }
-      }
-      currentMsgsRef.current = currentMsgs;
-      setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs, updatedAt: Date.now() } : c));
-    }
-  }, [activeProject?.id, projectMemory, serverBacked]);
+  }, [activeProject?.id, state.pendingApprovals, state.projectMemory, state.serverBacked]);
 
   const resolveHumanCheckpoint = useCallback(async (decision: 'resume' | 'cancel') => {
-    const checkpoint = humanCheckpoint;
+    const checkpoint = state.humanCheckpoint;
     if (!checkpoint) return;
-    setHumanCheckpoint(null);
-    setActionCenterInteractions(prev => {
-      const resolved = prev.find(item => item.id === checkpoint.id);
-      if (resolved) {
-        setActionCenterHistory(history => [resolved, ...history].slice(0, 12));
-      }
-      return prev.filter(item => item.id !== checkpoint.id);
-    });
+    dispatch({ type: 'SET_HUMAN_CHECKPOINT', checkpoint: null });
+    const interaction = state.actionCenterInteractions.find(i => i.id === checkpoint.id);
+    if (interaction) {
+      dispatch({ type: 'ADD_INTERACTION_HISTORY', interaction });
+    }
+    dispatch({ type: 'REMOVE_INTERACTION', id: checkpoint.id });
+
     if (decision === 'resume' || decision === 'cancel') {
       if (activeProject?.id) {
-        const mergedMemory = resolveActiveGuiSessionInMemory(projectMemory, decision);
-        setProjectMemory(mergedMemory);
-        if (serverBacked) {
+        const mergedMemory = resolveActiveGuiSessionInMemory(state.projectMemory, decision);
+        dispatch({ type: 'MERGE_PROJECT_MEMORY', memory: mergedMemory });
+        if (state.serverBacked) {
           saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
         }
       }
@@ -1021,9 +533,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       if (response && response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        const currentMsgsRef = {
-          current: [...(conversations.find(c => c.id === convId)?.messages || [])]
-        };
+        const currentMsgsRef = { current: [...(state.conversations.find(c => c.id === convId)?.messages || [])] };
         let buffer = '';
         let done = false;
         while (!done) {
@@ -1038,15 +548,49 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
             const payload = line.slice(6);
             if (payload === '[DONE]') continue;
             try {
-              applySseEvent(JSON.parse(payload), convId, currentMsgsRef);
-            } catch {
-              // ignore malformed chunks
-            }
+              const evt = JSON.parse(payload);
+              // Apply SSE events during checkpoint resume
+              if (evt.type === 'assistant_message') {
+                const msg: Message = {
+                  id: generateId(), role: 'assistant',
+                  content: evt.message.content || '',
+                  tool_calls: evt.message.tool_calls?.map((tc: any) => ({ ...tc, status: 'done' })),
+                  timestamp: Date.now(),
+                };
+                currentMsgsRef.current = [...currentMsgsRef.current, msg];
+                dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: currentMsgsRef.current });
+              } else if (evt.type === 'tool_execution') {
+                const msgs = currentMsgsRef.current.map((m, idx) => {
+                  if (idx === currentMsgsRef.current.length - 1 && m.role === 'assistant' && m.tool_calls) {
+                    return {
+                      ...m,
+                      tool_calls: m.tool_calls.map((tc: any) =>
+                        (evt.tool_call_id && tc.id === evt.tool_call_id) || (!evt.tool_call_id && tc.function?.name === evt.tool)
+                          ? { ...tc, status: 'running' }
+                          : tc
+                      ),
+                    };
+                  }
+                  return m;
+                });
+                currentMsgsRef.current = msgs;
+                dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
+              } else if (evt.type === 'tool_result') {
+                const toolMsg: Message = {
+                  id: generateId(), role: 'tool',
+                  content: typeof evt.result === 'string' ? evt.result : JSON.stringify(evt.result),
+                  tool_call_id: '',
+                  timestamp: Date.now(),
+                };
+                currentMsgsRef.current = [...currentMsgsRef.current, toolMsg];
+                dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: currentMsgsRef.current });
+              }
+            } catch { /* ignore */ }
           }
         }
       }
     }
-  }, [humanCheckpoint, activeProject?.path, conversations, applySseEvent]);
+  }, [state.humanCheckpoint, state.actionCenterInteractions, activeProject?.id, activeProject?.path, state.conversations, state.projectMemory, state.serverBacked]);
 
   const runHealthCheck = useCallback(async () => {
     if (!activeProject?.path) return;
@@ -1064,18 +608,12 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     await runTerminalStream(command, activeProject.path, (event) => {
       if (event.type === 'terminal_line') {
         window.dispatchEvent(new CustomEvent('terminal-log', {
-          detail: {
-            type: event.stream === 'stderr' ? 'error' : 'info',
-            content: String(event.chunk || '')
-          }
+          detail: { type: event.stream === 'stderr' ? 'error' : 'info', content: String(event.chunk || '') },
         }));
       }
       if (event.type === 'terminal_done') {
         window.dispatchEvent(new CustomEvent('terminal-log', {
-          detail: {
-            type: Number(event.code) === 0 ? 'success' : 'error',
-            content: `Exit code: ${String(event.code)}`
-          }
+          detail: { type: Number(event.code) === 0 ? 'success' : 'error', content: `Exit code: ${String(event.code)}` },
         }));
       }
     });
@@ -1091,37 +629,63 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     await applyDiff({ path: filePath, workingDirectory: activeProject.path, newContent });
   }, [activeProject?.path]);
 
+  // ==========================================
+  // Return Value (backward-compatible API)
+  // ==========================================
   return {
-    projects, conversations, messages, activeConvId, activeConversation, activeProject, loading, previewKey,
-    safeMode, setSafeMode, taskPlan, pendingApprovals, humanCheckpoint, actionCenterInteractions, actionCenterHistory, projectMemory, plannerArtifact, executionArtifacts,
-    sendMessage, stop: () => { abortController?.abort(); setLoading(false); },
-    decideApproval, resolveHumanCheckpoint, runHealthCheck, runTerminalCommand, getDiffPreview, applyDiffPreview,
+    projects: state.projects,
+    conversations: state.conversations,
+    messages,
+    activeConvId: state.activeConvId,
+    activeConversation,
+    activeProject,
+    loading: state.loading,
+    previewKey: state.previewKey,
+    safeMode: state.safeMode,
+    setSafeMode: (v: boolean) => dispatch({ type: 'SET_SAFE_MODE', safeMode: v }),
+    taskPlan: state.taskPlan,
+    pendingApprovals: state.pendingApprovals,
+    humanCheckpoint: state.humanCheckpoint,
+    actionCenterInteractions: state.actionCenterInteractions,
+    actionCenterHistory: state.actionCenterHistory,
+    projectMemory: state.projectMemory,
+    plannerArtifact: state.plannerArtifact,
+    executionArtifacts: state.executionArtifacts,
+    sendMessage: sendMessageFn,
+    stop: () => { state.abortController?.abort(); dispatch({ type: 'SET_LOADING', loading: false }); },
+    decideApproval,
+    resolveHumanCheckpoint,
+    runHealthCheck,
+    runTerminalCommand,
+    getDiffPreview,
+    applyDiffPreview,
     setActiveConvId: (id: string | null) => {
-      // When switching conversations, abort current request and reset loading
-      if (id !== activeConvId) {
-        if (abortController) {
-          abortController.abort();
-          setAbortController(null);
+      if (id !== state.activeConvId) {
+        if (state.abortController) {
+          state.abortController.abort();
+          dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
         }
-        setLoading(false);
+        dispatch({ type: 'SET_LOADING', loading: false });
       }
-      setActiveConvId(id);
-    }, createProject, updateProject, archiveProject: (id: string, archived: boolean = true) => updateProject(id, { archived }),
+      dispatch({ type: 'SET_ACTIVE_CONV_ID', id });
+    },
+    createProject,
+    updateProject,
+    archiveProject: (id: string, archived: boolean = true) => updateProject(id, { archived }),
     deleteProject: (id: string) => {
-      setProjects(p => p.filter(x => x.id !== id));
-      setConversations(c => c.filter(x => x.projectId !== id));
-      if (serverBacked) deleteProjectOnServer(id).catch(console.error);
+      dispatch({ type: 'REMOVE_PROJECT', id });
+      if (state.serverBacked) deleteProjectOnServer(id).catch(console.error);
     },
     updateProjectPort: (port: number) => {
       if (activeProject) {
-        setProjects(prev => prev.map(p => p.id === activeProject.id ? { ...p, lastPort: port } : p));
+        dispatch({ type: 'UPDATE_PROJECT', id: activeProject.id, updates: { lastPort: port } });
       }
     },
     createConversation,
     deleteConversation: (id: string) => {
-      setConversations(c => c.filter(x => x.id !== id));
-      if (serverBacked) deleteConversationOnServer(id).catch(console.error);
+      dispatch({ type: 'REMOVE_CONVERSATION', id });
+      if (state.serverBacked) deleteConversationOnServer(id).catch(console.error);
     },
-    clearAll: () => { setConversations([]); setProjects([]); setActiveConvId(null); }
+    clearAll: () => dispatch({ type: 'RESET_CHAT' }),
   };
 }
