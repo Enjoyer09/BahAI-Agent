@@ -263,13 +263,16 @@ interface SSEEventContext {
 
 function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   const { projectMemory, activeProject, serverBacked, sink, currentMsgs, streamBufferRef } = ctx;
+  const isWebChat = ctx.settings.productMode === 'web_chat';
 
   if (event.type === 'task_plan') {
+    if (isWebChat) return;
     sink.setTaskPlan(Array.isArray(event.items) ? event.items : []);
     return;
   }
 
   if (event.type === 'orchestration_state') {
+    if (isWebChat) return;
     const routingLine = event.routing?.reason
       ? `\nMarşrut: ${event.routing.primaryAgent}${event.routing.secondaryAgents?.length ? ` -> ${event.routing.secondaryAgents.join(' -> ')}` : ''}\nSəbəb: ${event.routing.reason}`
       : '';
@@ -280,6 +283,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'orchestration_phase') {
+    if (isWebChat) return;
     if (event.currentRole === 'Manager') return;
     const phaseSummary = Array.isArray(event.phases)
       ? event.phases.map((p: any) => `${p.role}: ${p.status}`).join(' | ')
@@ -289,6 +293,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'auto_route') {
+    if (isWebChat) return;
     const isCloud = event.providerId?.includes('cloud') || /\//.test(event.chosenModel || '');
     const icon = isCloud ? '☁️' : '🦙';
     const tier = event.intent === 'smart' ? 'Mürəkkəb iş' : 'Sürətli sual';
@@ -303,6 +308,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'debug') {
+    if (isWebChat) return;
     if (event.info?.plannerArtifact) {
       const artifact = event.info.plannerArtifact as PlannerArtifact;
       sink.setPlannerArtifact(artifact);
@@ -325,6 +331,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'governance_state') {
+    if (isWebChat) return;
     if (activeProject?.id) {
       const mergedMemory = mergeGovernanceIntoMemory(projectMemory, event.entryPath, event.gateReceipt);
       sink.mergeProjectMemory(mergedMemory);
@@ -334,6 +341,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'approval_request') {
+    if (isWebChat) return;
     const approval = {
       approvalId: event.approvalId,
       tool: event.tool,
@@ -350,12 +358,14 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'approval_resolved') {
+    if (isWebChat) return;
     sink.removeApproval(event.approvalId);
     sink.incrementPreviewKey();
     return;
   }
 
   if (event.type === 'human_checkpoint') {
+    if (isWebChat) return;
     sink.setHumanCheckpoint(event.checkpoint);
     if (activeProject?.id) {
       const mergedMemory = mergeHumanCheckpointIntoMemory(projectMemory, event.checkpoint);
@@ -367,6 +377,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
 
   if (event.type === 'assistant_delta') {
     const deltaText = normalizeAssistantText(String(event.content || ''));
+    if (!deltaText) return;
     streamBufferRef.current = normalizeAssistantText((streamBufferRef.current || '') + deltaText);
     sink.updateAssistantMessage(streamBufferRef.current);
     return;
@@ -378,7 +389,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
       id: generateId(),
       role: 'assistant',
       content,
-      tool_calls: event.message.tool_calls?.map((tc: any) => ({ ...tc, status: 'done' })),
+      tool_calls: isWebChat ? undefined : event.message.tool_calls?.map((tc: any) => ({ ...tc, status: 'done' })),
       timestamp: Date.now(),
     };
     streamBufferRef.current = '';
@@ -397,6 +408,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'tool_execution') {
+    if (isWebChat) return;
     trackToolUse(event.tool);
     // Update currentMsgs ref to track the running tool
     const current = currentMsgs.current;
@@ -422,6 +434,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'tool_result') {
+    if (isWebChat) return;
     // Find the running tool from the current messages (updated by tool_execution handler)
     const allToolCalls = currentMsgs.current.flatMap(m => m.tool_calls || []);
     const runningTool = allToolCalls.find((tc: any) => tc.status === 'running');
@@ -508,6 +521,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'workspace_updated') {
+    if (isWebChat) return;
     if (activeProject) {
       sink.updateProjectPort(activeProject?.id || '', 0); // signal workspace update
     }

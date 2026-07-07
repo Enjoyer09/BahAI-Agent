@@ -3,6 +3,12 @@ import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GateReceipt,
 export function normalizeAssistantText(content: string): string {
   if (typeof content !== 'string') return '';
   const trimmed = content.trim();
+  if (
+    /^\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*\}\s*\}$/.test(trimmed) ||
+    /^```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"/i.test(trimmed)
+  ) {
+    return '';
+  }
   const match = trimmed.match(/^\{\s*"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*\}$/);
   if (!match || !match[1]) return content;
   return match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');

@@ -16,6 +16,7 @@ const MarkdownRenderer = lazy(() => import('../common/MarkdownRenderer'));
 interface Props {
   message: Message;
   workingDirectory?: string;
+  productMode?: 'web_chat' | 'desktop_code';
 }
 
 function renderInlineSystemContent(content: string) {
@@ -29,7 +30,7 @@ function renderInlineSystemContent(content: string) {
   });
 }
 
-export default function ChatMessage({ message, workingDirectory }: Props) {
+export default function ChatMessage({ message, workingDirectory, productMode = 'desktop_code' }: Props) {
   const [copied, setCopied] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -160,6 +161,9 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
   // the Auto router's choice. Render as a small inline pill so it doesn't
   // dominate the conversation.
   if (message.role === 'system') {
+    const systemText = String(message.content || '');
+    const isMetaSystemNote = /^(Workflow:|Faza:|☁️ Auto|🦙 Auto)/i.test(systemText);
+    if (productMode === 'web_chat' && isMetaSystemNote) return null;
     return (
       <div className="flex items-center justify-center my-2" data-testid={`system-note-${message.id}`}>
         <div
@@ -176,8 +180,8 @@ export default function ChatMessage({ message, workingDirectory }: Props) {
     );
   }
 
-  const hasRunningTools = message.tool_calls?.some(tc => tc.status === 'running');
-  const hasTools = message.tool_calls && message.tool_calls.length > 0;
+  const hasRunningTools = productMode === 'desktop_code' && message.tool_calls?.some(tc => tc.status === 'running');
+  const hasTools = productMode === 'desktop_code' && message.tool_calls && message.tool_calls.length > 0;
 
   return (
     <div className="group animate-in" style={{ animationDelay: '50ms' }}>

@@ -93,10 +93,11 @@ export default function ChatArea({ messages, loading, onSend, onStop, workingDir
             key={msg.id || i}
             message={msg}
             workingDirectory={workingDirectory}
+            productMode={productMode}
           />
         ))}
 
-        {loading && messages[messages.length - 1]?.role !== 'assistant' && (
+        {loading && !messages.some((msg) => msg.role === 'assistant' && /Düşünürəm/i.test(msg.content || '')) && (
           <div className="flex items-start gap-3 sm:gap-4 animate-in">
             <div
               className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0"
