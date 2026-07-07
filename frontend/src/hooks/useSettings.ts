@@ -116,6 +116,14 @@ export function useSettings() {
   useEffect(() => { localStorage.setItem('guiBrowserPath', guiBrowserPath); }, [guiBrowserPath]);
   useEffect(() => { localStorage.setItem('guiBrowserCdpUrl', guiBrowserCdpUrl); }, [guiBrowserCdpUrl]);
   useEffect(() => { localStorage.setItem('guiAutoStartBrowser', String(guiAutoStartBrowser)); }, [guiAutoStartBrowser]);
+  useEffect(() => {
+    document.documentElement.dataset.performanceMode = performanceMode ? 'on' : 'off';
+    document.body.dataset.performanceMode = performanceMode ? 'on' : 'off';
+    return () => {
+      delete document.documentElement.dataset.performanceMode;
+      delete document.body.dataset.performanceMode;
+    };
+  }, [performanceMode]);
 
   const settings: Settings = { productMode, executionMode, apiKey, baseUrl, model, projectDir, performanceMode, orchestrationMode, workflow, guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser };
 

@@ -257,6 +257,38 @@ button, a, [role="button"] {
 }
 
 /* ==========================================
+   PERFORMANCE MODE
+   ========================================== */
+[data-performance-mode='on'] *,
+[data-performance-mode='on'] *::before,
+[data-performance-mode='on'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+[data-performance-mode='on'] .animate-in,
+[data-performance-mode='on'] .animate-in-up,
+[data-performance-mode='on'] .animate-in-right,
+[data-performance-mode='on'] .animate-in-left,
+[data-performance-mode='on'] .animate-slide-in-left,
+[data-performance-mode='on'] .animate-scale-in,
+[data-performance-mode='on'] .animate-shimmer,
+[data-performance-mode='on'] .animate-pulse-glow {
+  animation: none !important;
+}
+
+[data-performance-mode='on'] .glass-panel {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-performance-mode='on'] .premium-scroll {
+  scrollbar-width: auto;
+}
+
+/* ==========================================
    TOAST NOTIFICATIONS
    ========================================== */
 .toast-container {
