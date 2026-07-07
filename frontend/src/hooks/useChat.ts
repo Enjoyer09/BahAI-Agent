@@ -49,6 +49,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   const activeConvIdRef = useRef<string | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
   const serverBackedRef = useRef<boolean>(false);
+  const lastFinalAssistantContentRef = useRef<string>('');
   const streamThrottleRef = useRef<number>(0);
   const streamBufferRef = useRef<string>('');
   const storageTimeout = useRef<any>(null);
@@ -281,10 +282,25 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       if (!conv) return;
       const msgs = [...conv.messages];
       const lastMsg = msgs[msgs.length - 1];
+      const normalizedIncoming = String(msg.content || '').trim();
+      const normalizedLast = String(lastMsg?.content || '').trim();
+      if (
+        msg.role === 'assistant' &&
+        normalizedIncoming &&
+        (
+          normalizedIncoming === lastFinalAssistantContentRef.current ||
+          (lastMsg?.role === 'assistant' && normalizedIncoming === normalizedLast)
+        )
+      ) {
+        return;
+      }
       if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
         msgs[msgs.length - 1] = msg;
       } else {
         msgs.push(msg);
+      }
+      if (msg.role === 'assistant') {
+        lastFinalAssistantContentRef.current = normalizedIncoming;
       }
       dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
       if (serverBackedRef.current) {
@@ -424,6 +440,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     dispatch({ type: 'SET_PLANNER_ARTIFACT', artifact: null });
     dispatch({ type: 'SET_EXECUTION_ARTIFACTS', artifacts: [] });
     streamBufferRef.current = '';
+    lastFinalAssistantContentRef.current = '';
 
     const controller = new AbortController();
     dispatch({ type: 'SET_ABORT_CONTROLLER', controller });

@@ -377,6 +377,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
 
   if (event.type === 'assistant_delta') {
     const deltaText = normalizeAssistantText(String(event.content || ''));
+    if (/Düşünürəm/i.test(deltaText)) return;
     if (!deltaText) return;
     streamBufferRef.current = normalizeAssistantText((streamBufferRef.current || '') + deltaText);
     sink.updateAssistantMessage(streamBufferRef.current);

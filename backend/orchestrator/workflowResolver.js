@@ -43,7 +43,27 @@ const ORCHESTRATION_WORKFLOWS = {
   }
 };
 
-function resolveOrchestrationConfig(orchestrationMode, workflow, latestUserText = '') {
+function resolveOrchestrationConfig(orchestrationMode, workflow, latestUserText = '', options = {}) {
+  if (options.productMode === 'web_chat') {
+    return {
+      enabled: false,
+      workflow: 'solo',
+      mode: 'solo',
+      agents: ['Solo Agent'],
+      plan: ['İstifadəçi sualını cavablandır', 'Lazımdırsa uyğun cloud tool istifadə et', 'Tək yekun cavab ver'],
+      toolProfile: getToolProfileForWorkflow('solo'),
+      routing: {
+        mode: 'direct',
+        primaryAgent: 'Solo Agent',
+        secondaryAgents: [],
+        workflow: 'solo',
+        useTools: true,
+        maxSteps: 3,
+        reason: 'Web chat məhsulu üçün multi-agent orchestration söndürülüb',
+      },
+      maxSteps: 3
+    };
+  }
   const route = decideManagerRoute({ latestUserText, orchestrationMode, workflow });
 
   // FIX: Force solo mode for 'quick', 'gui', and 'solo' workflows regardless

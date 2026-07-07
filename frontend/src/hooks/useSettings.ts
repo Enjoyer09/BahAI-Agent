@@ -40,6 +40,7 @@ export function useSettings() {
     return localStorage.getItem('performanceMode') === 'true';
   });
   const [orchestrationMode, setOrchestrationMode] = useState(() => {
+    if (productMode === 'web_chat') return false;
     const saved = localStorage.getItem('orchestrationMode');
     if (saved == null) return DEFAULT_SETTINGS.orchestrationMode;
     return saved === 'true';
@@ -70,6 +71,12 @@ export function useSettings() {
       // ignore localStorage migration issues
     }
   }, []);
+
+  useEffect(() => {
+    if (productMode === 'web_chat' && orchestrationMode) {
+      setOrchestrationMode(false);
+    }
+  }, [productMode, orchestrationMode]);
 
   useEffect(() => {
     if (productMode !== 'desktop_code') return;
@@ -103,7 +110,7 @@ export function useSettings() {
   useEffect(() => { localStorage.setItem('model', model); }, [model]);
   useEffect(() => { localStorage.setItem('projectDir', projectDir); }, [projectDir]);
   useEffect(() => { localStorage.setItem('performanceMode', String(performanceMode)); }, [performanceMode]);
-  useEffect(() => { localStorage.setItem('orchestrationMode', String(orchestrationMode)); }, [orchestrationMode]);
+  useEffect(() => { localStorage.setItem('orchestrationMode', String(productMode === 'web_chat' ? false : orchestrationMode)); }, [orchestrationMode, productMode]);
   useEffect(() => { localStorage.setItem('workflow', workflow); }, [workflow]);
   useEffect(() => { localStorage.setItem('guiBrowserMode', guiBrowserMode); }, [guiBrowserMode]);
   useEffect(() => { localStorage.setItem('guiBrowserPath', guiBrowserPath); }, [guiBrowserPath]);

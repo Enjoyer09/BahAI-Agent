@@ -88,6 +88,12 @@ export default function ChatArea({ messages, loading, onSend, onStop, workingDir
       style={{ scrollBehavior: 'smooth' }}
     >
       <div className="max-w-3xl mx-auto px-3 sm:px-4 py-3 sm:py-6 space-y-3.5 sm:space-y-6">
+        <style>{`
+          @keyframes bahai-wave {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+            30% { transform: translateY(-5px); opacity: 1; }
+          }
+        `}</style>
         {messages.map((msg, i) => (
           <ChatMessage
             key={msg.id || i}
@@ -106,8 +112,22 @@ export default function ChatArea({ messages, loading, onSend, onStop, workingDir
               <Spinner size={14} className="text-white" />
             </div>
             <div className="flex-1 pt-0.5 flex items-center gap-3">
-              <div className="typing-indicator">
-                <span /><span /><span />
+              <div className="flex items-center gap-2 px-1">
+                <span className="text-sm italic" style={{ color: 'var(--fg-secondary)' }}>Düşünürəm</span>
+                <div className="flex items-end gap-1 h-5" aria-hidden="true">
+                  {[0, 1, 2, 3].map((i) => (
+                    <span
+                      key={i}
+                      className="block rounded-full"
+                      style={{
+                        width: '5px',
+                        height: `${8 + (i % 2) * 4}px`,
+                        background: 'var(--color-accent)',
+                        animation: `bahai-wave 1s ease-in-out ${i * 0.12}s infinite`
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
               {onStop && (
                 <button
