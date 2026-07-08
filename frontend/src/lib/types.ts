@@ -96,6 +96,11 @@ export interface Conversation {
   projectId: string;
   title: string;
   messages: Message[];
+  archived?: boolean;
+  lastMessageAt?: number;
+  preview?: string;
+  messageCount?: number;
+  messagesLoaded?: boolean;
   createdAt: number;
   updatedAt: number;
 }

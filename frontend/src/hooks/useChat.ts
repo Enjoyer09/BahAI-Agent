@@ -36,6 +36,7 @@ import {
   previewDiff,
   applyDiff,
 } from '../store/chatService';
+import { getConversationMessages } from '../lib/api';
 import {
   mergeApprovalDecisionIntoMemory,
   mergeEvidenceSummaryIntoMemory,
@@ -201,6 +202,26 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     };
     loadMemory();
   }, [activeProject?.id, state.serverBacked]);
+
+  useEffect(() => {
+    if (!state.serverBacked || !state.activeConvId) return;
+    const active = state.conversations.find((conv) => conv.id === state.activeConvId);
+    if (!active || active.messagesLoaded) return;
+    let cancelled = false;
+    getConversationMessages(active.id)
+      .then((loadedMessages: any) => {
+        if (cancelled) return;
+        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: active.id, messages: Array.isArray(loadedMessages) ? loadedMessages : [] });
+        dispatch({ type: 'UPDATE_CONVERSATION', id: active.id, updates: { messagesLoaded: true } });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        dispatch({ type: 'UPDATE_CONVERSATION', id: active.id, updates: { messagesLoaded: true } });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.serverBacked, state.activeConvId, state.conversations]);
 
   // ==========================================
   // GUI Capabilities Loading
@@ -501,7 +522,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     if (state.serverBacked) {
       createConversationOnServer(projectId, title)
         .then(serverConv => {
-          dispatch({ type: 'UPDATE_CONVERSATION', id: newConv.id, updates: serverConv });
+                dispatch({ type: 'UPDATE_CONVERSATION', id: newConv.id, updates: serverConv });
           dispatch({ type: 'SET_ACTIVE_CONV_ID', id: serverConv.id });
         })
         .catch(console.error);

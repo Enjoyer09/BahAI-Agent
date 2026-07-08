@@ -79,6 +79,8 @@ async function initDb() {
         user_id INTEGER REFERENCES users(id),
         title TEXT NOT NULL,
         messages JSONB DEFAULT '[]',
+        archived BOOLEAN DEFAULT false,
+        last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -87,6 +89,46 @@ async function initDb() {
     await client.query(`
       ALTER TABLE conversations
       ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+
+    await client.query(`
+      ALTER TABLE conversations
+      ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false
+    `);
+
+    await client.query(`
+      ALTER TABLE conversations
+      ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id),
+        role TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        attachments JSONB DEFAULT '[]',
+        tool_calls JSONB DEFAULT '[]',
+        tool_call_id TEXT,
+        timestamp BIGINT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_conversations_user_updated
+      ON conversations(user_id, updated_at DESC)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_conversations_user_last_message
+      ON conversations(user_id, last_message_at DESC)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
+      ON messages(conversation_id, created_at ASC)
     `);
 
     await client.query(`

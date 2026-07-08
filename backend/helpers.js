@@ -1014,7 +1014,19 @@ function serializeProject(row) {
 }
 
 function serializeConversation(row) {
-  return { id: row.id, projectId: row.project_id, title: row.title, messages: Array.isArray(row.messages) ? row.messages : [], createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(), updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now() };
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    title: row.title,
+    messages: Array.isArray(row.messages) ? row.messages : [],
+    archived: Boolean(row.archived),
+    lastMessageAt: row.last_message_at ? new Date(row.last_message_at).getTime() : undefined,
+    preview: row.preview || undefined,
+    messageCount: typeof row.message_count === 'number' ? row.message_count : undefined,
+    messagesLoaded: Array.isArray(row.messages) && row.messages.length > 0,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now()
+  };
 }
 
 // ==========================================

@@ -3,7 +3,7 @@
 // ==========================================
 
 import { API_BASE_URL } from './constants';
-import type { ActionCenterInteraction, Attachment, Conversation, GuiCapabilityStatus, Project, SSEEvent } from './types';
+import type { ActionCenterInteraction, Attachment, Conversation, GuiCapabilityStatus, Message, Project, SSEEvent } from './types';
 
 function getAuthHeader() {
   const token = localStorage.getItem('auth_token');
@@ -216,9 +216,17 @@ export async function sendChatMessage(
 }
 
 export async function loadWorkspaceState(): Promise<{ projects: Project[]; conversations: Conversation[] }> {
-  const response = await apiFetch(`${API_BASE_URL}/api/projects`);
-  if (!response.ok) throw new Error('Workspace məlumatları yüklənmədi');
-  return await response.json();
+  const [projectsResponse, conversationsResponse] = await Promise.all([
+    apiFetch(`${API_BASE_URL}/api/projects`),
+    apiFetch(`${API_BASE_URL}/api/conversations`)
+  ]);
+  if (!projectsResponse.ok || !conversationsResponse.ok) throw new Error('Workspace məlumatları yüklənmədi');
+  const projectsData = await projectsResponse.json();
+  const conversationsData = await conversationsResponse.json();
+  return {
+    projects: Array.isArray(projectsData.projects) ? projectsData.projects : [],
+    conversations: Array.isArray(conversationsData.conversations) ? conversationsData.conversations : [],
+  };
 }
 
 export async function getInstalledBrowsers(): Promise<{ browsers: Array<{ id: string; name: string; path: string; installed: boolean; supportsCdp: boolean; recommended?: boolean }>; cdpUrl: string; recommendedMode: string }> {
@@ -340,6 +348,13 @@ export async function deleteConversationOnServer(id: string): Promise<void> {
     method: 'DELETE'
   });
   if (!response.ok) throw new Error('Söhbət silinmədi');
+}
+
+export async function getConversationMessages(id: string): Promise<Message[]> {
+  const response = await apiFetch(`${API_BASE_URL}/api/conversations/${encodeURIComponent(id)}/messages`);
+  if (!response.ok) throw new Error('Söhbət mesajları yüklənmədi');
+  const data = await response.json();
+  return Array.isArray(data.messages) ? data.messages : [];
 }
 
 export async function extractAttachments(attachments: Attachment[]): Promise<Attachment[]> {

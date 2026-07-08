@@ -65,20 +65,24 @@ describe('API Client', () => {
   // ========== loadWorkspaceState ==========
   describe('loadWorkspaceState', () => {
     it('returns projects and conversations on success', async () => {
-      const data = {
-        projects: [{ id: 'p1', name: 'Test', path: '/test', createdAt: 1000 }],
-        conversations: [{ id: 'c1', projectId: 'p1', title: 'Chat', messages: [], createdAt: 1000, updatedAt: 1000 }],
-      };
-      mockFetch.mockResolvedValueOnce(mockResponse(data));
+      mockFetch
+        .mockResolvedValueOnce(mockResponse({
+          projects: [{ id: 'p1', name: 'Test', path: '/test', createdAt: 1000 }],
+        }))
+        .mockResolvedValueOnce(mockResponse({
+          conversations: [{ id: 'c1', projectId: 'p1', title: 'Chat', messages: [], createdAt: 1000, updatedAt: 1000 }],
+        }));
 
       const result = await loadWorkspaceState();
       expect(result.projects).toHaveLength(1);
       expect(result.conversations).toHaveLength(1);
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
     it('throws on non-ok response', async () => {
-      mockFetch.mockResolvedValueOnce(mockResponse({ error: 'Not found' }, 404));
+      mockFetch
+        .mockResolvedValueOnce(mockResponse({ error: 'Not found' }, 404))
+        .mockResolvedValueOnce(mockResponse({ conversations: [] }, 200));
       await expect(loadWorkspaceState()).rejects.toThrow('Workspace məlumatları yüklənmədi');
     });
   });
