@@ -51,6 +51,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   const [state, dispatch] = useReducer(chatReducer, undefined, createInitialState);
   const activeConvIdRef = useRef<string | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
+  const projectsRef = useRef<Project[]>([]);
   const serverBackedRef = useRef<boolean>(false);
   const lastFinalAssistantContentRef = useRef<string>('');
   const streamThrottleRef = useRef<number>(0);
@@ -65,6 +66,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   useEffect(() => {
     conversationsRef.current = state.conversations;
   }, [state.conversations]);
+
+  useEffect(() => {
+    projectsRef.current = state.projects;
+  }, [state.projects]);
 
   useEffect(() => {
     serverBackedRef.current = state.serverBacked;
@@ -454,20 +459,73 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     },
   }), [activeProject]);
 
+  const ensureConversationForSend = useCallback(async (): Promise<{ convId: string; project: Project | null }> => {
+    const existingConvId = activeConvIdRef.current;
+    const existingConv = conversationsRef.current.find((c) => c.id === existingConvId) || null;
+    const existingProject = projectsRef.current.find((p) => p.id === existingConv?.projectId) || null;
+    if (existingConv && existingProject) {
+      return { convId: existingConv.id, project: existingProject };
+    }
+
+    let project = existingProject || projectsRef.current[0] || null;
+
+    if (!project) {
+      if (serverBackedRef.current) {
+        const created = await createProjectOnServer({
+          name: getDefaultWorkspaceName(settings.productMode),
+          path: 'workspace://default',
+        });
+        dispatch({ type: 'ADD_PROJECT', project: created.project });
+        dispatch({ type: 'ADD_CONVERSATION', conversation: created.conversation });
+        dispatch({ type: 'SET_ACTIVE_CONV_ID', id: created.conversation.id });
+        return { convId: created.conversation.id, project: created.project };
+      }
+
+      const localProject: Project = {
+        id: generateId(),
+        name: getDefaultWorkspaceName(settings.productMode),
+        path: 'workspace://default',
+        createdAt: Date.now(),
+      };
+      dispatch({ type: 'ADD_PROJECT', project: localProject });
+      project = localProject;
+    }
+
+    if (serverBackedRef.current) {
+      const createdConversation = await createConversationOnServer(project.id, getDefaultConversationTitle(settings.productMode));
+      dispatch({ type: 'ADD_CONVERSATION', conversation: createdConversation });
+      dispatch({ type: 'SET_ACTIVE_CONV_ID', id: createdConversation.id });
+      return { convId: createdConversation.id, project };
+    }
+
+    const localConversation: Conversation = {
+      id: generateId(),
+      projectId: project.id,
+      title: getDefaultConversationTitle(settings.productMode),
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    dispatch({ type: 'ADD_CONVERSATION', conversation: localConversation });
+    dispatch({ type: 'SET_ACTIVE_CONV_ID', id: localConversation.id });
+    return { convId: localConversation.id, project };
+  }, [settings.productMode]);
+
   // ==========================================
   // sendMessage
   // ==========================================
   const sendMessageFn = useCallback(async (input: string, attachments: any[] = []) => {
     if (!input.trim() && attachments.length === 0) return;
-    if (!state.activeConvId) return;
 
     if (state.abortController) {
       state.abortController.abort();
       dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
     }
 
-    const convId = state.activeConvId;
-    const activeConv = state.conversations.find(c => c.id === convId) || null;
+    const ensured = await ensureConversationForSend();
+    const convId = ensured.convId;
+    const activeConv = conversationsRef.current.find(c => c.id === convId) || null;
+    const resolvedProject = ensured.project || activeProject;
     const userMsg: Message = { id: generateId(), role: 'user', content: input, attachments, timestamp: Date.now() };
     const shouldAutoRenameConversation = activeConv && (
       !activeConv.title ||
@@ -499,7 +557,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     const ctx: SendMessageContext = {
       settings,
       activeConvId: convId,
-      activeProject,
+      activeProject: resolvedProject,
       messages: currentMsgs,
       projectMemory: state.projectMemory,
       plannerArtifact: state.plannerArtifact,
@@ -517,7 +575,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const responseTime = Date.now() - userMsg.timestamp;
       trackChatMessage(settings.model, responseTime);
     }
-  }, [state.activeConvId, state.conversations, state.abortController, state.projectMemory, state.plannerArtifact, state.executionArtifacts, state.serverBacked, state.safeMode, messages, activeProject, settings, eventSink]);
+  }, [state.abortController, state.projectMemory, state.plannerArtifact, state.executionArtifacts, state.serverBacked, state.safeMode, messages, activeProject, settings, eventSink, ensureConversationForSend]);
 
   // ==========================================
   // Callbacks
