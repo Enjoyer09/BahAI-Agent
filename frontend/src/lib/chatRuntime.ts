@@ -4,10 +4,12 @@ export function isToolCallLikeText(content: string): boolean {
   const text = String(content || '').trim();
   if (!text) return false;
   return (
+    /^[`{\s,]*$/is.test(text) ||
     /^(?:json\s+)?\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
     /^```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
     /^\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
     /^(?:json\s+)?\{\s*"name"\s*:\s*"[^"]+"/is.test(text) ||
+    /^(?:json\s+)?\{\s*"name"\s*:\s*"[^"]*$/is.test(text) ||
     /^(?:```(?:json)?\s*)?"arguments"\s*:\s*\{/is.test(text) ||
     /^(?:```(?:json)?\s*)?\{\s*"arguments"\s*:\s*\{/is.test(text) ||
     /^(?:```(?:json)?\s*)?"url"\s*:\s*"https?:\/\/[^\s"]+/is.test(text) ||
@@ -16,6 +18,11 @@ export function isToolCallLikeText(content: string): boolean {
     /^(?:```(?:json)?\s*)?\{\s*"query"\s*:\s*"[^"]+/is.test(text) ||
     /^(?:```(?:json)?\s*)?"command"\s*:\s*"[^"]+/is.test(text) ||
     /^(?:```(?:json)?\s*)?\{\s*"command"\s*:\s*"[^"]+/is.test(text) ||
+    /(?:^|[\s,{])"command"\s*:\s*"[^"]*$/is.test(text) ||
+    /(?:^|[\s,{])"query"\s*:\s*"[^"]*$/is.test(text) ||
+    /(?:^|[\s,{])"arguments"\s*:\s*\{?[^}]*$/is.test(text) ||
+    /(?:^|[\s,{])"name"\s*:\s*"[^"]*$/is.test(text) ||
+    /(?:^|[\s,{])"url"\s*:\s*"https?:\/\/[^\s"]*$/is.test(text) ||
     /^(?:```(?:json)?\s*)?"date"\s*:\s*"[^"]+/is.test(text) ||
     /^(?:```(?:json)?\s*)?\{\s*"date"\s*:\s*"[^"]+/is.test(text) ||
     /^```json\s*$/i.test(text) ||
@@ -27,6 +34,9 @@ export function normalizeAssistantText(content: string): string {
   if (typeof content !== 'string') return '';
   const trimmed = content.trim();
   if (isToolCallLikeText(trimmed)) {
+    return '';
+  }
+  if (/^(?:json\s+)?\{[\s\S]*"arguments"\s*:\s*\{[\s\S]*$/is.test(trimmed) && !/[.?!…:]$/.test(trimmed)) {
     return '';
   }
   const match = trimmed.match(/^\{\s*"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*\}$/);

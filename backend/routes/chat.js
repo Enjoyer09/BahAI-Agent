@@ -52,12 +52,26 @@ const {
 function getDirectWebChatReply(latestUserText = '') {
   const text = String(latestUserText || '').trim();
   const lower = text.toLowerCase();
+  const tz = process.env.BAHAI_DEFAULT_TIMEZONE || 'Asia/Baku';
   const now = new Date();
+  const parts = new Intl.DateTimeFormat('az-AZ', {
+    timeZone: tz,
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long'
+  }).formatToParts(now);
+  const getPart = (type) => parts.find((item) => item.type === type)?.value || '';
+  const prettyDate = `${getPart('day')} ${getPart('month')} ${getPart('year')}, ${getPart('weekday')}`;
   const yyyyMmDd = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, '0'),
-    String(now.getDate()).padStart(2, '0')
+    ...new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+      .format(now)
+      .split('-')
   ].join('-');
+  const asksDate = /\b(bugün|bugun|bu gün|today)\b/i.test(text) && /\b(ayın neçəsidir|ayin necesidir|tarix|date|günlerden ne gündür|hansi gundur)\b/i.test(text);
+  if (asksDate) {
+    return `Bu gün ${prettyDate}-dir.`;
+  }
   const asksFifaWorldCup = /\bfifa\b/i.test(text) && /\b(dünya çempionatı|dunya cempionati|world cup)\b/i.test(text);
   if (asksFifaWorldCup && yyyyMmDd === '2026-07-08') {
     return 'Bu gün, 8 iyul 2026 üçün FIFA Dünya Çempionatında oyun görünmür. Rəsmi 2026 cədvəlində növbəti oyun 9 iyul 2026 mərhələsinə düşür. İstəsən növbəti oyunu da deyim.';
@@ -101,7 +115,7 @@ router.post('/', async (req, res) => {
   }
 
   const workspaceRoot = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../../sandbox'));
-  const resolvedWD = resolveWorkingDirectory(undefined, req.user);
+  const resolvedWD = productMode === 'web_chat' ? '' : resolveWorkingDirectory(undefined, req.user);
   const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '6', 10);
   const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '180000', 10);
   const LLM_TIMEOUT_CHAT = parseInt(process.env.LLM_TIMEOUT_CHAT || '60000', 10);
@@ -236,18 +250,18 @@ router.post('/', async (req, res) => {
   }
 
   // Build system message
-  const workspaceHint = resolvedWD ? `Cari iş qovluğu: ${resolvedWD}` : '';
   const productPrompt = productMode === 'web_chat'
     ? `Sən BahAI-sən — Azərbaycan dilində faydalı, təbii danışan chat köməkçisi.
 Cari istifadəçi üçün mümkün olduqda metrik vahidlərdən istifadə et.
 Temperaturu Celsius (${String.fromCharCode(176)}C) ilə ver, Fahrenheit vermə; istifadəçi xüsusi istəməsə ABŞ vahidlərinə keçmə.
-Qısa, aydın, insan kimi cavab ver.`
+Qısa, aydın, insan kimi cavab ver.
+Web chat rejimində lokal workspace, fayl sistemi, qovluq yolu, sandbox, project root və daxili tool JSON-u haqqında danışma.
+İstifadəçi açıq şəkildə kod/repo analizi istəməyibsə lokal qovluğu yoxlama.`
     : `Sən BahAI agentisən — Azərbaycan dilində AI kodlaşdırma köməkçisi.`;
 
   const systemPrompt = `${productPrompt}
 
-${workspaceHint}
-${resolvedWD ? `Project Root: ${resolvedWD}` : ''}
+${productMode === 'web_chat' ? '' : (resolvedWD ? `Cari iş qovluğu: ${resolvedWD}\nProject Root: ${resolvedWD}` : '')}
 
 Tool-ları istifadə edərək sualları cavablandır, kod yaz, faylları oxu/düzəlt, test işlət.
 

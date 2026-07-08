@@ -382,13 +382,14 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
     if (/Düşünürəm/i.test(deltaText)) return;
     if (!deltaText) return;
     streamBufferRef.current = normalizeAssistantText((streamBufferRef.current || '') + deltaText);
+    if (!streamBufferRef.current) return;
     sink.updateAssistantMessage(streamBufferRef.current);
     return;
   }
 
   if (event.type === 'assistant_message') {
     const content = chooseAssistantContent(streamBufferRef.current || '', event.message.content || '');
-    if (isWebChat && isToolCallLikeText(content)) {
+    if (isWebChat && (!content || isToolCallLikeText(content))) {
       streamBufferRef.current = '';
       return;
     }
