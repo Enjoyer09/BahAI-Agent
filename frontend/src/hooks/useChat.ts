@@ -321,6 +321,11 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const lastMsg = msgs[msgs.length - 1];
       const normalizedIncoming = String(msg.content || '').trim();
       const normalizedLast = String(lastMsg?.content || '').trim();
+      const recentAssistantContents = msgs
+        .filter((item) => item.role === 'assistant')
+        .slice(-3)
+        .map((item) => String(item.content || '').trim())
+        .filter(Boolean);
       if (!normalizedIncoming && lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
         msgs.pop();
         dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
@@ -334,7 +339,8 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         normalizedIncoming &&
         (
           normalizedIncoming === lastFinalAssistantContentRef.current ||
-          (lastMsg?.role === 'assistant' && normalizedIncoming === normalizedLast)
+          (lastMsg?.role === 'assistant' && normalizedIncoming === normalizedLast) ||
+          recentAssistantContents.includes(normalizedIncoming)
         )
       ) {
         return;

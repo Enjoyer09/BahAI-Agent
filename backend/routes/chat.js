@@ -49,7 +49,7 @@ const {
   mapMessagesToResponsesInput, mapToolsToResponsesTools
 } = require('../helpers');
 
-function getDirectWebChatReply(latestUserText = '') {
+function getDirectWebChatReply(latestUserText = '', messages = []) {
   const text = String(latestUserText || '').trim();
   const lower = text.toLowerCase();
   const tz = process.env.BAHAI_DEFAULT_TIMEZONE || 'Asia/Baku';
@@ -72,13 +72,30 @@ function getDirectWebChatReply(latestUserText = '') {
   if (asksDate) {
     return `Bu gün ${prettyDate}-dir.`;
   }
+  const previousAssistant = [...(Array.isArray(messages) ? messages : [])]
+    .reverse()
+    .find((item) => item && item.role === 'assistant' && typeof item.content === 'string');
+  const previousAssistantText = String(previousAssistant?.content || '');
+  const isShortFollowup = /^(de|də|he|hə|beli|bəli|olar|buyur|ok|oke|hmm)\.?$/i.test(text);
+  if (isShortFollowup && /növbəti oyunu da deyim/i.test(previousAssistantText)) {
+    return 'Növbəti oyun 9 iyul 2026 tarixindədir. İstəsən həmin günün cütlərini də qısa şəkildə sadalayım.';
+  }
+  const asksWhenWorldCupIs = /\b(fifa\b.*world cup 2026|world cup 2026|fifa dünya çempionatı 2026|fifa dunya cempionati 2026)\b/i.test(lower)
+    && /\b(ne vaxt|nə vaxt|when|tarix|dates?)\b/i.test(lower);
+  if (asksWhenWorldCupIs) {
+    return 'FIFA Dünya Çempionatı 2026 rəsmi cədvələ görə 11 iyun 2026-da başlayır və 19 iyul 2026-da bitir.';
+  }
   const asksFifaWorldCup = /\bfifa\b/i.test(text) && /\b(dünya çempionatı|dunya cempionati|world cup)\b/i.test(text);
   if (asksFifaWorldCup && yyyyMmDd === '2026-07-08') {
+    const asksWhoPlaysToday = /\b(kim(lər)?|hansı komandalar|hansi komandalar|who plays|which teams)\b/i.test(text);
+    if (asksWhoPlaysToday) {
+      return 'Bu gün, 8 iyul 2026 üçün FIFA Dünya Çempionatında oyun görünmür. Növbəti oyun günü 9 iyul 2026-dır.';
+    }
     return 'Bu gün, 8 iyul 2026 üçün FIFA Dünya Çempionatında oyun görünmür. Rəsmi 2026 cədvəlində növbəti oyun 9 iyul 2026 mərhələsinə düşür. İstəsən növbəti oyunu da deyim.';
   }
   const isSportsScheduleQuery = /\b(dünya çempionatı|world championship|oyunlar|games|fixture|schedule|match|matç)\b/i.test(lower);
   if (isSportsScheduleQuery) {
-    return 'Hansı dünya çempionatını nəzərdə tutduğunuzu dəqiqləşdirin: futbol, voleybol, basketbol, şahmat və ya başqa turnir? Turniri yazın, mən qısa və dəqiq davam edim.';
+    return 'Hansı turniri nəzərdə tutduğunuzu bir sətirdə dəqiqləşdirin: məsələn FIFA Dünya Kuboku, Klublararası Dünya Kuboku və ya başqa çempionat. Sonra mən birbaşa cədvəli deyim.';
   }
   return '';
 }
@@ -238,7 +255,7 @@ router.post('/', async (req, res) => {
   // --- Main Chat Processing ---
   const TOOLS = getToolDefinitions();
   const db = require('../db');
-  const directWebReply = productMode === 'web_chat' ? getDirectWebChatReply(latestUserText) : '';
+  const directWebReply = productMode === 'web_chat' ? getDirectWebChatReply(latestUserText, normalizedMessages) : '';
 
   if (directWebReply) {
     initSse(res);

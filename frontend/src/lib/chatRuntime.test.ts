@@ -67,6 +67,12 @@ describe('normalizeAssistantText', () => {
   it('strips leaked command fragments', () => {
     expect(normalizeAssistantText('"command": "date"')).toBe('');
   });
+
+  it('strips partial tool call fragments', () => {
+    expect(normalizeAssistantText('command": "')).toBe('');
+    expect(normalizeAssistantText('query":"today date')).toBe('');
+    expect(normalizeAssistantText('query":"today date"} }')).toBe('');
+  });
 });
 
 describe('isToolCallLikeText', () => {
@@ -88,6 +94,12 @@ describe('isToolCallLikeText', () => {
 
   it('detects leaked command fragment', () => {
     expect(isToolCallLikeText('"command": "date"')).toBe(true);
+  });
+
+  it('detects partial tool call fragments', () => {
+    expect(isToolCallLikeText('command": "')).toBe(true);
+    expect(isToolCallLikeText('query":"today date')).toBe(true);
+    expect(isToolCallLikeText('query":"today date"} }')).toBe(true);
   });
 
   it('does not flag normal prose', () => {

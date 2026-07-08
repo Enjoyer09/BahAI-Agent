@@ -18,8 +18,14 @@ export function isToolCallLikeText(content: string): boolean {
     /^(?:```(?:json)?\s*)?\{\s*"query"\s*:\s*"[^"]+/is.test(text) ||
     /^(?:```(?:json)?\s*)?"command"\s*:\s*"[^"]+/is.test(text) ||
     /^(?:```(?:json)?\s*)?\{\s*"command"\s*:\s*"[^"]+/is.test(text) ||
-    /(?:^|[\s,{])"command"\s*:\s*"[^"]*$/is.test(text) ||
-    /(?:^|[\s,{])"query"\s*:\s*"[^"]*$/is.test(text) ||
+    /(?:^|[\s,{])"command"\s*:\s*"[^"]*(?:"\s*[}\],]*)?$/is.test(text) ||
+    /(?:^|[\s,{])"query"\s*:\s*"[^"]*(?:"\s*[}\],]*)?$/is.test(text) ||
+    /(?:^|[\s,{])command"\s*:\s*"[^"]*(?:"\s*[}\],]*)?$/is.test(text) ||
+    /(?:^|[\s,{])query"\s*:\s*"[^"]*(?:"\s*[}\],]*)?$/is.test(text) ||
+    /^command"\s*:\s*"[^"]*(?:"\s*[}\],]*)?$/is.test(text) ||
+    /^query"\s*:\s*"[^"]*(?:"\s*[}\],]*)?$/is.test(text) ||
+    /^command"\s*:\s*"[^"]+/is.test(text) ||
+    /^query"\s*:\s*"[^"]+/is.test(text) ||
     /(?:^|[\s,{])"arguments"\s*:\s*\{?[^}]*$/is.test(text) ||
     /(?:^|[\s,{])"name"\s*:\s*"[^"]*$/is.test(text) ||
     /(?:^|[\s,{])"url"\s*:\s*"https?:\/\/[^\s"]*$/is.test(text) ||
