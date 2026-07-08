@@ -79,6 +79,12 @@ describe('normalizeAssistantText', () => {
     expect(normalizeAssistantText('https://wttr.in/Baku?format=%C|%t|%w|%h')).toBe('');
     expect(normalizeAssistantText('Yenidən cəhd edirəm')).toBe('');
   });
+
+  it('normalizes weather units to metric-only text', () => {
+    expect(
+      normalizeAssistantText('Bakıda hazırda yüngül yağış var. Temperatur: təxminən 23°C (73°F). Külək: 8 km/saat (5 mph). Rütubət: 84%')
+    ).toBe('Bakıda hazırda yüngül yağış var. Temperatur: təxminən 23°C. Külək: 8 km/saat. Rütubət: 84%');
+  });
 });
 
 describe('isToolCallLikeText', () => {
@@ -111,6 +117,11 @@ describe('isToolCallLikeText', () => {
   it('detects bare wttr leakage', () => {
     expect(isToolCallLikeText('wttr.in/Baku')).toBe(true);
     expect(isToolCallLikeText('https://wttr.in/Baku?format=%C|%t|%w|%h')).toBe(true);
+  });
+
+  it('detects bare tool name leakage', () => {
+    expect(isToolCallLikeText('web_search",')).toBe(true);
+    expect(isToolCallLikeText('web_fetch')).toBe(true);
   });
 
   it('does not flag normal prose', () => {

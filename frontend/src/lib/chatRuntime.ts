@@ -5,6 +5,8 @@ export function isToolCallLikeText(content: string): boolean {
   if (!text) return false;
   return (
     /^(?:https?:\/\/)?wttr\.in\/[^\s]+$/i.test(text) ||
+    /^(?:["`{[]\s*)?web_search["']?,?\s*$/i.test(text) ||
+    /^(?:["`{[]\s*)?(?:web_fetch|browser_open|gui_step|gui_observe|run_terminal_command)["']?,?\s*$/i.test(text) ||
     /^[`{\s,]*$/is.test(text) ||
     /^(?:json\s+)?\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
     /^```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
@@ -50,8 +52,10 @@ export function normalizeAssistantText(content: string): string {
     return '';
   }
   const match = trimmed.match(/^\{\s*"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*\}$/);
-  if (!match || !match[1]) return content;
-  return match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  const normalized = match && match[1]
+    ? match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+    : content;
+  return normalizeWeatherUnits(normalized);
 }
 
 export function chooseAssistantContent(streamedRaw: string, finalRaw: string): string {
@@ -74,6 +78,20 @@ export function chooseAssistantContent(streamedRaw: string, finalRaw: string): s
     return streamedContent;
   }
   return finalContent;
+}
+
+function normalizeWeatherUnits(content: string): string {
+  let text = String(content || '');
+  if (!text) return text;
+  text = text.replace(/\(\s*-?\d+\s*°F\s*\)/gi, '');
+  text = text.replace(/,\s*-?\d+\s*°F\b/gi, '');
+  text = text.replace(/\b-?\d+\s*°F\b/gi, '');
+  text = text.replace(/\(\s*(\d+(?:[.,]\d+)?)\s*mph\s*\)/gi, '');
+  text = text.replace(/\b(\d+(?:[.,]\d+)?)\s*mph\b/gi, '');
+  text = text.replace(/\s{2,}/g, ' ');
+  text = text.replace(/\(\s*\)/g, '');
+  text = text.replace(/\s+([,.;!?])/g, '$1');
+  return text.trim();
 }
 
 export function normalizeUiErrorMessage(content: string): string {

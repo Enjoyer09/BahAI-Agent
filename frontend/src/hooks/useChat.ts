@@ -337,6 +337,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const normalizedLast = String(lastMsg?.content || '').trim();
       const simplifyAssistantText = (value: string) => value
         .replace(/\s+/g, ' ')
+        .replace(/\([^)]*°f[^)]*\)/gi, '')
+        .replace(/\([^)]*mph[^)]*\)/gi, '')
+        .replace(/\b\d+\s*°f\b/gi, '')
+        .replace(/\b\d+\s*mph\b/gi, '')
         .replace(/[.!?…]+$/g, '')
         .trim()
         .toLowerCase();

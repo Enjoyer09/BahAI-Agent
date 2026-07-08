@@ -244,16 +244,26 @@ async function handleToolCall(toolCall, workingDirectory, user) {
 
         if (isWeatherQuery && normalizedCity) {
           try {
-            const wttrUrl = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=%C+%t+%w+%h`;
+            const wttrUrl = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=%C|%t|%w|%h`;
             const wttrRes = await fetch(wttrUrl, { timeout: 10000, headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
             if (wttrRes.ok) {
               const weatherLine = (await wttrRes.text()).trim();
               if (weatherLine) {
-                const cleaned = weatherLine
+                const cleaned = weatherLine.replace(/\+([0-9])/g, '$1').trim();
+                const [conditionRaw = '', tempRaw = '', windRaw = '', humidityRaw = ''] = cleaned.split('|');
+                const tempMetric = String(tempRaw).replace(/°?[FC]/gi, '').trim();
+                const windMetric = String(windRaw)
+                  .replace(/mph/gi, 'km/saat')
+                  .replace(/km\/h/gi, 'km/saat')
                   .replace(/\s+/g, ' ')
-                  .replace(/\+([0-9])/g, '$1')
                   .trim();
-                return `${cityDisplayName[normalizedCity] || normalizedCity} hava belə görünür: ${cleaned}`;
+                const humidity = String(humidityRaw).trim();
+                const pieces = [];
+                if (conditionRaw) pieces.push(`${cityDisplayName[normalizedCity] || normalizedCity} hazırda ${String(conditionRaw).toLowerCase()} müşahidə olunur.`);
+                if (tempMetric) pieces.push(`Temperatur təxminən ${tempMetric}°C-dir.`);
+                if (windMetric) pieces.push(`Külək ${windMetric} təşkil edir.`);
+                if (humidity) pieces.push(`Rütubət ${humidity.replace('%', '')}%-dir.`);
+                return pieces.join(' ');
               }
             }
           } catch { /* weather fallback failed; continue to normal search */ }
