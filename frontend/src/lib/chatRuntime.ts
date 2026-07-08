@@ -12,6 +12,12 @@ export function isToolCallLikeText(content: string): boolean {
     /^(?:```(?:json)?\s*)?\{\s*"arguments"\s*:\s*\{/is.test(text) ||
     /^(?:```(?:json)?\s*)?"url"\s*:\s*"https?:\/\/[^\s"]+/is.test(text) ||
     /^(?:```(?:json)?\s*)?\{\s*"url"\s*:\s*"https?:\/\/[^\s"]+/is.test(text) ||
+    /^(?:```(?:json)?\s*)?"query"\s*:\s*"[^"]+/is.test(text) ||
+    /^(?:```(?:json)?\s*)?\{\s*"query"\s*:\s*"[^"]+/is.test(text) ||
+    /^(?:```(?:json)?\s*)?"command"\s*:\s*"[^"]+/is.test(text) ||
+    /^(?:```(?:json)?\s*)?\{\s*"command"\s*:\s*"[^"]+/is.test(text) ||
+    /^(?:```(?:json)?\s*)?"date"\s*:\s*"[^"]+/is.test(text) ||
+    /^(?:```(?:json)?\s*)?\{\s*"date"\s*:\s*"[^"]+/is.test(text) ||
     /^```json\s*$/i.test(text) ||
     /^```\s*$/i.test(text)
   );

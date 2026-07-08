@@ -59,6 +59,14 @@ describe('normalizeAssistantText', () => {
   it('strips leaked tool argument fragments', () => {
     expect(normalizeAssistantText('"arguments": { "url": "https://wttr.in/Baku?format=3" }')).toBe('');
   });
+
+  it('strips leaked query fragments', () => {
+    expect(normalizeAssistantText('"query": "today\'s FIFA World Cup qualification matches"')).toBe('');
+  });
+
+  it('strips leaked command fragments', () => {
+    expect(normalizeAssistantText('"command": "date"')).toBe('');
+  });
 });
 
 describe('isToolCallLikeText', () => {
@@ -72,6 +80,14 @@ describe('isToolCallLikeText', () => {
 
   it('detects leaked arguments fragment', () => {
     expect(isToolCallLikeText('"arguments": { "url": "https://wttr.in/Baku?format=3" }')).toBe(true);
+  });
+
+  it('detects leaked query fragment', () => {
+    expect(isToolCallLikeText('"query": "today\'s FIFA World Cup qualification matches"')).toBe(true);
+  });
+
+  it('detects leaked command fragment', () => {
+    expect(isToolCallLikeText('"command": "date"')).toBe(true);
   });
 
   it('does not flag normal prose', () => {

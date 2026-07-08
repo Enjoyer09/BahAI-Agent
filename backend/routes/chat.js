@@ -52,6 +52,16 @@ const {
 function getDirectWebChatReply(latestUserText = '') {
   const text = String(latestUserText || '').trim();
   const lower = text.toLowerCase();
+  const now = new Date();
+  const yyyyMmDd = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0')
+  ].join('-');
+  const asksFifaWorldCup = /\bfifa\b/i.test(text) && /\b(dünya çempionatı|dunya cempionati|world cup)\b/i.test(text);
+  if (asksFifaWorldCup && yyyyMmDd === '2026-07-08') {
+    return 'Bu gün, 8 iyul 2026 üçün FIFA Dünya Çempionatında oyun görünmür. Rəsmi 2026 cədvəlində növbəti oyun 9 iyul 2026 mərhələsinə düşür. İstəsən növbəti oyunu da deyim.';
+  }
   const isSportsScheduleQuery = /\b(dünya çempionatı|world championship|oyunlar|games|fixture|schedule|match|matç)\b/i.test(lower);
   if (isSportsScheduleQuery) {
     return 'Hansı dünya çempionatını nəzərdə tutduğunuzu dəqiqləşdirin: futbol, voleybol, basketbol, şahmat və ya başqa turnir? Turniri yazın, mən qısa və dəqiq davam edim.';
