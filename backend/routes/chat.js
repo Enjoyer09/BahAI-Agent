@@ -80,8 +80,12 @@ function getDirectWebChatReply(latestUserText = '', messages = []) {
   if (isShortFollowup && /növbəti oyunu da deyim/i.test(previousAssistantText)) {
     return 'Növbəti oyun 9 iyul 2026 tarixindədir. İstəsən həmin günün cütlərini də qısa şəkildə sadalayım.';
   }
-  const asksWhenWorldCupIs = /\b(fifa\b.*world cup 2026|world cup 2026|fifa dünya çempionatı 2026|fifa dunya cempionati 2026)\b/i.test(lower)
-    && /\b(ne vaxt|nə vaxt|when|tarix|dates?)\b/i.test(lower);
+  if (isShortFollowup && /həmin günün cütlərini də qısa şəkildə sadalayım/i.test(previousAssistantText)) {
+    return '9 iyul 2026 oyun günü quarter-final mərhələsinə düşür. Dəqiq cütlər əvvəlki mərhələnin nəticələrinə görə formalaşır; istəsən rəsmi cədvəl üzərindən həmin an üçün aktual cütləri ayrıca yoxlayım.';
+  }
+  const asksWhenWorldCupIs =
+    ((lower.includes('world cup 2026') || lower.includes('fifa world cup 2026') || lower.includes('fifa dunya cempionati 2026') || lower.includes('fifa dünya çempionatı 2026'))
+      && (lower.includes('ne vaxt') || lower.includes('nə vaxt') || lower.includes('vaxtdir') || lower.includes('tarix')));
   if (asksWhenWorldCupIs) {
     return 'FIFA Dünya Çempionatı 2026 rəsmi cədvələ görə 11 iyun 2026-da başlayır və 19 iyul 2026-da bitir.';
   }
