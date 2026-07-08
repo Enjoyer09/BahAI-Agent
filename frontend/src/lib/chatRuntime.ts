@@ -4,6 +4,7 @@ export function isToolCallLikeText(content: string): boolean {
   const text = String(content || '').trim();
   if (!text) return false;
   return (
+    /^(?:https?:\/\/)?wttr\.in\/[^\s]+$/i.test(text) ||
     /^[`{\s,]*$/is.test(text) ||
     /^(?:json\s+)?\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
     /^```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
@@ -40,6 +41,9 @@ export function normalizeAssistantText(content: string): string {
   if (typeof content !== 'string') return '';
   const trimmed = content.trim();
   if (isToolCallLikeText(trimmed)) {
+    return '';
+  }
+  if (/^(?:yenidən cəhd edirəm|yeniden cehd edirem)\b/i.test(trimmed) && !/[.?!…]$/.test(trimmed)) {
     return '';
   }
   if (/^(?:json\s+)?\{[\s\S]*"arguments"\s*:\s*\{[\s\S]*$/is.test(trimmed) && !/[.?!…:]$/.test(trimmed)) {

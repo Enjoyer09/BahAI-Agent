@@ -110,8 +110,9 @@ async function getDirectWebChatReply(latestUserText = '', messages = []) {
           return pieces.join(' ');
         }
       } catch {
-        // fall through to other direct handlers / model path
+        return `${cityMeta.label} hava məlumatını hazırda birbaşa götürə bilmədim. Bir neçə dəqiqə sonra yenidən yoxlayaq.`;
       }
+      return `${cityMeta.label} hava məlumatını hazırda birbaşa götürə bilmədim. Bir neçə dəqiqə sonra yenidən yoxlayaq.`;
     }
   }
   const previousAssistant = [...(Array.isArray(messages) ? messages : [])]

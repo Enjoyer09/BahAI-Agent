@@ -215,19 +215,28 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     if (!state.serverBacked || !state.activeConvId) return;
     const active = state.conversations.find((conv) => conv.id === state.activeConvId);
     if (!active || active.messagesLoaded) return;
+    if (Array.isArray(active.messages) && active.messages.length > 0) {
+      dispatch({ type: 'UPDATE_CONVERSATION', id: active.id, updates: { messagesLoaded: true } });
+      return;
+    }
     let cancelled = false;
     getConversationMessages(active.id, { limit: 120 })
       .then((loadedPage: any) => {
         if (cancelled) return;
         const loadedMessages = Array.isArray(loadedPage?.messages) ? loadedPage.messages : [];
-        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: active.id, messages: loadedMessages });
+        const latestConversation = conversationsRef.current.find((conv) => conv.id === active.id);
+        const localMessages = Array.isArray(latestConversation?.messages) ? latestConversation.messages : [];
+        const mergedMessages = loadedMessages.length === 0 && localMessages.length > 0
+          ? localMessages
+          : loadedMessages;
+        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: active.id, messages: mergedMessages });
         dispatch({
           type: 'UPDATE_CONVERSATION',
           id: active.id,
           updates: {
             messagesLoaded: true,
-            ...(loadedMessages.length > 0 ? {
-              oldestMessageCursor: new Date(loadedMessages[0].timestamp).toISOString(),
+            ...(mergedMessages.length > 0 ? {
+              oldestMessageCursor: new Date(mergedMessages[0].timestamp).toISOString(),
               messagesHasMore: Boolean(loadedPage?.pagination?.hasMore)
             } : {})
           }
@@ -484,7 +493,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
           path: 'workspace://default',
         });
         dispatch({ type: 'ADD_PROJECT', project: created.project });
-        dispatch({ type: 'ADD_CONVERSATION', conversation: created.conversation });
+        dispatch({
+          type: 'ADD_CONVERSATION',
+          conversation: { ...created.conversation, messagesLoaded: true, messagesHasMore: false }
+        });
         dispatch({ type: 'SET_ACTIVE_CONV_ID', id: created.conversation.id });
         return { convId: created.conversation.id, project: created.project };
       }
@@ -501,7 +513,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
 
     if (serverBackedRef.current) {
       const createdConversation = await createConversationOnServer(project.id, getDefaultConversationTitle(settings.productMode));
-      dispatch({ type: 'ADD_CONVERSATION', conversation: createdConversation });
+      dispatch({
+        type: 'ADD_CONVERSATION',
+        conversation: { ...createdConversation, messagesLoaded: true, messagesHasMore: false }
+      });
       dispatch({ type: 'SET_ACTIVE_CONV_ID', id: createdConversation.id });
       return { convId: createdConversation.id, project };
     }
@@ -545,6 +560,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     // Add user message to conversation
     const currentMsgs = [...messages, userMsg];
     dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: currentMsgs });
+    if (state.serverBacked) {
+      dispatch({ type: 'UPDATE_CONVERSATION', id: convId, updates: { messagesLoaded: true } });
+    }
     if (shouldAutoRenameConversation && nextTitle) {
       dispatch({ type: 'UPDATE_CONVERSATION', id: convId, updates: { title: nextTitle } });
       if (state.serverBacked) {

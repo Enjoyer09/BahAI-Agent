@@ -73,6 +73,12 @@ describe('normalizeAssistantText', () => {
     expect(normalizeAssistantText('query":"today date')).toBe('');
     expect(normalizeAssistantText('query":"today date"} }')).toBe('');
   });
+
+  it('strips bare wttr tool leakage and retry fragments', () => {
+    expect(normalizeAssistantText('wttr.in/Baku')).toBe('');
+    expect(normalizeAssistantText('https://wttr.in/Baku?format=%C|%t|%w|%h')).toBe('');
+    expect(normalizeAssistantText('Yenidən cəhd edirəm')).toBe('');
+  });
 });
 
 describe('isToolCallLikeText', () => {
@@ -100,6 +106,11 @@ describe('isToolCallLikeText', () => {
     expect(isToolCallLikeText('command": "')).toBe(true);
     expect(isToolCallLikeText('query":"today date')).toBe(true);
     expect(isToolCallLikeText('query":"today date"} }')).toBe(true);
+  });
+
+  it('detects bare wttr leakage', () => {
+    expect(isToolCallLikeText('wttr.in/Baku')).toBe(true);
+    expect(isToolCallLikeText('https://wttr.in/Baku?format=%C|%t|%w|%h')).toBe(true);
   });
 
   it('does not flag normal prose', () => {

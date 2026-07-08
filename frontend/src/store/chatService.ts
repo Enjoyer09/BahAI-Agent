@@ -223,6 +223,17 @@ export async function handleSendMessage(
       undefined
     );
 
+    const pendingAssistant = normalizeAssistantText(streamBufferRef.current || '');
+    if (pendingAssistant) {
+      sink.finalizeAssistantMessage({
+        id: generateId(),
+        role: 'assistant',
+        content: pendingAssistant,
+        timestamp: Date.now(),
+      });
+      streamBufferRef.current = '';
+    }
+
     // Save project memory after successful completion
     if (activeProject?.id && serverBacked) {
       const inferredMemory = {
