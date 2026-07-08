@@ -70,6 +70,22 @@ function formatConversationMeta(timestamp?: number) {
   return new Intl.DateTimeFormat('az-AZ', { day: '2-digit', month: 'short' }).format(new Date(timestamp));
 }
 
+function sanitizeConversationPreview(raw?: string) {
+  const text = String(raw || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, ' ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[*_`#>~-]+/g, ' ')
+    .replace(/\(\s*-?\d+\s*°F\s*\)/gi, '')
+    .replace(/\b-?\d+\s*°F\b/gi, '')
+    .replace(/\(\s*\d+\s*mph\s*\)/gi, '')
+    .replace(/\b\d+\s*mph\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;!?])/g, '$1')
+    .trim();
+  return text;
+}
+
 function groupByDate(conversations: Conversation[]): { label: string; items: Conversation[] }[] {
   const now = Date.now();
   const day = 86400000;
@@ -477,23 +493,23 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                 const projectLabel = isWebProduct ? 'BahAI' : (project?.name || 'Desktop Workspace');
                 const isSandbox = projectLabel === 'bahAI Sandbox' || projectLabel === 'BahAI';
                 const metaTime = formatConversationMeta(conv.lastMessageAt || conv.updatedAt);
-                const preview = String(conv.preview || '').replace(/\s+/g, ' ').trim();
+                const preview = sanitizeConversationPreview(conv.preview || '');
                 return (
                   <div key={conv.id} className="group relative">
                     <button
                       onClick={() => chat.setActiveConvId(conv.id)}
-                      className="w-full flex items-start gap-2 px-3 py-3 rounded-lg text-left transition-colors"
+                      className="w-full flex items-start gap-2 px-3 py-3 pr-14 rounded-[24px] text-left transition-colors"
                       style={{
                         background: isActive ? 'var(--bg-hover)' : 'transparent',
                         color: isActive ? 'var(--fg-main)' : 'var(--fg-secondary)',
-                        minHeight: '44px',
+                        minHeight: isMobile ? '96px' : '72px',
                       }}
                       onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'; }}
                       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="text-sm truncate flex-1">{conv.title || (isWebProduct ? 'Adsız chat' : 'Adsız söhbət')}</div>
+                          <div className="text-sm truncate flex-1 font-medium">{conv.title || (isWebProduct ? 'Adsız chat' : 'Adsız söhbət')}</div>
                           {metaTime && (
                             <span className="text-[10px] shrink-0" style={{ color: 'var(--fg-muted)' }}>
                               {metaTime}
@@ -501,7 +517,17 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                           )}
                         </div>
                         {preview && (
-                          <div className="mt-1 text-[11px] truncate-2" style={{ color: 'var(--fg-muted)' }}>
+                          <div
+                            className="mt-1 text-[12px] leading-5"
+                            style={{
+                              color: 'var(--fg-muted)',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              paddingRight: '6px'
+                            }}
+                          >
                             {preview}
                           </div>
                         )}
@@ -526,11 +552,17 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                         )}
                       </div>
                     </button>
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2 mobile-visible" style={{ opacity: isMobile ? 1 : undefined }}>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 mobile-visible" style={{ opacity: isMobile ? 1 : undefined }}>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conv.id); }}
-                        className="p-2 rounded transition-colors"
-                        style={{ color: 'var(--fg-muted)', minHeight: '44px', minWidth: '44px' }}
+                        className="p-2 rounded-full transition-colors tahoe-button"
+                        style={{
+                          color: 'var(--fg-muted)',
+                          minHeight: '36px',
+                          minWidth: '36px',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)'
+                        }}
                         aria-label="Delete conversation"
                       >
                         <Trash2 size={14} />

@@ -888,7 +888,8 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
     if (message.attachments?.length) {
       const textParts = [content, '[Sistem qeydi: İstifadəçi artıq attachment göndərib. Yenidən upload/drag-drop/link istəmədən mövcud attachment məzmununu analiz et.]'];
       if (!isLocalOrFlakyModel && imageAttachments.length > 0) {
-        textParts.push('[Sistem qeydi: Şəkil əlavə olunub. Əsas cavabı şəklin vizual məzmununa əsaslandır. OCR mətni səs-küylü və qeyri-dəqiq ola bilər.]');
+        textParts.push('[Sistem qeydi: Şəkil əlavə olunub. Əsas cavabı birbaşa görünən obyektlərə, səhnəyə, rənglərə və yerləşimə əsaslandır. OCR mətni səs-küylü və qeyri-dəqiq ola bilər.]');
+        textParts.push('[Sistem qaydası - image: Əvvəl şəkildə görünən əsas obyektləri qısa təsvir et. Yalnız açıq və aydın görünən yazını qeyd et. Oxuna bilməyən və ya qeyri-müəyyən mətni təxmin etmə, uydurma, bərpa etmə. Əgər yazı aydın deyilsə sadəcə "yazı seçilmir" və ya "mətn aydın oxunmur" de. Captcha, poster, qiymət etiketi, sitat və s. kimi nəticələri yalnız şəkildə həqiqətən görünürsə yaz.]');
       }
       const results = await Promise.all(message.attachments.map(async (attachment) => {
         if (attachment?.extractedText && typeof attachment.extractedText === 'string' && attachment.extractedText.trim()) {
