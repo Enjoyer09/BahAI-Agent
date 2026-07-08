@@ -49,7 +49,7 @@ const {
   mapMessagesToResponsesInput, mapToolsToResponsesTools
 } = require('../helpers');
 
-function getDirectWebChatReply(latestUserText = '', messages = []) {
+async function getDirectWebChatReply(latestUserText = '', messages = []) {
   const text = String(latestUserText || '').trim();
   const lower = text.toLowerCase();
   const tz = process.env.BAHAI_DEFAULT_TIMEZONE || 'Asia/Baku';
@@ -71,6 +71,48 @@ function getDirectWebChatReply(latestUserText = '', messages = []) {
   const asksDate = /\b(bugün|bugun|bu gün|today)\b/i.test(text) && /\b(ayın neçəsidir|ayin necesidir|tarix|date|günlerden ne gündür|hansi gundur)\b/i.test(text);
   if (asksDate) {
     return `Bu gün ${prettyDate}-dir.`;
+  }
+  const weatherCityMap = {
+    baku: { wttr: 'Baku', label: 'Bakıda' },
+    bakı: { wttr: 'Baku', label: 'Bakıda' },
+    baki: { wttr: 'Baku', label: 'Bakıda' },
+    gence: { wttr: 'Ganja', label: 'Gəncədə' },
+    gəncə: { wttr: 'Ganja', label: 'Gəncədə' },
+    ganja: { wttr: 'Ganja', label: 'Gəncədə' },
+    sumqayit: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
+    sumqayıt: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
+    sumgayit: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
+  };
+  const isWeatherQuery = /\b(hava|weather|temperatur|temperature|dərəcə|derece)\b/i.test(text);
+  const weatherCityMatch = text.match(/\b(baku|bakı|baki|gence|gəncə|ganja|sumqayit|sumqayıt|sumgayit)\b/i);
+  if (isWeatherQuery && weatherCityMatch) {
+    const cityKey = weatherCityMatch[1].toLowerCase();
+    const cityMeta = weatherCityMap[cityKey];
+    if (cityMeta) {
+      try {
+        const wttrUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=%C|%t|%w|%h`;
+        const wttrRes = await fetch(wttrUrl, { timeout: 10000, headers: { 'User-Agent': 'BahAI/1.0' } });
+        if (wttrRes.ok) {
+          const raw = (await wttrRes.text()).trim();
+          const [conditionRaw = '', tempRaw = '', windRaw = '', humidityRaw = ''] = raw.split('|');
+          const condition = String(conditionRaw).replace(/\s+/g, ' ').trim();
+          const tempC = String(tempRaw).replace(/\+/g, '').replace(/\s+/g, '').trim();
+          const wind = String(windRaw).replace(/\s+/g, ' ').trim();
+          const humidity = String(humidityRaw).replace(/\s+/g, '').trim();
+          const windMetric = wind
+            .replace(/mph/gi, 'km/saat')
+            .replace(/(\d+(?:\.\d+)?)\s*km\/h/gi, '$1 km/saat');
+          const pieces = [];
+          if (condition) pieces.push(`${cityMeta.label} hazırda ${condition.toLowerCase()} müşahidə olunur.`);
+          if (tempC) pieces.push(`Temperatur təxminən ${tempC.replace(/°?[FC]/gi, '')}°C-dir.`);
+          if (windMetric) pieces.push(`Külək ${windMetric} təşkil edir.`);
+          if (humidity) pieces.push(`Rütubət ${humidity.replace('%', '')}%-dir.`);
+          return pieces.join(' ');
+        }
+      } catch {
+        // fall through to other direct handlers / model path
+      }
+    }
   }
   const previousAssistant = [...(Array.isArray(messages) ? messages : [])]
     .reverse()
@@ -259,7 +301,7 @@ router.post('/', async (req, res) => {
   // --- Main Chat Processing ---
   const TOOLS = getToolDefinitions();
   const db = require('../db');
-  const directWebReply = productMode === 'web_chat' ? getDirectWebChatReply(latestUserText, normalizedMessages) : '';
+  const directWebReply = productMode === 'web_chat' ? await getDirectWebChatReply(latestUserText, normalizedMessages) : '';
 
   if (directWebReply) {
     initSse(res);

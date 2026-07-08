@@ -326,10 +326,17 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const lastMsg = msgs[msgs.length - 1];
       const normalizedIncoming = String(msg.content || '').trim();
       const normalizedLast = String(lastMsg?.content || '').trim();
+      const simplifyAssistantText = (value: string) => value
+        .replace(/\s+/g, ' ')
+        .replace(/[.!?…]+$/g, '')
+        .trim()
+        .toLowerCase();
+      const normalizedIncomingLoose = simplifyAssistantText(normalizedIncoming);
+      const normalizedLastLoose = simplifyAssistantText(normalizedLast);
       const recentAssistantContents = msgs
         .filter((item) => item.role === 'assistant')
         .slice(-3)
-        .map((item) => String(item.content || '').trim())
+        .map((item) => simplifyAssistantText(String(item.content || '').trim()))
         .filter(Boolean);
       if (!normalizedIncoming && lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
         msgs.pop();
@@ -345,7 +352,8 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         (
           normalizedIncoming === lastFinalAssistantContentRef.current ||
           (lastMsg?.role === 'assistant' && normalizedIncoming === normalizedLast) ||
-          recentAssistantContents.includes(normalizedIncoming)
+          (normalizedIncomingLoose && lastMsg?.role === 'assistant' && normalizedIncomingLoose === normalizedLastLoose) ||
+          recentAssistantContents.includes(normalizedIncomingLoose)
         )
       ) {
         return;
