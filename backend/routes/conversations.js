@@ -80,6 +80,8 @@ async function replaceConversationMessages(client, conversationId, userId, rawMe
 router.get('/', async (req, res) => {
   try {
     const projectId = req.query.projectId;
+    const limit = Math.max(1, Math.min(parseInt(String(req.query.limit || '100'), 10) || 100, 200));
+    const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
     if (!db.hasDatabase()) return res.json({ conversations: [] });
 
     if (projectId) {
@@ -97,10 +99,15 @@ router.get('/', async (req, res) => {
            GROUP BY conversation_id
          ) m ON m.conversation_id = c.id
          WHERE c.user_id = $1 AND c.project_id = $2 AND c.archived = false
-         ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC`,
-        [req.user.id, projectId]
+         ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC
+         LIMIT $3 OFFSET $4`,
+        [req.user.id, projectId, limit + 1, offset]
       );
-      return res.json({ conversations: result.rows.map((row) => serializeConversation({ ...row, messages: [] })) });
+      const rows = result.rows.slice(0, limit);
+      return res.json({
+        conversations: rows.map((row) => serializeConversation({ ...row, messages: [] })),
+        pagination: { limit, offset, hasMore: result.rows.length > limit }
+      });
     }
     const result = await db.query(
       `SELECT c.*,
@@ -117,10 +124,14 @@ router.get('/', async (req, res) => {
        ) m ON m.conversation_id = c.id
        WHERE c.user_id = $1 AND c.archived = false
        ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC
-       LIMIT 100`,
-      [req.user.id]
+       LIMIT $2 OFFSET $3`,
+      [req.user.id, limit + 1, offset]
     );
-    res.json({ conversations: result.rows.map((row) => serializeConversation({ ...row, messages: [] })) });
+    const rows = result.rows.slice(0, limit);
+    res.json({
+      conversations: rows.map((row) => serializeConversation({ ...row, messages: [] })),
+      pagination: { limit, offset, hasMore: result.rows.length > limit }
+    });
   } catch (e) {
     console.error('List conversations error:', e);
     res.status(500).json({ error: 'Server xətası' });

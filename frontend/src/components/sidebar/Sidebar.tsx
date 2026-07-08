@@ -54,6 +54,19 @@ interface Props {
   isMobile?: boolean;
 }
 
+function formatConversationMeta(timestamp?: number) {
+  if (!timestamp) return '';
+  const diffMs = Date.now() - timestamp;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'indi';
+  if (diffMin < 60) return `${diffMin} dəq`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} saat`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < 7) return `${diffDay} gün`;
+  return new Intl.DateTimeFormat('az-AZ', { day: '2-digit', month: 'short' }).format(new Date(timestamp));
+}
+
 function groupByDate(conversations: Conversation[]): { label: string; items: Conversation[] }[] {
   const now = Date.now();
   const day = 86400000;
@@ -456,8 +469,10 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
               {group.items.map(conv => {
                 const isActive = chat.activeConvId === conv.id;
                 const project = safeProjects.find((item) => item.id === conv.projectId) || null;
-                const projectLabel = isWebProduct ? 'BahAI Cloud' : (project?.name || 'Desktop Workspace');
-                const isSandbox = projectLabel === 'bahAI Sandbox' || projectLabel === 'BahAI Cloud';
+                const projectLabel = isWebProduct ? 'BahAI' : (project?.name || 'Desktop Workspace');
+                const isSandbox = projectLabel === 'bahAI Sandbox' || projectLabel === 'BahAI';
+                const metaTime = formatConversationMeta(conv.lastMessageAt || conv.updatedAt);
+                const preview = String(conv.preview || '').replace(/\s+/g, ' ').trim();
                 return (
                   <div key={conv.id} className="group relative">
                     <button
@@ -472,11 +487,28 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm truncate">{conv.title || (isWebProduct ? 'Adsız chat' : 'Adsız söhbət')}</div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="text-sm truncate flex-1">{conv.title || (isWebProduct ? 'Adsız chat' : 'Adsız söhbət')}</div>
+                          {metaTime && (
+                            <span className="text-[10px] shrink-0" style={{ color: 'var(--fg-muted)' }}>
+                              {metaTime}
+                            </span>
+                          )}
+                        </div>
+                        {preview && (
+                          <div className="mt-1 text-[11px] truncate-2" style={{ color: 'var(--fg-muted)' }}>
+                            {preview}
+                          </div>
+                        )}
+                        {typeof conv.messageCount === 'number' && conv.messageCount > 0 && (
+                          <div className="mt-1 text-[10px]" style={{ color: 'var(--fg-faint)' }}>
+                            {conv.messageCount} mesaj
+                          </div>
+                        )}
                         {!isWebProduct && (
                           <div className="mt-1 flex items-center gap-2 min-w-0">
                             <span
-                              className="text-[10px] px-2 py-0.5 rounded-md truncate"
+                              className="text-[10px] px-2 py-0.5 rounded-md truncate tahoe-chip"
                               style={{
                                 color: isSandbox ? 'var(--fg-muted)' : 'var(--color-accent)',
                                 background: isSandbox ? 'var(--bg-surface)' : 'var(--color-accent-muted)',
