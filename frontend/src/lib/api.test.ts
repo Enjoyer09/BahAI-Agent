@@ -22,6 +22,7 @@ import {
   listGithubRepos,
   getProjectMemory,
   saveProjectMemory,
+  extractAttachments,
 } from './api';
 import type { SSEEvent } from './types';
 
@@ -131,6 +132,36 @@ describe('API Client', () => {
 
       const result = await createConversationOnServer('p1');
       expect(result.id).toBe('c1');
+    });
+  });
+
+  describe('extractAttachments', () => {
+    it('maps extracted attachment results back onto originals', async () => {
+      mockFetch.mockResolvedValueOnce(mockResponse({
+        attachments: [
+          {
+            id: 'a1',
+            extractedText: 'Detected text',
+            extractionError: '',
+            imageUrl: 'data:image/png;base64,abc'
+          }
+        ]
+      }));
+
+      const result = await extractAttachments([
+        {
+          id: 'a1',
+          name: 'shot.png',
+          type: 'image',
+          mimeType: 'image/png',
+          url: 'data:image/png;base64,abc'
+        }
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].extractedText).toBe('Detected text');
+      expect(result[0].url).toBe('data:image/png;base64,abc');
+      expect(result[0].imageUrl).toBe('data:image/png;base64,abc');
     });
   });
 

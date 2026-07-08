@@ -425,15 +425,31 @@ export async function extractAttachments(attachments: Attachment[]): Promise<Att
       }));
     }
     const data = await response.json();
-    const extracted = Array.isArray(data.attachments) ? data.attachments : [];
+    const extracted = Array.isArray(data.attachments)
+      ? data.attachments
+      : Array.isArray(data.results)
+        ? data.results
+        : data.attachment
+          ? [data.attachment]
+          : [];
     return attachments.map(attachment => {
       const match = extracted.find((item: Attachment) => item.id === attachment.id);
       if (match && match.extractedText) {
         // Extraction successful — keep extractedText, keep URL as backup
-        return { ...attachment, ...match, url: attachment.url };
+        return {
+          ...attachment,
+          ...match,
+          url: attachment.url,
+          imageUrl: attachment.type === 'image' ? attachment.url : match.imageUrl
+        };
       }
       // Extraction returned empty — keep original URL for backend retry
-      return { ...attachment, ...(match || {}), url: attachment.url };
+      return {
+        ...attachment,
+        ...(match || {}),
+        url: attachment.url,
+        imageUrl: attachment.type === 'image' ? attachment.url : match?.imageUrl
+      };
     });
   } catch (err: any) {
     clearTimeout(timeoutId);

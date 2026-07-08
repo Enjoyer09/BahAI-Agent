@@ -864,6 +864,10 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
     let tool_call_id = message.tool_call_id;
     let name = message.name;
 
+    const imageAttachments = Array.isArray(message.attachments)
+      ? message.attachments.filter((attachment) => attachment?.type === 'image' && typeof attachment?.url === 'string' && attachment.url.startsWith('data:image/'))
+      : [];
+
     if (message.attachments?.length) {
       const textParts = [content, '[Sistem qeydi: İstifadəçi artıq attachment göndərib. Yenidən upload/drag-drop/link istəmədən mövcud attachment məzmununu analiz et.]'];
       const results = await Promise.all(message.attachments.map(async (attachment) => {
@@ -908,12 +912,36 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
       }
     }
 
-    normalized.push({
-      role, content,
+    const normalizedMessage = {
+      role,
+      content,
+      attachments: !isLocalOrFlakyModel && imageAttachments.length > 0 ? imageAttachments.map((attachment) => ({
+        type: 'image',
+        mimeType: attachment.mimeType || 'image/png',
+        url: attachment.url,
+        name: attachment.name || 'image'
+      })) : undefined,
       tool_calls: isLocalOrFlakyModel ? undefined : (tool_calls?.length ? tool_calls : undefined),
       tool_call_id: isLocalOrFlakyModel ? undefined : tool_call_id,
       name: isLocalOrFlakyModel ? undefined : name
-    });
+    };
+
+    if (!isLocalOrFlakyModel && normalizedMessage.role === 'user' && normalizedMessage.attachments?.length) {
+      normalizedMessage.content = [
+        ...(typeof content === 'string' && content.trim()
+          ? [{ type: 'text', text: content }]
+          : []),
+        ...normalizedMessage.attachments.map((attachment) => ({
+          type: 'image_url',
+          image_url: {
+            url: attachment.url,
+            detail: 'high'
+          }
+        }))
+      ];
+    }
+
+    normalized.push(normalizedMessage);
   }
 
   if (isLocalOrFlakyModel && normalized.length > 0) {
@@ -1223,6 +1251,17 @@ function mapMessagesToResponsesInput(messages = []) {
     const contentParts = [];
     if (typeof message.content === 'string' && message.content.trim()) {
       contentParts.push({ type: 'input_text', text: message.content });
+    }
+    if (Array.isArray(message.attachments)) {
+      for (const attachment of message.attachments) {
+        if (attachment?.type === 'image' && typeof attachment?.url === 'string' && attachment.url.startsWith('data:image/')) {
+          contentParts.push({
+            type: 'input_image',
+            image_url: attachment.url,
+            detail: 'high'
+          });
+        }
+      }
     }
     if (contentParts.length > 0) {
       input.push({ role: message.role, content: contentParts });

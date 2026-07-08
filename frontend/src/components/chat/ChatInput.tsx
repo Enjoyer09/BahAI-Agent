@@ -111,15 +111,16 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
     Array.from(files).forEach(file => {
       const ext = '.' + file.name.split('.').pop()?.toLowerCase();
       const isText = file.type.startsWith('text/') || file.type.includes('json') || file.type.includes('xml');
+      const isImage = file.type.startsWith('image/');
       
-      if (!ALLOWED_EXTENSIONS.includes(ext) && !isText) {
-        alert(`"${file.name}" dəstəklənmir. Yalnız mətn faylları qəbul edilir: ${ALLOWED_EXTENSIONS.join(', ')}`);
+      if (!ALLOWED_EXTENSIONS.includes(ext) && !isText && !isImage) {
+        alert(`"${file.name}" dəstəklənmir. Mətn faylları və şəkillər qəbul edilir.`);
         return;
       }
       
-      // File size check: max 500KB for text files
-      if (file.size > 500 * 1024) {
-        alert(`"${file.name}" çox böyükdür (${(file.size / 1024).toFixed(0)}KB). Maksimum 500KB.`);
+      const maxBytes = isImage ? 5 * 1024 * 1024 : 500 * 1024;
+      if (file.size > maxBytes) {
+        alert(`"${file.name}" çox böyükdür (${(file.size / 1024).toFixed(0)}KB). Maksimum ${isImage ? '5MB' : '500KB'}.`);
         return;
       }
       const reader = new FileReader();
@@ -127,7 +128,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
         setAttachments(prev => [...prev, {
           id: crypto.randomUUID(),
           name: file.name,
-          type: 'file',
+          type: isImage ? 'image' : 'file',
           mimeType: file.type || 'text/plain',
           url: ev.target?.result as string
         }]);
@@ -228,7 +229,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             ref={fileInputRef}
             onChange={(e) => { pushFiles(e.target.files); e.target.value = ''; }}
             multiple
-            accept=".txt,.json,.csv,.md,.yaml,.yml,.xml,.log,.env,.js,.ts,.jsx,.tsx,.py,.html,.css,.har,.svg,.sh,.toml,.ini,.cfg,.sql,.graphql"
+            accept="image/*,.txt,.json,.csv,.md,.yaml,.yml,.xml,.log,.env,.js,.ts,.jsx,.tsx,.py,.html,.css,.har,.svg,.sh,.toml,.ini,.cfg,.sql,.graphql"
             className="hidden"
             aria-hidden="true"
           />

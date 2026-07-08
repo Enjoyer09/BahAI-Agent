@@ -233,7 +233,16 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
                     style={{ border: '1px solid var(--border)', background: 'var(--bg-hover)' }}
                   >
                     {at.type === 'image' ? (
-                      <img src={at.url} alt="attachment" className="max-w-[70vw] sm:max-w-[200px] h-auto" />
+                      at.url ? (
+                        <img src={at.url} alt="attachment" className="max-w-[70vw] sm:max-w-[200px] h-auto" />
+                      ) : (
+                        <div className="flex items-center gap-2 px-3 py-2">
+                          <FileText size={14} style={{ color: 'var(--fg-muted)' }} />
+                          <span className="text-xs truncate max-w-[150px]" style={{ color: 'var(--fg-secondary)' }}>
+                            {at.name}
+                          </span>
+                        </div>
+                      )
                     ) : (
                       <div className="flex items-center gap-2 px-3 py-2">
                         <FileText size={14} style={{ color: 'var(--fg-muted)' }} />

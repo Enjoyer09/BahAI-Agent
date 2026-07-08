@@ -188,10 +188,27 @@ router.get('/admin/users', async (req, res) => {
 router.post('/attachments/extract', async (req, res) => {
   try {
     const { extractAttachment } = require('../helpers');
-    const attachment = req.body.attachment;
-    if (!attachment) return res.status(400).json({ error: 'attachment tələb olunur' });
-    const result = await extractAttachment(attachment);
-    res.json({ extractedText: result.extractedText || '', extractionError: result.extractionError });
+    const attachments = Array.isArray(req.body.attachments)
+      ? req.body.attachments
+      : req.body.attachment
+        ? [req.body.attachment]
+        : [];
+    if (attachments.length === 0) return res.status(400).json({ error: 'attachment tələb olunur' });
+    const results = await Promise.all(
+      attachments.map(async (attachment) => {
+        const result = await extractAttachment(attachment);
+        return {
+          id: attachment?.id,
+          name: attachment?.name || result.name || 'attachment',
+          type: attachment?.type || 'file',
+          mimeType: attachment?.mimeType || result.mimeType || 'application/octet-stream',
+          extractedText: result.extractedText || '',
+          extractionError: result.extractionError,
+          imageUrl: attachment?.type === 'image' ? attachment?.url : undefined
+        };
+      })
+    );
+    res.json({ attachments: results });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

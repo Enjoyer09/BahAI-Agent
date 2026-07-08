@@ -16,6 +16,7 @@ export interface Attachment {
   url: string;
   extractedText?: string;
   extractionError?: string;
+  imageUrl?: string;
 }
 
 export interface Message {
