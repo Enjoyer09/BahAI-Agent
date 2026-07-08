@@ -10,6 +10,7 @@ import type {
 export interface ChatState {
   projects: Project[];
   conversations: Conversation[];
+  conversationsHasMore: boolean;
   activeConvId: string | null;
   loading: boolean;
   hydrated: boolean;
@@ -31,6 +32,7 @@ export function createInitialState(): ChatState {
   return {
     projects: [],
     conversations: [],
+    conversationsHasMore: false,
     activeConvId: null,
     loading: false,
     hydrated: false,
@@ -59,6 +61,8 @@ export type ChatAction =
   | { type: 'UPDATE_PROJECT'; id: string; updates: Partial<Project> }
   | { type: 'REMOVE_PROJECT'; id: string }
   | { type: 'SET_CONVERSATIONS'; conversations: Conversation[] }
+  | { type: 'APPEND_CONVERSATIONS'; conversations: Conversation[]; hasMore?: boolean }
+  | { type: 'SET_CONVERSATIONS_HAS_MORE'; hasMore: boolean }
   | { type: 'ADD_CONVERSATION'; conversation: Conversation }
   | { type: 'UPDATE_CONVERSATION'; id: string; updates: Partial<Conversation> }
   | { type: 'REMOVE_CONVERSATION'; id: string }

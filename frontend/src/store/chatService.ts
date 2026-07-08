@@ -6,6 +6,7 @@ import type { Message, Conversation, Project, Settings, PlannerArtifact, Executi
 import {
   sendChatMessage as apiSendChatMessage,
   loadWorkspaceState,
+  listConversations,
   createProjectOnServer,
   updateProjectOnServer,
   deleteProjectOnServer,
@@ -544,6 +545,7 @@ export interface WorkspaceLoadResult {
   conversations: Conversation[];
   serverBacked: boolean;
   activeConvId: string | null;
+  conversationsHasMore?: boolean;
 }
 
 export async function loadWorkspace(
@@ -555,7 +557,7 @@ export async function loadWorkspace(
   }
 
   try {
-    const state = await loadWorkspaceState();
+    const state = await loadWorkspaceState({ limit: 40, offset: 0 });
     if (state.projects.length === 0) {
       const created = await createProjectOnServer({
         name: getDefaultWorkspaceName(settings.productMode),
@@ -577,6 +579,7 @@ export async function loadWorkspace(
         conversations: [newConv],
         serverBacked: true,
         activeConvId: created.conversation.id,
+        conversationsHasMore: false,
       };
     }
     return {
@@ -584,6 +587,7 @@ export async function loadWorkspace(
       conversations: state.conversations,
       serverBacked: true,
       activeConvId: state.conversations[0]?.id || null,
+      conversationsHasMore: Boolean(state.pagination?.hasMore),
     };
   } catch {
     return { projects: [], conversations: [], serverBacked: false, activeConvId: null };
@@ -601,6 +605,7 @@ export {
   getWelcomeMessage,
   buildConversationTitleFromInput,
   loadWorkspaceState,
+  listConversations,
   createProjectOnServer,
   updateProjectOnServer,
   deleteProjectOnServer,

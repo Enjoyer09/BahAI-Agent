@@ -9,11 +9,24 @@ interface Props {
   loading: boolean;
   onSend: (msg: string) => void;
   onStop?: () => void;
+  onLoadOlderMessages?: () => void | Promise<void>;
+  canLoadOlderMessages?: boolean;
+  loadingOlderMessages?: boolean;
   workingDirectory?: string;
   productMode?: 'web_chat' | 'desktop_code';
 }
 
-export default function ChatArea({ messages, loading, onSend, onStop, workingDirectory, productMode = 'desktop_code' }: Props) {
+export default function ChatArea({
+  messages,
+  loading,
+  onSend,
+  onStop,
+  onLoadOlderMessages,
+  canLoadOlderMessages = false,
+  loadingOlderMessages = false,
+  workingDirectory,
+  productMode = 'desktop_code'
+}: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
 
@@ -94,6 +107,24 @@ export default function ChatArea({ messages, loading, onSend, onStop, workingDir
             30% { transform: translateY(-5px); opacity: 1; }
           }
         `}</style>
+        {canLoadOlderMessages && onLoadOlderMessages && (
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => void onLoadOlderMessages()}
+              disabled={loadingOlderMessages}
+              className="px-3.5 py-2 rounded-xl text-xs sm:text-sm transition-all disabled:opacity-60"
+              style={{
+                border: '1px solid var(--border)',
+                color: 'var(--fg-secondary)',
+                background: 'var(--bg-surface-elevated, var(--bg-surface))',
+                minHeight: '38px',
+              }}
+            >
+              {loadingOlderMessages ? 'Yüklənir...' : 'Əvvəlki mesajları göstər'}
+            </button>
+          </div>
+        )}
         {messages.map((msg, i) => (
           <ChatMessage
             key={msg.id || i}

@@ -215,10 +215,14 @@ export async function sendChatMessage(
   }
 }
 
-export async function loadWorkspaceState(): Promise<{ projects: Project[]; conversations: Conversation[] }> {
+export async function loadWorkspaceState(input?: { limit?: number; offset?: number }): Promise<{ projects: Project[]; conversations: Conversation[]; pagination?: { limit: number; offset: number; hasMore: boolean } | null }> {
+  const params = new URLSearchParams();
+  if (typeof input?.limit === 'number') params.set('limit', String(input.limit));
+  if (typeof input?.offset === 'number') params.set('offset', String(input.offset));
+  const conversationsUrl = `${API_BASE_URL}/api/conversations${params.toString() ? `?${params.toString()}` : ''}`;
   const [projectsResponse, conversationsResponse] = await Promise.all([
     apiFetch(`${API_BASE_URL}/api/projects`),
-    apiFetch(`${API_BASE_URL}/api/conversations`)
+    apiFetch(conversationsUrl)
   ]);
   if (!projectsResponse.ok || !conversationsResponse.ok) throw new Error('Workspace məlumatları yüklənmədi');
   const projectsData = await projectsResponse.json();
@@ -226,6 +230,36 @@ export async function loadWorkspaceState(): Promise<{ projects: Project[]; conve
   return {
     projects: Array.isArray(projectsData.projects) ? projectsData.projects : [],
     conversations: Array.isArray(conversationsData.conversations) ? conversationsData.conversations : [],
+    pagination: conversationsData.pagination || null,
+  };
+}
+
+export async function listConversations(input?: { projectId?: string; limit?: number; offset?: number }): Promise<{ conversations: Conversation[]; pagination?: { limit: number; offset: number; hasMore: boolean } | null }> {
+  const params = new URLSearchParams();
+  if (input?.projectId) params.set('projectId', input.projectId);
+  if (typeof input?.limit === 'number') params.set('limit', String(input.limit));
+  if (typeof input?.offset === 'number') params.set('offset', String(input.offset));
+  const response = await apiFetch(`${API_BASE_URL}/api/conversations${params.toString() ? `?${params.toString()}` : ''}`);
+  if (!response.ok) throw new Error('Söhbətlər yüklənmədi');
+  const data = await response.json();
+  return {
+    conversations: Array.isArray(data.conversations) ? data.conversations : [],
+    pagination: data.pagination || null,
+  };
+}
+
+export async function searchConversations(input: { q: string; projectId?: string; limit?: number; offset?: number }): Promise<{ conversations: Conversation[]; pagination?: { limit: number; offset: number; hasMore: boolean } | null }> {
+  const params = new URLSearchParams();
+  params.set('q', input.q);
+  if (input.projectId) params.set('projectId', input.projectId);
+  if (typeof input.limit === 'number') params.set('limit', String(input.limit));
+  if (typeof input.offset === 'number') params.set('offset', String(input.offset));
+  const response = await apiFetch(`${API_BASE_URL}/api/conversations?${params.toString()}`);
+  if (!response.ok) throw new Error('Söhbət axtarışı alınmadı');
+  const data = await response.json();
+  return {
+    conversations: Array.isArray(data.conversations) ? data.conversations : [],
+    pagination: data.pagination || null,
   };
 }
 
@@ -350,11 +384,17 @@ export async function deleteConversationOnServer(id: string): Promise<void> {
   if (!response.ok) throw new Error('Söhbət silinmədi');
 }
 
-export async function getConversationMessages(id: string): Promise<Message[]> {
-  const response = await apiFetch(`${API_BASE_URL}/api/conversations/${encodeURIComponent(id)}/messages`);
+export async function getConversationMessages(id: string, input?: { limit?: number; before?: string }): Promise<{ messages: Message[]; pagination?: { hasMore: boolean } | null }> {
+  const params = new URLSearchParams();
+  if (typeof input?.limit === 'number') params.set('limit', String(input.limit));
+  if (input?.before) params.set('before', input.before);
+  const response = await apiFetch(`${API_BASE_URL}/api/conversations/${encodeURIComponent(id)}/messages${params.toString() ? `?${params.toString()}` : ''}`);
   if (!response.ok) throw new Error('Söhbət mesajları yüklənmədi');
   const data = await response.json();
-  return Array.isArray(data.messages) ? data.messages : [];
+  return {
+    messages: Array.isArray(data.messages) ? data.messages : [],
+    pagination: data.pagination || null,
+  };
 }
 
 export async function extractAttachments(attachments: Attachment[]): Promise<Attachment[]> {

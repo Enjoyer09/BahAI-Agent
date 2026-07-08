@@ -29,11 +29,14 @@ import { Button } from '../common/UI';
 interface ChatState {
   projects: Project[];
   conversations: Conversation[];
+  conversationsHasMore?: boolean;
   activeConvId: string | null;
   activeProject: Project | null;
   setActiveConvId: (id: string) => void;
   createProject: (name: string, path: string, repoUrl?: string) => any;
   createConversation: (projectId: string) => void;
+  loadMoreConversations?: () => Promise<void> | void;
+  searchConversations?: (q: string) => Promise<void> | void;
   deleteProject: (id: string) => void;
   archiveProject: (id: string, archived?: boolean) => void;
   deleteConversation: (id: string) => void;
@@ -123,12 +126,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
   const safeConversations = Array.isArray(chat.conversations) ? chat.conversations : [];
   const activeProjects = safeProjects.filter(p => p && !p.archived);
 
-  // Filter conversations by search
-  const filteredConversations = useMemo(() => {
-    if (!searchQuery.trim()) return safeConversations;
-    const q = searchQuery.toLowerCase();
-    return safeConversations.filter(c => c.title?.toLowerCase().includes(q));
-  }, [safeConversations, searchQuery]);
+  const filteredConversations = useMemo(() => safeConversations, [safeConversations]);
 
   const grouped = useMemo(() => groupByDate(filteredConversations), [filteredConversations]);
 
@@ -142,6 +140,13 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      chat.searchConversations?.(searchQuery);
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
     if (!showSettings) return;
@@ -542,6 +547,18 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
               <p className="text-xs" style={{ color: 'var(--fg-muted)' }}>
                 {searchQuery ? 'Nəticə tapılmadı' : (isWebProduct ? 'Hələ chat yoxdur' : 'Hələ söhbət yoxdur')}
               </p>
+            </div>
+          )}
+
+          {!searchQuery && chat.conversationsHasMore && (
+            <div className="px-2 py-3">
+              <button
+                onClick={() => chat.loadMoreConversations?.()}
+                className="w-full text-xs rounded-lg px-3 py-2 tahoe-button"
+                style={{ color: 'var(--fg-secondary)', background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
+              >
+                Daha çox yüklə
+              </button>
             </div>
           )}
         </div>

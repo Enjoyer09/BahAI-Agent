@@ -1022,6 +1022,7 @@ function serializeConversation(row) {
     archived: Boolean(row.archived),
     lastMessageAt: row.last_message_at ? new Date(row.last_message_at).getTime() : undefined,
     preview: row.preview || undefined,
+    summaryText: row.summary_text || undefined,
     messageCount: typeof row.message_count === 'number' ? row.message_count : undefined,
     messagesLoaded: Array.isArray(row.messages) && row.messages.length > 0,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),

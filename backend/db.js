@@ -102,6 +102,11 @@ async function initDb() {
     `);
 
     await client.query(`
+      ALTER TABLE conversations
+      ADD COLUMN IF NOT EXISTS summary_text TEXT DEFAULT ''
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY,
         conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,

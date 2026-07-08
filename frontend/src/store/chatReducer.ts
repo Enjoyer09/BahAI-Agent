@@ -30,6 +30,19 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SET_CONVERSATIONS':
       return { ...state, conversations: action.conversations };
 
+    case 'APPEND_CONVERSATIONS': {
+      const merged = [...state.conversations];
+      for (const incoming of action.conversations) {
+        if (!merged.some((item) => item.id === incoming.id)) {
+          merged.push(incoming);
+        }
+      }
+      return { ...state, conversations: merged, conversationsHasMore: action.hasMore ?? state.conversationsHasMore };
+    }
+
+    case 'SET_CONVERSATIONS_HAS_MORE':
+      return { ...state, conversationsHasMore: action.hasMore };
+
     case 'ADD_CONVERSATION':
       return { ...state, conversations: [action.conversation, ...state.conversations] };
 
@@ -152,6 +165,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         projects: [],
         conversations: [],
+        conversationsHasMore: false,
         activeConvId: null,
         loading: false,
         hydrated: false,

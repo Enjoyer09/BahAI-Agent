@@ -99,8 +99,11 @@ export interface Conversation {
   archived?: boolean;
   lastMessageAt?: number;
   preview?: string;
+  summaryText?: string;
   messageCount?: number;
   messagesLoaded?: boolean;
+  messagesHasMore?: boolean;
+  oldestMessageCursor?: string;
   createdAt: number;
   updatedAt: number;
 }

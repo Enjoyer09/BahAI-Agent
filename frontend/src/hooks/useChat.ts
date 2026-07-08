@@ -14,6 +14,7 @@ import { chatReducer } from '../store/chatReducer';
 import {
   handleSendMessage,
   loadWorkspace,
+  listConversations,
   generateId,
   getDefaultConversationTitle,
   getDefaultWorkspaceName,
@@ -36,7 +37,7 @@ import {
   previewDiff,
   applyDiff,
 } from '../store/chatService';
-import { getConversationMessages } from '../lib/api';
+import { getConversationMessages, searchConversations } from '../lib/api';
 import {
   mergeApprovalDecisionIntoMemory,
   mergeEvidenceSummaryIntoMemory,
@@ -55,6 +56,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   const streamThrottleRef = useRef<number>(0);
   const streamBufferRef = useRef<string>('');
   const storageTimeout = useRef<any>(null);
+  const loadingOlderMessagesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     activeConvIdRef.current = state.activeConvId;
@@ -107,6 +109,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       if (result.serverBacked) {
         dispatch({ type: 'SET_PROJECTS', projects: result.projects });
         dispatch({ type: 'SET_CONVERSATIONS', conversations: result.conversations });
+        dispatch({ type: 'SET_CONVERSATIONS_HAS_MORE', hasMore: Boolean(result.conversationsHasMore) });
         dispatch({ type: 'SET_ACTIVE_CONV_ID', id: result.activeConvId });
         dispatch({ type: 'SET_SERVER_BACKED', backed: true });
       } else {
@@ -208,11 +211,22 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     const active = state.conversations.find((conv) => conv.id === state.activeConvId);
     if (!active || active.messagesLoaded) return;
     let cancelled = false;
-    getConversationMessages(active.id)
-      .then((loadedMessages: any) => {
+    getConversationMessages(active.id, { limit: 120 })
+      .then((loadedPage: any) => {
         if (cancelled) return;
-        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: active.id, messages: Array.isArray(loadedMessages) ? loadedMessages : [] });
-        dispatch({ type: 'UPDATE_CONVERSATION', id: active.id, updates: { messagesLoaded: true } });
+        const loadedMessages = Array.isArray(loadedPage?.messages) ? loadedPage.messages : [];
+        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: active.id, messages: loadedMessages });
+        dispatch({
+          type: 'UPDATE_CONVERSATION',
+          id: active.id,
+          updates: {
+            messagesLoaded: true,
+            ...(loadedMessages.length > 0 ? {
+              oldestMessageCursor: new Date(loadedMessages[0].timestamp).toISOString(),
+              messagesHasMore: Boolean(loadedPage?.pagination?.hasMore)
+            } : {})
+          }
+        });
       })
       .catch(() => {
         if (cancelled) return;
@@ -700,11 +714,13 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   return {
     projects: state.projects,
     conversations: state.conversations,
+    conversationsHasMore: state.conversationsHasMore,
     messages,
     activeConvId: state.activeConvId,
     activeConversation,
     activeProject,
     loading: state.loading,
+    loadingOlderMessages: activeConversation ? loadingOlderMessagesRef.current.has(activeConversation.id) : false,
     previewKey: state.previewKey,
     safeMode: state.safeMode,
     setSafeMode: (v: boolean) => dispatch({ type: 'SET_SAFE_MODE', safeMode: v }),
@@ -747,6 +763,55 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       }
     },
     createConversation,
+    loadMoreConversations: async () => {
+      if (!state.serverBacked || !state.conversationsHasMore) return;
+      const result = await listConversations({ limit: 40, offset: state.conversations.length });
+      dispatch({ type: 'APPEND_CONVERSATIONS', conversations: result.conversations, hasMore: Boolean(result.pagination?.hasMore) });
+    },
+    searchConversations: async (q: string) => {
+      if (!state.serverBacked) return;
+      const text = q.trim();
+      if (!text) {
+        const result = await loadWorkspace(userKey, settings);
+        dispatch({ type: 'SET_CONVERSATIONS', conversations: result.conversations });
+        dispatch({ type: 'SET_CONVERSATIONS_HAS_MORE', hasMore: Boolean(result.conversationsHasMore) });
+        return;
+      }
+      const result = await searchConversations({ q: text, limit: 40, offset: 0 });
+      dispatch({ type: 'SET_CONVERSATIONS', conversations: result.conversations });
+      dispatch({ type: 'SET_CONVERSATIONS_HAS_MORE', hasMore: Boolean(result.pagination?.hasMore) });
+    },
+    loadOlderMessages: async (conversationId: string) => {
+      const conv = state.conversations.find((item) => item.id === conversationId);
+      if (!state.serverBacked || !conv || !conv.messagesHasMore || !conv.oldestMessageCursor) return;
+      if (loadingOlderMessagesRef.current.has(conversationId)) return;
+      loadingOlderMessagesRef.current.add(conversationId);
+      dispatch({ type: 'SET_LOADING', loading: state.loading });
+      try {
+        const page = await getConversationMessages(conversationId, { limit: 80, before: conv.oldestMessageCursor });
+        const older = Array.isArray(page.messages) ? page.messages : [];
+        if (older.length === 0) {
+          dispatch({
+            type: 'UPDATE_CONVERSATION',
+            id: conversationId,
+            updates: { messagesHasMore: false }
+          });
+          return;
+        }
+        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: conversationId, messages: [...older, ...(conv.messages || [])] });
+        dispatch({
+          type: 'UPDATE_CONVERSATION',
+          id: conversationId,
+          updates: {
+            oldestMessageCursor: new Date(older[0].timestamp).toISOString(),
+            messagesHasMore: Boolean(page.pagination?.hasMore)
+          }
+        });
+      } finally {
+        loadingOlderMessagesRef.current.delete(conversationId);
+        dispatch({ type: 'SET_LOADING', loading: state.loading });
+      }
+    },
     deleteConversation: (id: string) => {
       dispatch({ type: 'REMOVE_CONVERSATION', id });
       if (state.serverBacked) deleteConversationOnServer(id).catch(console.error);

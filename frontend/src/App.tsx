@@ -375,6 +375,9 @@ function AppContent() {
           loading={chat.loading}
           onSend={chat.sendMessage}
           onStop={chat.stop}
+          onLoadOlderMessages={chat.activeConversation ? () => chat.loadOlderMessages(chat.activeConversation!.id) : undefined}
+          canLoadOlderMessages={Boolean(chat.activeConversation?.messagesHasMore)}
+          loadingOlderMessages={Boolean(chat.loadingOlderMessages)}
           workingDirectory={chat.activeProject?.path || ''}
           productMode={settings.productMode}
         />
