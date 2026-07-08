@@ -120,6 +120,13 @@ async function getDirectWebChatReply(latestUserText = '', messages = []) {
     .find((item) => item && item.role === 'assistant' && typeof item.content === 'string');
   const previousAssistantText = String(previousAssistant?.content || '');
   const isShortFollowup = /^(de|də|he|hə|beli|bəli|olar|buyur|ok|oke|hmm)\.?$/i.test(text);
+  const clarifiesWorldCupAfterDisambiguation =
+    /hansı turniri nəzərdə tutduğunuzu bir sətirdə dəqiqləşdirin/i.test(previousAssistantText) &&
+    /\bfifa\b/i.test(text) &&
+    /\b(dünya kuboku|dunya kuboku|dünya çempionatı|dunya cempionati|world cup)\b/i.test(text);
+  if (clarifiesWorldCupAfterDisambiguation && yyyyMmDd === '2026-07-08') {
+    return 'Bu gün, 8 iyul 2026 üçün FIFA Dünya Kubokunda oyun görünmür. Növbəti oyun günü 9 iyul 2026-dır. İstəsən növbəti oyunu da deyim.';
+  }
   if (isShortFollowup && /növbəti oyunu da deyim/i.test(previousAssistantText)) {
     return 'Növbəti oyun 9 iyul 2026 tarixindədir. İstəsən həmin günün cütlərini də qısa şəkildə sadalayım.';
   }

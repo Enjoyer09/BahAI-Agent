@@ -790,6 +790,23 @@ async function extractImageText(buffer) {
   return result?.data?.text || '';
 }
 
+function isLikelyUsefulOcr(text = '') {
+  const value = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!value || value.length < 12) return false;
+  const alphaMatches = value.match(/[A-Za-zÀ-ÿА-Яа-яƏəĞğİıÖöŞşÜüÇç]/g) || [];
+  const digitMatches = value.match(/[0-9]/g) || [];
+  const weirdMatches = value.match(/[^A-Za-zÀ-ÿА-Яа-яƏəĞğİıÖöŞşÜüÇç0-9\s.,:;!?%()/'"&+-]/g) || [];
+  const alphaRatio = alphaMatches.length / value.length;
+  const weirdRatio = weirdMatches.length / value.length;
+  const hasWords = /\b[A-Za-zÀ-ÿА-Яа-яƏəĞğİıÖöŞşÜüÇç]{2,}\b/.test(value);
+  const hasTooManyBrokenCaps = (value.match(/\b[A-Z]{1,2}\b/g) || []).length >= 6;
+  if (!hasWords) return false;
+  if (alphaRatio < 0.35 && digitMatches.length < 4) return false;
+  if (weirdRatio > 0.12) return false;
+  if (hasTooManyBrokenCaps && value.length > 60) return false;
+  return true;
+}
+
 function decodeDataUrl(dataUrl) {
   if (!dataUrl || typeof dataUrl !== 'string') return null;
   const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
@@ -870,16 +887,34 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
 
     if (message.attachments?.length) {
       const textParts = [content, '[Sistem qeydi: İstifadəçi artıq attachment göndərib. Yenidən upload/drag-drop/link istəmədən mövcud attachment məzmununu analiz et.]'];
+      if (!isLocalOrFlakyModel && imageAttachments.length > 0) {
+        textParts.push('[Sistem qeydi: Şəkil əlavə olunub. Əsas cavabı şəklin vizual məzmununa əsaslandır. OCR mətni səs-küylü və qeyri-dəqiq ola bilər.]');
+      }
       const results = await Promise.all(message.attachments.map(async (attachment) => {
         if (attachment?.extractedText && typeof attachment.extractedText === 'string' && attachment.extractedText.trim()) {
-          return `\n\n[Attachment: ${attachment.name || 'attachment'} | ${attachment.mimeType || attachment.type || 'unknown'}]\n${attachment.extractedText.slice(0, 6000)}`;
+          const extractedText = String(attachment.extractedText || '').trim();
+          if (attachment?.type === 'image' && !isLocalOrFlakyModel) {
+            if (isLikelyUsefulOcr(extractedText)) {
+              return `\n\n[Attachment OCR hint: ${attachment.name || 'image'}]\n${extractedText.slice(0, 1200)}`;
+            }
+            return `\n\n[Attachment: ${attachment.name || 'image'} | ${attachment.mimeType || attachment.type || 'image'}]\nŞəkil əlavə olunub. Vizual analizə üstünlük ver.`;
+          }
+          return `\n\n[Attachment: ${attachment.name || 'attachment'} | ${attachment.mimeType || attachment.type || 'unknown'}]\n${extractedText.slice(0, 6000)}`;
         }
         if (attachment?.extractionError) return `\n\n[Attachment: ${attachment?.name || 'attachment'}]\nOxuma xətası: ${attachment.extractionError}`;
         if (!attachment?.url || attachment.url === '') return `\n\n[Attachment: ${attachment?.name || 'attachment'} | ${attachment?.mimeType || 'unknown'}]\nFayl əlavə olunub, amma məzmunu çıxarıla bilmədi.`;
         let extracted;
         try { extracted = await extractAttachment(attachment); }
         catch (error) { extracted = { name: attachment?.name || 'attachment', mimeType: attachment?.mimeType || attachment?.type || 'application/octet-stream', extractedText: `[Attachment emalında xəta: ${attachment?.name || 'attachment'}]` }; }
-        if (extracted.extractedText) return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${extracted.extractedText.slice(0, 6000)}`;
+        if (extracted.extractedText) {
+          if (attachment?.type === 'image' && !isLocalOrFlakyModel) {
+            if (isLikelyUsefulOcr(extracted.extractedText)) {
+              return `\n\n[Attachment OCR hint: ${extracted.name}]\n${String(extracted.extractedText).slice(0, 1200)}`;
+            }
+            return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\nŞəkil əlavə olunub. Vizual analizə üstünlük ver.`;
+          }
+          return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${String(extracted.extractedText).slice(0, 6000)}`;
+        }
         return `\n\n[Attachment: ${attachment?.name || extracted.name || 'attachment'} | ${attachment?.mimeType || extracted.mimeType || 'unknown'}]\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`;
       }));
       textParts.push(...results);
