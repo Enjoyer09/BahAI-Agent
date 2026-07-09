@@ -13,6 +13,7 @@ const CHECKPOINT_MODE = process.argv.includes('--checkpoint');
 const SLOW_MO_ARG = process.argv.find((arg) => arg.startsWith('--slow-mo='));
 const SLOW_MO = SLOW_MO_ARG ? Number(SLOW_MO_ARG.split('=')[1]) : 0;
 const REQUIRE_CLOUD_UI = !process.argv.includes('--skip-cloud-ui');
+const MATRIX_MODE = process.argv.includes('--matrix');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -72,6 +73,7 @@ async function ensureAuthenticated(page) {
 }
 
 async function assertCloudChatShell(page) {
+  console.log('Checking cloud chat shell...');
   await page.waitForFunction(() => {
     const text = document.body.innerText || '';
     return text.includes('BahAI Cloud');
@@ -85,6 +87,7 @@ async function assertCloudChatShell(page) {
 }
 
 async function sendSmokeMessage(page) {
+  console.log('Sending baseline smoke message...');
   const input = page.getByLabel('Message input', { exact: true });
   assert(await input.count() === 1, 'Message input tapılmadı');
   await input.fill('Salam. Bu bir prod smoke testdir. Zəhmət olmasa bir cümlə ilə cavab ver.');
@@ -107,6 +110,71 @@ async function sendSmokeMessage(page) {
   const body = await page.locator('body').innerText();
   assert(!body.includes('Qovluq aç'), 'Web chat shell desktop folder CTA göstərir');
   assert(!body.includes('Qovluq və ya repo əlavə et'), 'Web chat shell desktop repo CTA göstərir');
+}
+
+async function sendPromptAndWaitForStableAnswer(page, prompt, matcher, options = {}) {
+  console.log(`Prompt => ${prompt}`);
+  const input = page.getByLabel('Message input', { exact: true });
+  assert(await input.count() === 1, 'Message input tapılmadı');
+  await input.fill(prompt);
+
+  const sendButton = page.getByRole('button', { name: 'Send message' });
+  assert(await sendButton.count() === 1, 'Send button tapılmadı');
+  await sendButton.click();
+
+  const timeoutMs = options.timeoutMs || 45000;
+  const pollingStart = Date.now();
+  let matchedText = '';
+
+  while (Date.now() - pollingStart < timeoutMs) {
+    await page.waitForTimeout(1200);
+    const body = await page.locator('body').innerText();
+    if (typeof matcher === 'function' ? matcher(body) : matcher.test(body)) {
+      matchedText = body;
+      break;
+    }
+  }
+
+  assert(!!matchedText, `Prompt üçün gözlənilən cavab gəlmədi: ${prompt}`);
+  assert(!matchedText.includes('wttr.in/'), 'Raw weather tool URL UI-da göründü');
+  assert(!matchedText.includes('"name": "web_fetch"'), 'Raw tool JSON UI-da göründü');
+  assert(!matchedText.includes('arguments'), 'Raw tool arguments UI-da göründü');
+  assert(!matchedText.includes('function_call_output'), 'Raw function call UI-da göründü');
+  return matchedText;
+}
+
+async function runSmokeMatrix(page) {
+  const cases = [
+    {
+      name: 'date',
+      prompt: 'Bugün ayın neçəsidir?',
+      matcher: (body) => /Bu gün .*2026/i.test(body) || /iyul 2026/i.test(body)
+    },
+    {
+      name: 'weather',
+      prompt: 'Sumqayıtda hava necədir?',
+      matcher: (body) => /Sumqayıtda/i.test(body) && /°C/i.test(body)
+    },
+    {
+      name: 'sports',
+      prompt: 'Bugün FIFA Dünya Çempionatında hansı oyunlar var?',
+      matcher: (body) => /FIFA Dünya Çempionat/i.test(body) && /(Bu gün|bugün|8 iyul 2026|9 iyul 2026)/i.test(body),
+    },
+    {
+      name: 'code',
+      prompt: 'JavaScript-də async await nədir? Bir qısa nümunə ver.',
+      matcher: (body) => /async await/i.test(body) && /await/i.test(body)
+    }
+  ];
+
+  const results = [];
+  for (const testCase of cases) {
+    console.log(`Matrix case starting: ${testCase.name}`);
+    const text = await sendPromptAndWaitForStableAnswer(page, testCase.prompt, testCase.matcher, { timeoutMs: 50000 });
+    results.push({ name: testCase.name, ok: true, sample: text.slice(-280) });
+    console.log(`Matrix case ok: ${testCase.name}`);
+  }
+  return results;
 }
 
 async function createCheckpointFlow(token) {
@@ -175,8 +243,9 @@ async function resumeCheckpoint(token, checkpointId) {
   );
 }
 
-async function checkHealth() {
-  const res = await fetch(`${BASE_URL}/api/browsers`);
+async function checkHealth(token) {
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(`${BASE_URL}/api/browsers`, { headers });
   assert(res.ok, `/api/browsers failed: ${res.status}`);
   const data = await res.json();
   assert(Array.isArray(data.browsers), 'browsers payload yanlışdır');
@@ -185,9 +254,6 @@ async function checkHealth() {
 async function main() {
   console.log(`BahAI prod smoke starting: ${CHAT_URL}`);
   console.log(`Credentials: ${EMAIL}`);
-
-  await checkHealth();
-  console.log('Health ok: /api/browsers');
 
   const { chromium } = require(path.join(process.cwd(), 'backend', 'node_modules', 'playwright'));
   const browser = await chromium.launch({ headless: HEADLESS, slowMo: SLOW_MO });
@@ -199,6 +265,9 @@ async function main() {
     const token = await ensureAuthenticated(page);
     console.log('Auth ok');
 
+    await checkHealth(token);
+    console.log('Health ok: /api/browsers');
+
     if (REQUIRE_CLOUD_UI) {
       await assertCloudChatShell(page);
       console.log('Cloud chat shell ok');
@@ -206,6 +275,14 @@ async function main() {
 
     await sendSmokeMessage(page);
     console.log('Chat ok');
+
+    if (MATRIX_MODE) {
+      const matrixResults = await runSmokeMatrix(page);
+      console.log('Smoke matrix ok');
+      for (const result of matrixResults) {
+        console.log(`- ${result.name}: ok`);
+      }
+    }
 
     if (CHECKPOINT_MODE) {
       const checkpointText = await createCheckpointFlow(token);
@@ -226,16 +303,30 @@ async function main() {
       }
     }
 
-    const screenshotPath = path.join(artifactsDir, `prod-smoke-${Date.now()}.png`);
+    const suffix = MATRIX_MODE ? 'prod-smoke-matrix' : 'prod-smoke';
+    const screenshotPath = path.join(artifactsDir, `${suffix}-${Date.now()}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`Screenshot: ${screenshotPath}`);
     console.log('BahAI prod smoke passed.');
+  } catch (error) {
+    try {
+      const failureShot = path.join(artifactsDir, `prod-smoke-failure-${Date.now()}.png`);
+      await page.screenshot({ path: failureShot, fullPage: true });
+      console.error(`Failure screenshot: ${failureShot}`);
+      const bodyText = await page.locator('body').innerText().catch(() => '');
+      if (bodyText) {
+        console.error(`Failure body excerpt:\n${bodyText.slice(0, 2000)}`);
+      }
+    } catch (captureErr) {
+      console.error(`Failure diagnostics capture failed: ${captureErr.message}`);
+    }
+    throw error;
   } finally {
     await browser.close();
   }
 }
 
 main().catch((error) => {
-  console.error(`BahAI prod smoke failed: ${error.message}`);
+  console.error(`BahAI prod smoke failed: ${error.stack || error.message}`);
   process.exitCode = 1;
 });

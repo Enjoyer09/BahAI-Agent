@@ -281,3 +281,30 @@ OmniRoute P1:
 
 - `backend/tests/runner.test.js`
   - session failure/success marker çağırışları da yoxlanır
+
+### Update — 2026-07-09 Web Smoke Matrix
+
+- `scripts/prod-smoke.js`
+  - yeni `--matrix` rejimi əlavə olunub
+  - bu ssenariləri ardıcıl yoxlayır:
+    - date
+    - weather
+    - sports schedule wording
+    - short code explanation
+  - əlavə guard-lar:
+    - raw `wttr.in` URL UI-da görünməsin
+    - raw tool JSON görünməsin
+    - `arguments` və `function_call_output` parçaları görünməsin
+
+- `package.json`
+  - yeni script:
+    - `npm run smoke:prod:matrix`
+
+- `scripts/check-harness.js`
+  - yeni smoke script marker-i yoxlanır
+
+### Növbəti ən doğru addım
+
+1. Railway deploy üzərində `smoke:prod:matrix` real qaçır
+2. qırılan ssenariləri bir-bir functional fix et
+3. lazım olsa frontend store/UI qatında `provider_telemetry` üçün səssiz debug hook əlavə et

@@ -12,6 +12,7 @@
     "local": "node bin/cli.js",
     "smoke:gui": "node scripts/gui-smoke.js",
     "smoke:prod": "node scripts/prod-smoke.js",
+    "smoke:prod:matrix": "node scripts/prod-smoke.js --matrix",
     "smoke:desktop": "node scripts/desktop-smoke.js",
     "smoke:electron": "node scripts/electron-smoke.js",
     "smoke:prod:checkpoint": "node scripts/prod-smoke.js --checkpoint",

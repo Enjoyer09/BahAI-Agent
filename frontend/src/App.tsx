@@ -287,7 +287,7 @@ function AppContent() {
             </button>
             <div className="min-w-0 flex-1 text-center px-1">
               <div className="text-sm font-medium truncate" style={{ color: 'var(--fg-main)' }}>
-                {isWebProduct ? 'BahAI' : (chat.activeProject?.name || 'bahAI')}
+                {isWebProduct ? 'BahAI Cloud' : (chat.activeProject?.name || 'bahAI')}
               </div>
               <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
                 {isWebProduct ? 'Chat' : `${settings.executionMode === 'local' ? 'Local' : 'Cloud'} Desktop`}
@@ -327,7 +327,7 @@ function AppContent() {
               className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
               style={{ background: 'var(--bg-hover)', color: 'var(--fg-main)', border: '1px solid var(--border)' }}
             >
-              {isWebProduct ? 'BahAI' : `Desktop • ${settings.executionMode === 'local' ? 'Local' : 'Cloud'}`}
+              {isWebProduct ? 'BahAI Cloud' : `Desktop • ${settings.executionMode === 'local' ? 'Local' : 'Cloud'}`}
             </span>
             {isDesktopProduct && (
               <>
