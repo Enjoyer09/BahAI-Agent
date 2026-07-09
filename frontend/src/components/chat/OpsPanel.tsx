@@ -1,5 +1,5 @@
-import { Shield, CheckCircle2, Clock, ListChecks, Globe, Terminal as TerminalIcon, BrainCircuit, MonitorCog } from 'lucide-react';
-import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GateReceipt, GovernanceEntryPath, GuiCapabilityStatus, PlannerArtifact, Project, RuntimeArtifact } from '../../lib/types';
+import { Shield, CheckCircle2, Clock, ListChecks, Globe, Terminal as TerminalIcon, BrainCircuit, MonitorCog, Activity } from 'lucide-react';
+import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GateReceipt, GovernanceEntryPath, GuiCapabilityStatus, PlannerArtifact, Project, ProviderTelemetryEvent, RuntimeArtifact } from '../../lib/types';
 
 interface Props {
   safeMode: boolean;
@@ -26,6 +26,7 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
   const guiCapabilities = (projectMemory?.guiCapabilities || null) as GuiCapabilityStatus | null;
   const activeGuiSession = (projectMemory?.activeGuiSession || null) as ActiveGuiSession | null;
   const governance = (projectMemory?.governance || null) as { entryPath?: GovernanceEntryPath; gateReceipt?: GateReceipt } | null;
+  const providerTelemetry = (Array.isArray(projectMemory?.providerTelemetry) ? projectMemory.providerTelemetry : []) as ProviderTelemetryEvent[];
   return (
     <div className="h-full flex flex-col overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
       {/* Header */}
@@ -179,6 +180,44 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {providerTelemetry.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Activity size={13} style={{ color: 'var(--fg-muted)' }} />
+              <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--fg-muted)' }}>
+                Provider Telemetry
+              </span>
+            </div>
+            <div className="space-y-2">
+              {providerTelemetry.slice(-6).reverse().map((event, idx) => (
+                <div key={`${event.event}-${event.timestamp || idx}-${idx}`} className="rounded-lg p-3" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="text-[11px] font-semibold" style={{ color: 'var(--fg-main)' }}>
+                      {event.event}
+                    </div>
+                    <div className="text-[10px]" style={{ color: 'var(--fg-muted)' }}>
+                      {event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : ''}
+                    </div>
+                  </div>
+                  <div className="text-xs" style={{ color: 'var(--fg-secondary)' }}>
+                    {[event.providerId, event.model, event.wireApi].filter(Boolean).join(' • ') || 'provider event'}
+                  </div>
+                  {(event.previousProviderId || event.fromProviderId || event.toProviderId) && (
+                    <div className="text-[10px] mt-1 font-mono" style={{ color: 'var(--fg-muted)' }}>
+                      {[event.previousProviderId || event.fromProviderId, event.toProviderId].filter(Boolean).join(' -> ')}
+                    </div>
+                  )}
+                  {(event.status || event.message) && (
+                    <div className="text-[10px] mt-1" style={{ color: 'var(--fg-muted)' }}>
+                      {[event.status ? `status ${event.status}` : '', event.message || ''].filter(Boolean).join(' • ')}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

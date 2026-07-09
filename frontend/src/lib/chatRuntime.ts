@@ -1,4 +1,4 @@
-import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GateReceipt, GovernanceEntryPath, GuiCapabilityStatus, HumanCheckpoint, PlannerArtifact, RuntimeArtifact } from './types';
+import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GateReceipt, GovernanceEntryPath, GuiCapabilityStatus, HumanCheckpoint, PlannerArtifact, ProviderTelemetryEvent, RuntimeArtifact } from './types';
 
 export function isToolCallLikeText(content: string): boolean {
   const text = String(content || '').trim();
@@ -253,6 +253,19 @@ export function mergeRuntimeArtifactIntoMemory(memory: Record<string, unknown>, 
     };
   }
   return nextMemory;
+}
+
+export function mergeProviderTelemetryIntoMemory(memory: Record<string, unknown>, event: ProviderTelemetryEvent) {
+  const nextEvent = {
+    ...event,
+    timestamp: event.timestamp || Date.now()
+  };
+  const history = Array.isArray(memory.providerTelemetry) ? memory.providerTelemetry : [];
+  return {
+    ...memory,
+    lastProviderTelemetry: nextEvent,
+    providerTelemetry: [...history, nextEvent].slice(-20)
+  };
 }
 
 export function buildValidationSnapshot(result: string) {

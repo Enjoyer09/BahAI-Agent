@@ -173,6 +173,20 @@ export interface RuntimeArtifact {
   timestamp: number;
 }
 
+export interface ProviderTelemetryEvent {
+  event: 'provider_skip_cooldown' | 'provider_stream_start' | 'provider_failure' | 'provider_failover' | 'provider_wireapi_downgrade';
+  providerId?: string;
+  previousProviderId?: string;
+  fromProviderId?: string;
+  toProviderId?: string;
+  model?: string;
+  toModel?: string;
+  wireApi?: string;
+  status?: number | string | null;
+  message?: string;
+  timestamp?: number;
+}
+
 export interface GuiCapabilityStatus {
   summary: {
     status: 'ok' | 'degraded' | 'missing';
@@ -268,6 +282,7 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 export type SSEEvent =
   | { type: 'assistant_message'; message: any }
   | { type: 'assistant_delta'; content: string }
+  | ({ type: 'provider_telemetry' } & ProviderTelemetryEvent)
   | { type: 'tool_execution'; tool: string; args: string; tool_call_id?: string }
   | { type: 'tool_result'; result: any }
   | { type: 'task_plan'; items: string[] }

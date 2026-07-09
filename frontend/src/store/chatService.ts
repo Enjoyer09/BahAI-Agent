@@ -44,6 +44,7 @@ import {
   mergeGovernanceIntoMemory,
   mergeHumanCheckpointIntoMemory,
   mergeGuiObservationIntoMemory,
+  mergeProviderTelemetryIntoMemory,
 } from '../lib/chatRuntime';
 
 // ==========================================
@@ -317,6 +318,14 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   if (event.type === 'error') {
     trackChatError(ctx.settings.model, event.message);
     sink.addSystemMessage(`❌ Xəta: ${normalizeUiErrorMessage(event.message)}`);
+    return;
+  }
+
+  if (event.type === 'provider_telemetry') {
+    if (!activeProject?.id) return;
+    const mergedMemory = mergeProviderTelemetryIntoMemory(projectMemory, event);
+    sink.mergeProjectMemory(mergedMemory);
+    if (serverBacked) saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
     return;
   }
 

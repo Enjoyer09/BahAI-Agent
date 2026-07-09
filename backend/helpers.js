@@ -846,6 +846,11 @@ function isLikelyUsefulOcr(text = '') {
   return true;
 }
 
+function isImageInspectionPrompt(text = '') {
+  const value = String(text || '').toLowerCase();
+  return /\b(bax|buna bax|şəkil|sekil|foto|image|screenshot|bu nədir|bu nedir|nə görürsən|ne gorursen|təsvir et|tesvir et|analiz et)\b/i.test(value);
+}
+
 function decodeDataUrl(dataUrl) {
   if (!dataUrl || typeof dataUrl !== 'string') return null;
   const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
@@ -929,6 +934,9 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
       if (!isLocalOrFlakyModel && imageAttachments.length > 0) {
         textParts.push('[Sistem qeydi: Şəkil əlavə olunub. Əsas cavabı birbaşa görünən obyektlərə, səhnəyə, rənglərə və yerləşimə əsaslandır. OCR mətni səs-küylü və qeyri-dəqiq ola bilər.]');
         textParts.push('[Sistem qaydası - image: Əvvəl şəkildə görünən əsas obyektləri qısa təsvir et. Yalnız açıq və aydın görünən yazını qeyd et. Oxuna bilməyən və ya qeyri-müəyyən mətni təxmin etmə, uydurma, bərpa etmə. Əgər yazı aydın deyilsə sadəcə "yazı seçilmir" və ya "mətn aydın oxunmur" de. Captcha, poster, qiymət etiketi, sitat və s. kimi nəticələri yalnız şəkildə həqiqətən görünürsə yaz.]');
+        if (isImageInspectionPrompt(content)) {
+          textParts.push('[Sistem formatı - image reply: Cavabı 3 hissə ilə qur: 1) Şəkildə görünən əsas obyektlər/səhnə. 2) Oxunan mətn varsa yalnız aydın görünən qısa parçalar. 3) Əmin olmadığın hissələr üçün bunu açıq de. Kiçik detallar uydurma.]');
+        }
       }
       const results = await Promise.all(message.attachments.map(async (attachment) => {
         if (attachment?.extractedText && typeof attachment.extractedText === 'string' && attachment.extractedText.trim()) {
