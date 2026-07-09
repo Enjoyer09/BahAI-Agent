@@ -97,6 +97,25 @@ function isWelcomeLikeAssistantMessage(content: string, productMode?: Settings['
   return patterns.some((pattern) => normalized.includes(pattern));
 }
 
+function isWebChatHistoryNoise(message: Message): boolean {
+  const content = String(message.content || '').trim();
+  if (!content) return true;
+  if (message.role === 'system' || message.role === 'tool') return true;
+  if (isToolCallLikeText(content)) return true;
+  if (/^❌\s*xəta:/i.test(content)) return true;
+  if (/cavab tamamlanmadan əlaqə kəsildi/i.test(content)) return true;
+  if (/^(workflow:|faza:|marşrut:|səbəb:)/i.test(content)) return true;
+  if (/active gui session|cari visible browser sessiyası açıqdır/i.test(content)) return true;
+  if (/eyni browser sessiyasında davam edirəm/i.test(content)) return true;
+  if (/hazırdır\.\s*istəsən növbəti addımı bu sessiyada davam etdirə bilərik/i.test(content)) return true;
+  return false;
+}
+
+function sanitizeWebChatHistory(messages: Message[]): Message[] {
+  const filtered = messages.filter((message) => !isWebChatHistoryNoise(message));
+  return filtered.slice(-8);
+}
+
 function buildConversationTitleFromInput(input: string, productMode?: Settings['productMode']): string {
   const text = String(input || '')
     .replace(/\s+/g, ' ')
@@ -178,7 +197,10 @@ export async function handleSendMessage(
 
     const isLikelyLocalModel = !settings.model.includes('/') || settings.baseUrl.includes('localhost') || settings.baseUrl.includes('127.0.0.1');
     const MAX_HISTORY_MESSAGES = isLikelyLocalModel ? 8 : 16;
-    const historySlice = currentMsgs.slice(-MAX_HISTORY_MESSAGES);
+    const historySource = settings.productMode === 'web_chat'
+      ? sanitizeWebChatHistory(currentMsgs)
+      : currentMsgs;
+    const historySlice = historySource.slice(-MAX_HISTORY_MESSAGES);
     const preparedMessagesCore = historySlice.map((m, idx) => {
       const isRecent = idx >= historySlice.length - 6;
       const trimmedToolCalls = isRecent
@@ -652,6 +674,7 @@ export {
   getDefaultWorkspaceName,
   getWelcomeMessage,
   isWelcomeLikeAssistantMessage,
+  sanitizeWebChatHistory,
   buildConversationTitleFromInput,
   loadWorkspaceState,
   listConversations,

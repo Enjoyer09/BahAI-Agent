@@ -9,6 +9,7 @@ import {
   getDefaultWorkspaceName,
   getWelcomeMessage,
   isWelcomeLikeAssistantMessage,
+  sanitizeWebChatHistory,
   normalizeUiErrorMessage,
 } from './chatService';
 
@@ -77,6 +78,21 @@ describe('isWelcomeLikeAssistantMessage', () => {
 
   it('does not flag regular assistant replies', () => {
     expect(isWelcomeLikeAssistantMessage('Bakıda bu gün hava təxminən 30°C-dir.', 'web_chat')).toBe(false);
+  });
+});
+
+describe('sanitizeWebChatHistory', () => {
+  it('removes browser/session/error noise from web history', () => {
+    const result = sanitizeWebChatHistory([
+      { id: '1', role: 'assistant', content: 'Eyni browser sessiyasında davam edirəm.', timestamp: 1 },
+      { id: '2', role: 'assistant', content: '❌ Xəta: Cavab tamamlanmadan əlaqə kəsildi.', timestamp: 2 },
+      { id: '3', role: 'assistant', content: 'HP warranty ilə distributor zəmanəti fərqli ola bilər.', timestamp: 3 },
+      { id: '4', role: 'user', content: '120 ədəd notebook alınıb', timestamp: 4 },
+    ] as any);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].content).toContain('HP warranty');
+    expect(result[1].content).toContain('120 ədəd notebook');
   });
 });
 
