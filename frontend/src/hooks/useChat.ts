@@ -19,6 +19,7 @@ import {
   getDefaultConversationTitle,
   getDefaultWorkspaceName,
   getWelcomeMessage,
+  isWelcomeLikeAssistantMessage,
   buildConversationTitleFromInput,
   createProjectOnServer,
   updateProjectOnServer,
@@ -150,12 +151,14 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         id: defaultConvId,
         projectId: defaultProjId,
         title: settings.productMode === 'web_chat' ? 'Yeni chat' : 'Xoş Gəlmisiniz!',
-        messages: [{
-          id: generateId(),
-          role: 'assistant',
-          content: getWelcomeMessage(settings.productMode, false),
-          timestamp: Date.now(),
-        }],
+        messages: settings.productMode === 'web_chat'
+          ? []
+          : [{
+              id: generateId(),
+              role: 'assistant',
+              content: getWelcomeMessage(settings.productMode, false),
+              timestamp: Date.now(),
+            }],
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
@@ -335,6 +338,8 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const lastMsg = msgs[msgs.length - 1];
       const normalizedIncoming = String(msg.content || '').trim();
       const normalizedLast = String(lastMsg?.content || '').trim();
+      const nonSystemMessages = msgs.filter((item) => item.role !== 'system');
+      const hasUserMessage = msgs.some((item) => item.role === 'user');
       const simplifyAssistantText = (value: string) => value
         .replace(/\s+/g, ' ')
         .replace(/\([^)]*°f[^)]*\)/gi, '')
@@ -344,6 +349,18 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         .replace(/[.!?…]+$/g, '')
         .trim()
         .toLowerCase();
+      if (
+        msg.role === 'assistant' &&
+        normalizedIncoming &&
+        isWelcomeLikeAssistantMessage(normalizedIncoming, settings.productMode) &&
+        (hasUserMessage || nonSystemMessages.length > 1)
+      ) {
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
+          msgs.pop();
+          dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
+        }
+        return;
+      }
       const normalizedIncomingLoose = simplifyAssistantText(normalizedIncoming);
       const normalizedLastLoose = simplifyAssistantText(normalizedLast);
       const recentAssistantContents = msgs

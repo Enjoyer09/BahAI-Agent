@@ -8,6 +8,7 @@ import {
   getDefaultConversationTitle,
   getDefaultWorkspaceName,
   getWelcomeMessage,
+  isWelcomeLikeAssistantMessage,
   normalizeUiErrorMessage,
 } from './chatService';
 
@@ -62,6 +63,20 @@ describe('getWelcomeMessage', () => {
     const msg = getWelcomeMessage('web_chat', false);
     expect(msg).toContain('Yazın');
     expect(msg).toContain('kömək');
+  });
+});
+
+describe('isWelcomeLikeAssistantMessage', () => {
+  it('detects web intro text', () => {
+    expect(isWelcomeLikeAssistantMessage('Salam! Yazın, mən kömək edim.', 'web_chat')).toBe(true);
+  });
+
+  it('detects generic bahai intro text in web mode', () => {
+    expect(isWelcomeLikeAssistantMessage('Salam! Mən BahAI asistentiəm. Hazırsınızsa sualınızı yazın.', 'web_chat')).toBe(true);
+  });
+
+  it('does not flag regular assistant replies', () => {
+    expect(isWelcomeLikeAssistantMessage('Bakıda bu gün hava təxminən 30°C-dir.', 'web_chat')).toBe(false);
   });
 });
 

@@ -74,6 +74,29 @@ function getWelcomeMessage(productMode?: Settings['productMode'], serverBacked =
     : 'Salam! Mən bahAI agentiyəm. Layihə seçilmədiyi üçün sizin üçün avtomatik olaraq bir "bahAI Sandbox" (Qaralama) iş sahəsi yaratdım. İndi bura nəsə yaza bilərsiniz, sizə kömək etməyə hazıram! 🚀';
 }
 
+function isWelcomeLikeAssistantMessage(content: string, productMode?: Settings['productMode']): boolean {
+  const normalized = String(content || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  if (!normalized) return false;
+  const webWelcomePatterns = [
+    'salam! yazın, mən kömək edim',
+    'salam! söhbət tarixçəniz saxlanılıb',
+    'salam! mən bahai',
+    'mən bahai',
+  ];
+  const desktopWelcomePatterns = [
+    'salam! mən bahai agentiyəm',
+    'workspace yaratdım',
+    'bahai sandbox',
+  ];
+  const patterns = productMode === 'web_chat'
+    ? [...webWelcomePatterns, ...desktopWelcomePatterns]
+    : desktopWelcomePatterns;
+  return patterns.some((pattern) => normalized.includes(pattern));
+}
+
 function buildConversationTitleFromInput(input: string, productMode?: Settings['productMode']): string {
   const text = String(input || '')
     .replace(/\s+/g, ' ')
@@ -584,17 +607,20 @@ export async function loadWorkspace(
         name: getDefaultWorkspaceName(settings.productMode),
         path: 'workspace://default',
       });
-      const welcomeMessage: Message = {
-        id: generateId(),
-        role: 'assistant',
-        content: getWelcomeMessage(settings.productMode, true),
-        timestamp: Date.now(),
-      };
       const newConv = {
         ...created.conversation,
-        messages: [welcomeMessage],
+        messages: settings.productMode === 'web_chat'
+          ? []
+          : [{
+              id: generateId(),
+              role: 'assistant' as const,
+              content: getWelcomeMessage(settings.productMode, true),
+              timestamp: Date.now(),
+            }],
       };
-      await updateConversationOnServer(created.conversation.id, { messages: [welcomeMessage] });
+      if (newConv.messages.length > 0) {
+        await updateConversationOnServer(created.conversation.id, { messages: newConv.messages });
+      }
       return {
         projects: [created.project],
         conversations: [newConv],
@@ -624,6 +650,7 @@ export {
   getDefaultConversationTitle,
   getDefaultWorkspaceName,
   getWelcomeMessage,
+  isWelcomeLikeAssistantMessage,
   buildConversationTitleFromInput,
   loadWorkspaceState,
   listConversations,
