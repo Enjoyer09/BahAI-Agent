@@ -105,6 +105,14 @@ function AppContent() {
     if (auth.user && !auth.loading) setAuthModalOpen(false);
   }, [auth.user, auth.loading]);
 
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setAuthModalOpen(true);
+    };
+    window.addEventListener('bahai-auth-expired', handleAuthExpired as EventListener);
+    return () => window.removeEventListener('bahai-auth-expired', handleAuthExpired as EventListener);
+  }, []);
+
   // Show auth modal when on /chat but not logged in (online mode only)
   useEffect(() => {
     if (!auth.loading && !auth.user && isChat) {

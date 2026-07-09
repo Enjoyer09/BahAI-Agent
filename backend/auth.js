@@ -466,10 +466,10 @@ const authRateLimit = rateLimit({
 
 // ==========================================
 // P1-FIX: JWT Refresh Token System
-// Short-lived access token (15min) + longer refresh token (7d).
+// Short-lived access token (1h) + longer refresh token (7d).
 // On 401 the client calls /refresh to get a new pair without re-login.
 // ==========================================
-const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
+const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '1h';
 const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || '7d';
 
 function generateTokenPair(payload) {

@@ -5,6 +5,16 @@
 import { API_BASE_URL } from './constants';
 import type { ActionCenterInteraction, Attachment, Conversation, GuiCapabilityStatus, Message, Project, SSEEvent } from './types';
 
+function notifyAuthExpired(message = 'Sessiya vaxtı bitib. Yenidən daxil olun.') {
+  try {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('refresh_token');
+    window.dispatchEvent(new CustomEvent('bahai-auth-expired', { detail: { message } }));
+  } catch {
+    // ignore
+  }
+}
+
 function getAuthHeader() {
   const token = localStorage.getItem('auth_token');
   return token ? { 'Authorization': `Bearer ${token}` } : {};
@@ -27,7 +37,19 @@ async function apiFetch(input: string, init: RequestInit = {}, retryOnLocalAuth 
   for (const [key, value] of Object.entries(authHeader)) headers.set(key, value);
 
   const response = await fetch(input, { ...init, headers });
-  if (response.status !== 403 || !retryOnLocalAuth) return response;
+  if (response.status === 401) {
+    notifyAuthExpired('Sessiya vaxtı bitib. Yenidən daxil olun.');
+    return response;
+  }
+  if (response.status !== 403 || !retryOnLocalAuth) {
+    if (response.status === 403) {
+      const payload = await response.clone().json().catch(() => null);
+      if (/sessiya vaxtı bitib|etibarsızdır/i.test(String(payload?.error || ''))) {
+        notifyAuthExpired(String(payload.error || 'Sessiya vaxtı bitib. Yenidən daxil olun.'));
+      }
+    }
+    return response;
+  }
 
   if (!(await isLocalMode())) return response;
   localStorage.removeItem('auth_token');
