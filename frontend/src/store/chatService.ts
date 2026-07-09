@@ -141,6 +141,7 @@ export interface SendMessageContext {
   executionArtifacts: ExecutionArtifact[];
   serverBacked: boolean;
   safeMode: boolean;
+  signal?: AbortSignal;
   sink: EventSink;
 }
 
@@ -244,7 +245,7 @@ export async function handleSendMessage(
         currentMsgs: { current: currentMsgs },
         streamBufferRef,
       }),
-      undefined
+      ctx.signal
     );
 
     const pendingAssistant = normalizeAssistantText(streamBufferRef.current || '');

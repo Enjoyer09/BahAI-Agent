@@ -165,6 +165,7 @@ export async function sendChatMessage(
   let done = false;
   let sawDoneMarker = false;
   let sawAnyEvent = false;
+  let sawAssistantOutput = false;
 
   try {
     while (!done) {
@@ -186,6 +187,9 @@ export async function sendChatMessage(
           try {
             const data = JSON.parse(dataStr) as SSEEvent;
             sawAnyEvent = true;
+            if (data?.type === 'assistant_delta' || data?.type === 'assistant_message') {
+              sawAssistantOutput = true;
+            }
             onEvent(data);
           } catch {
             // ignore
@@ -196,6 +200,14 @@ export async function sendChatMessage(
   } catch (err: any) {
     const message = String(err?.message || '');
     if (sawDoneMarker || sawAnyEvent || /network error|failed to fetch|load failed/i.test(message)) {
+      if (!sawDoneMarker && sawAnyEvent && !signal?.aborted) {
+        onEvent({
+          type: 'error',
+          message: sawAssistantOutput
+            ? 'Cavab tamamlanmadan əlaqə kəsildi. Gələn hissə göstərildi; qalıq üçün yenidən göndərin.'
+            : 'Cavab başlamadan əlaqə kəsildi. Yenidən cəhd edin.'
+        } as SSEEvent);
+      }
       return;
     }
     throw err;
@@ -208,10 +220,22 @@ export async function sendChatMessage(
         return;
       }
       const data = JSON.parse(payload) as SSEEvent;
+      if (data?.type === 'assistant_delta' || data?.type === 'assistant_message') {
+        sawAssistantOutput = true;
+      }
       onEvent(data);
     } catch {
       // ignore
     }
+  }
+
+  if (!sawDoneMarker && sawAnyEvent && !signal?.aborted) {
+    onEvent({
+      type: 'error',
+      message: sawAssistantOutput
+        ? 'Cavab tamamlanmadan əlaqə kəsildi. Gələn hissə göstərildi; qalıq üçün yenidən göndərin.'
+        : 'Cavab yarımçıq dayandı. Yenidən cəhd edin.'
+    } as SSEEvent);
   }
 }
 

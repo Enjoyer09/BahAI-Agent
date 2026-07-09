@@ -579,7 +579,8 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     const nextTitle = shouldAutoRenameConversation ? buildConversationTitleFromInput(input, settings.productMode) : activeConv?.title;
 
     // Add user message to conversation
-    const currentMsgs = [...messages, userMsg];
+    const baseMessages = Array.isArray(activeConv?.messages) ? activeConv.messages : [];
+    const currentMsgs = [...baseMessages, userMsg];
     dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: currentMsgs });
     if (state.serverBacked) {
       dispatch({ type: 'UPDATE_CONVERSATION', id: convId, updates: { messagesLoaded: true } });
@@ -611,6 +612,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       executionArtifacts: state.executionArtifacts,
       serverBacked: state.serverBacked,
       safeMode: state.safeMode,
+      signal: controller.signal,
       sink: eventSink,
     };
 

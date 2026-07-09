@@ -56,7 +56,7 @@ function isGuiContinuationRequest(text = '') {
   const value = String(text || '').toLowerCase();
   if (extractUrlFromGuiRequest(value)) return false;
   if (isGuiLoginResumeRequest(value) || isGuiLoginCheckpointRequest(value) || isGuiObserveSelfTestRequest(value)) return false;
-  return /(axtar|search|tap|filter|filtr|qiymət|qiymet|sort|sırala|sirala|click|klik|bax|observe|goster|göstər|ara)/i.test(value);
+  return /\b(axtar|search|tap|filter|filtr|qiymət|qiymet|sort|sırala|sirala|click|klik|bax|observe|goster|göstər|ara)\b/i.test(value);
 }
 
 function buildGuiBrowserOpenArgs({

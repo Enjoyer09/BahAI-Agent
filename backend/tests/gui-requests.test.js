@@ -59,6 +59,12 @@ describe('GUI request classifiers', () => {
       isGuiContinuationRequest('GUI agent chrome da laptopmarket.az saytını aç')
     ).toBe(false);
   });
+
+  it('does not treat normal descriptive chat text as gui continuation', () => {
+    expect(
+      isGuiContinuationRequest('hp warranty check sehifesinde warranty expired gosterir amma distributer malin qarantiyada oldugunu deyir. ne meseleydi?')
+    ).toBe(false);
+  });
 });
 
 describe('buildGuiBrowserOpenArgs', () => {
