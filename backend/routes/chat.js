@@ -76,15 +76,22 @@ async function getDirectWebChatReply(latestUserText = '', messages = []) {
     baku: { wttr: 'Baku', label: 'Bakıda' },
     bakı: { wttr: 'Baku', label: 'Bakıda' },
     baki: { wttr: 'Baku', label: 'Bakıda' },
+    bakida: { wttr: 'Baku', label: 'Bakıda' },
+    bakıda: { wttr: 'Baku', label: 'Bakıda' },
     gence: { wttr: 'Ganja', label: 'Gəncədə' },
     gəncə: { wttr: 'Ganja', label: 'Gəncədə' },
     ganja: { wttr: 'Ganja', label: 'Gəncədə' },
+    gencede: { wttr: 'Ganja', label: 'Gəncədə' },
+    gəncədə: { wttr: 'Ganja', label: 'Gəncədə' },
     sumqayit: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
     sumqayıt: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
     sumgayit: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
+    sumqayitda: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
+    sumqayıtda: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
+    sumgayitda: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
   };
   const isWeatherQuery = /\b(hava|weather|temperatur|temperature|dərəcə|derece)\b/i.test(text);
-  const weatherCityMatch = text.match(/\b(baku|bakı|baki|gence|gəncə|ganja|sumqayit|sumqayıt|sumgayit)\b/i);
+  const weatherCityMatch = text.match(/\b(baku|bakı|baki|bakida|bakıda|gence|gəncə|ganja|gencede|gəncədə|sumqayit|sumqayıt|sumgayit|sumqayitda|sumqayıtda|sumgayitda)\b/i);
   if (isWeatherQuery && weatherCityMatch) {
     const cityKey = weatherCityMatch[1].toLowerCase();
     const cityMeta = weatherCityMap[cityKey];

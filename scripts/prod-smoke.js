@@ -86,8 +86,32 @@ async function assertCloudChatShell(page) {
   assert(!body.includes('Desktop Runtime Status'), 'Web shell desktop runtime panelini göstərir');
 }
 
+async function startFreshChat(page) {
+  console.log('Starting fresh chat...');
+  const ariaButton = page.getByRole('button', { name: 'New chat' });
+  if (await ariaButton.count()) {
+    await ariaButton.first().click();
+    await page.waitForTimeout(700);
+    return;
+  }
+  const textButton = page.getByRole('button', { name: 'Yeni chat' });
+  if (await textButton.count()) {
+    await textButton.first().click();
+    await page.waitForTimeout(700);
+  }
+}
+
+async function waitForComposerReady(page, timeoutMs = 45000) {
+  await page.waitForFunction(() => {
+    const send = document.querySelector('[aria-label="Send message"]');
+    const stop = document.querySelector('[aria-label="Stop generation"]');
+    return Boolean(send) && !stop;
+  }, { timeout: timeoutMs });
+}
+
 async function sendSmokeMessage(page) {
   console.log('Sending baseline smoke message...');
+  await waitForComposerReady(page);
   const input = page.getByLabel('Message input', { exact: true });
   assert(await input.count() === 1, 'Message input tapılmadı');
   await input.fill('Salam. Bu bir prod smoke testdir. Zəhmət olmasa bir cümlə ilə cavab ver.');
@@ -96,16 +120,11 @@ async function sendSmokeMessage(page) {
   assert(await sendButton.count() === 1, 'Send button tapılmadı');
   await sendButton.click();
 
-  await page.waitForTimeout(1500);
   await page.waitForFunction(() => {
     const text = document.body.innerText || '';
     return text.includes('prod smoke testdir') || text.includes('Bu bir prod smoke testdir');
-  }, { timeout: 10000 }).catch(() => {});
-
-  await page.waitForFunction(() => {
-    const text = document.body.innerText || '';
-    return text.includes('Tool call') || text.includes('Salam') || text.includes('Cavab') || text.includes('bahAI');
-  }, { timeout: 30000 });
+  }, { timeout: 10000 });
+  await waitForComposerReady(page, 50000);
 
   const body = await page.locator('body').innerText();
   assert(!body.includes('Qovluq aç'), 'Web chat shell desktop folder CTA göstərir');
@@ -114,6 +133,7 @@ async function sendSmokeMessage(page) {
 
 async function sendPromptAndWaitForStableAnswer(page, prompt, matcher, options = {}) {
   console.log(`Prompt => ${prompt}`);
+  await waitForComposerReady(page);
   const input = page.getByLabel('Message input', { exact: true });
   assert(await input.count() === 1, 'Message input tapılmadı');
   await input.fill(prompt);
@@ -134,6 +154,8 @@ async function sendPromptAndWaitForStableAnswer(page, prompt, matcher, options =
       break;
     }
   }
+
+  await waitForComposerReady(page, timeoutMs);
 
   assert(!!matchedText, `Prompt üçün gözlənilən cavab gəlmədi: ${prompt}`);
   assert(!matchedText.includes('wttr.in/'), 'Raw weather tool URL UI-da göründü');
@@ -273,6 +295,7 @@ async function main() {
       console.log('Cloud chat shell ok');
     }
 
+    await startFreshChat(page);
     await sendSmokeMessage(page);
     console.log('Chat ok');
 
