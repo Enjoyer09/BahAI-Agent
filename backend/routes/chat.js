@@ -211,7 +211,7 @@ router.post('/', async (req, res) => {
   const resolvedWD = productMode === 'web_chat' ? '' : resolveWorkingDirectory(undefined, req.user);
   const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '6', 10);
   const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '180000', 10);
-  const LLM_TIMEOUT_CHAT = parseInt(process.env.LLM_TIMEOUT_CHAT || '60000', 10);
+  const LLM_TIMEOUT_CHAT = parseInt(process.env.LLM_TIMEOUT_CHAT || '90000', 10);
   const providerRuntime = require('../helpers').providerRuntime || { markProviderFailure: () => {}, canUseProviderNow: () => true, markProviderSuccess: () => {}, reorderCandidatesForSession: (items) => items };
   const providerSessionKey = `${productMode || 'desktop_code'}:${req.user?.id || 'anon'}:${conversationId || 'default'}`;
 
@@ -363,6 +363,10 @@ router.post('/', async (req, res) => {
 Cari istifadəçi üçün mümkün olduqda metrik vahidlərdən istifadə et.
 Temperaturu Celsius (${String.fromCharCode(176)}C) ilə ver, Fahrenheit vermə; istifadəçi xüsusi istəməsə ABŞ vahidlərinə keçmə.
 Qısa, aydın, insan kimi cavab ver.
+ Web chat cavablarında standart olaraq maksimum 4-6 cümlə yaz.
+ İstifadəçi istəməyibsə markdown heading (\`#\`, \`##\`, \`###\`) işlətmə.
+ Lazım olmadıqca uzun bullet siyahısı qurma; əvvəl 1 qısa cavab ver, sonra istəsə detallandır.
+ Cavabı şişirtmə, eyni fikri təkrar etmə, nitqi esse formasına salma.
 Web chat rejimində lokal workspace, fayl sistemi, qovluq yolu, sandbox, project root və daxili tool JSON-u haqqında danışma.
 İstifadəçi açıq şəkildə kod/repo analizi istəməyibsə lokal qovluğu yoxlama.`
     : `Sən BahAI agentisən — Azərbaycan dilində AI kodlaşdırma köməkçisi.`;
