@@ -113,7 +113,9 @@ async function runChatSession({
         buildDeepSeekRecoveryMessages: dependencies.buildDeepSeekRecoveryMessages,
         writeSse: (payload) => writeSse(res, payload),
         shouldEmitDebugEvent,
-        llmTimeoutMs: dependencies.llmTimeoutMs
+        llmTimeoutMs: dependencies.llmTimeoutMs,
+        onProviderTelemetry: dependencies.onProviderTelemetry,
+        providerSessionKey: dependencies.providerSessionKey
       });
 
       if (runnerResult.errorEvent) {

@@ -1,3 +1,18 @@
+function isRetryableProviderError(error, isResponsesSchemaMismatchError) {
+  const status = error?.status || error?.code;
+  const msg = String(error?.message || '').toLowerCase();
+  if (status === 401) return true;
+  if (status === 408 || status === 409 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
+  if (status === 400 && (msg.includes('provider returned error') || msg.includes('temporarily unavailable'))) return true;
+  if (isResponsesSchemaMismatchError(error)) return true;
+  if (!status && (msg.includes('network') || msg.includes('timeout') || msg.includes('fetch failed') || msg.includes('econnrefused') || msg.includes('econnreset'))) return true;
+  return false;
+}
+
+function modelDisablesTools(model = '') {
+  return /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(String(model || ''));
+}
+
 async function openAiStreamWithFallback({
   currentMessages,
   effectiveModel,
@@ -15,7 +30,9 @@ async function openAiStreamWithFallback({
   buildDeepSeekRecoveryMessages,
   writeSse,
   shouldEmitDebugEvent,
-  llmTimeoutMs
+  llmTimeoutMs,
+  onProviderTelemetry,
+  providerSessionKey
 }) {
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), llmTimeoutMs);
@@ -28,27 +45,64 @@ async function openAiStreamWithFallback({
   let deepSeekRecoveryUsed = false;
   let providerNoToolsFallbackUsed = false;
 
+  async function createStream(provider, providerClient, model, messages, disableTools = false) {
+    const apiInputMessages = await normalizeMessagesForModel(messages, model);
+    const shouldDisableTools = disableTools || modelDisablesTools(model);
+    if (provider.wireApi === 'responses') {
+      return providerClient.responses.create({
+        model,
+        input: mapMessagesToResponsesInput(apiInputMessages),
+        tools: shouldDisableTools ? undefined : mapToolsToResponsesTools(phaseTools),
+        stream: true,
+        parallel_tool_calls: false
+      }, { signal: abortController.signal });
+    }
+    return providerClient.chat.completions.create({
+      model,
+      messages: apiInputMessages,
+      tools: shouldDisableTools ? undefined : phaseTools,
+      temperature: 0.2,
+      stream: true
+    }, { signal: abortController.signal });
+  }
+
   try {
     while (true) {
       try {
-        const apiInputMessages = await normalizeMessagesForModel(nextMessages, nextModel);
-        if (nextProvider.wireApi === 'responses') {
-          stream = await nextClient.responses.create({
-            model: nextModel,
-            input: mapMessagesToResponsesInput(apiInputMessages),
-            tools: isLocalOrFlakyModel ? undefined : mapToolsToResponsesTools(phaseTools),
-            stream: true,
-            parallel_tool_calls: false
-          }, { signal: abortController.signal });
-        } else {
-          stream = await nextClient.chat.completions.create({
-            model: nextModel,
-            messages: apiInputMessages,
-            tools: isLocalOrFlakyModel ? undefined : phaseTools,
-            temperature: 0.2,
-            stream: true
-          }, { signal: abortController.signal });
+        if (providerCandidates.length > 1 && !providerRuntime.canUseProviderNow(nextProvider.id)) {
+          const warmAlternative = providerCandidates.find((candidate) => (
+            candidate.id !== nextProvider.id && providerRuntime.canUseProviderNow(candidate.id)
+          ));
+          if (warmAlternative) {
+            onProviderTelemetry?.({
+              event: 'provider_skip_cooldown',
+              fromProviderId: nextProvider.id,
+              toProviderId: warmAlternative.id,
+              toModel: warmAlternative.model,
+              toBaseURL: warmAlternative.baseURL
+            });
+            nextProvider = warmAlternative;
+            nextClient = buildOpenAIClient(warmAlternative);
+            nextModel = warmAlternative.model;
+          }
         }
+
+        stream = await createStream(
+          nextProvider,
+          nextClient,
+          nextModel,
+          nextMessages,
+          isLocalOrFlakyModel
+        );
+        providerRuntime.markProviderSuccess(nextProvider.id);
+        providerRuntime.markSessionProviderSuccess?.(providerSessionKey, nextProvider.id);
+        onProviderTelemetry?.({
+          event: 'provider_stream_start',
+          providerId: nextProvider.id,
+          model: nextModel,
+          baseURL: nextProvider.baseURL,
+          wireApi: nextProvider.wireApi
+        });
 
         return {
           stream,
@@ -59,46 +113,38 @@ async function openAiStreamWithFallback({
         };
       } catch (apiErr) {
         let currentErr = apiErr;
-        const isRetryable = (() => {
-          const st = currentErr?.status || currentErr?.code;
-          const msg = String(currentErr?.message || '').toLowerCase();
-          if (st === 401) return true;
-          if (st === 429 || st === 500 || st === 502 || st === 503 || st === 504) return true;
-          if (st === 400 && msg.includes('provider returned error')) return true;
-          if (isResponsesSchemaMismatchError(currentErr)) return true;
-          if (!st && (msg.includes('network') || msg.includes('timeout') || msg.includes('fetch failed'))) return true;
-          return false;
-        })();
+        const isRetryable = isRetryableProviderError(currentErr, isResponsesSchemaMismatchError);
 
         if (isRetryable && providerCandidates.length > 1) {
           providerRuntime.markProviderFailure(nextProvider.id);
+          providerRuntime.markSessionProviderFailure?.(providerSessionKey, nextProvider.id);
+          onProviderTelemetry?.({
+            event: 'provider_failure',
+            providerId: nextProvider.id,
+            model: nextModel,
+            baseURL: nextProvider.baseURL,
+            status: currentErr?.status || currentErr?.code || null,
+            message: String(currentErr?.message || '').slice(0, 240)
+          });
           const alternatives = providerCandidates.filter((p) => p.id !== nextProvider.id && providerRuntime.canUseProviderNow(p.id));
           for (const alt of alternatives) {
             try {
               const altClient = buildOpenAIClient(alt);
-              const altApiInputMessages = await normalizeMessagesForModel(nextMessages, alt.model);
-              const altIsLocal = /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(alt.model);
-              if (alt.wireApi === 'responses') {
-                stream = await altClient.responses.create({
-                  model: alt.model,
-                  input: mapMessagesToResponsesInput(altApiInputMessages),
-                  tools: altIsLocal ? undefined : mapToolsToResponsesTools(phaseTools),
-                  stream: true,
-                  parallel_tool_calls: false
-                }, { signal: abortController.signal });
-              } else {
-                stream = await altClient.chat.completions.create({
-                  model: alt.model,
-                  messages: altApiInputMessages,
-                  tools: altIsLocal ? undefined : phaseTools,
-                  temperature: 0.2,
-                  stream: true
-                }, { signal: abortController.signal });
-              }
+              stream = await createStream(alt, altClient, alt.model, nextMessages, false);
               nextProvider = alt;
               nextClient = altClient;
               nextModel = alt.model;
               providerRuntime.markProviderSuccess(alt.id);
+              providerRuntime.markSessionProviderSuccess?.(providerSessionKey, alt.id);
+              onProviderTelemetry?.({
+                event: 'provider_failover',
+                fromProviderId: activeProvider?.id || null,
+                previousProviderId: nextProvider.id,
+                providerId: alt.id,
+                model: alt.model,
+                baseURL: alt.baseURL,
+                wireApi: alt.wireApi
+              });
               console.log(`🔁 Provider failover: switched to ${alt.id}`);
               return {
                 stream,
@@ -110,22 +156,33 @@ async function openAiStreamWithFallback({
             } catch (altErr) {
               currentErr = altErr;
               providerRuntime.markProviderFailure(alt.id);
+              providerRuntime.markSessionProviderFailure?.(providerSessionKey, alt.id);
+              onProviderTelemetry?.({
+                event: 'provider_failure',
+                providerId: alt.id,
+                model: alt.model,
+                baseURL: alt.baseURL,
+                status: altErr?.status || altErr?.code || null,
+                message: String(altErr?.message || '').slice(0, 240)
+              });
             }
           }
           if (!stream && isResponsesSchemaMismatchError(currentErr) && nextProvider.wireApi === 'responses') {
             try {
               const downgradedProvider = { ...nextProvider, wireApi: 'chat_completions' };
               const downgradedClient = buildOpenAIClient(downgradedProvider);
-              const downgradedMessages = await normalizeMessagesForModel(nextMessages, nextModel);
-              stream = await downgradedClient.chat.completions.create({
-                model: nextModel,
-                messages: downgradedMessages,
-                tools: isLocalOrFlakyModel ? undefined : phaseTools,
-                temperature: 0.2,
-                stream: true
-              }, { signal: abortController.signal });
+              stream = await createStream(downgradedProvider, downgradedClient, nextModel, nextMessages, isLocalOrFlakyModel);
               nextProvider = downgradedProvider;
               nextClient = downgradedClient;
+              providerRuntime.markProviderSuccess(downgradedProvider.id);
+              providerRuntime.markSessionProviderSuccess?.(providerSessionKey, downgradedProvider.id);
+              onProviderTelemetry?.({
+                event: 'provider_wireapi_downgrade',
+                providerId: downgradedProvider.id,
+                model: nextModel,
+                baseURL: downgradedProvider.baseURL,
+                wireApi: downgradedProvider.wireApi
+              });
               console.log(`🔁 Provider downgrade: switched ${nextProvider.id} to chat_completions`);
               return {
                 stream,
@@ -140,6 +197,15 @@ async function openAiStreamWithFallback({
           }
         } else {
           providerRuntime.markProviderFailure(nextProvider.id);
+          providerRuntime.markSessionProviderFailure?.(providerSessionKey, nextProvider.id);
+          onProviderTelemetry?.({
+            event: 'provider_failure',
+            providerId: nextProvider.id,
+            model: nextModel,
+            baseURL: nextProvider.baseURL,
+            status: currentErr?.status || currentErr?.code || null,
+            message: String(currentErr?.message || '').slice(0, 240)
+          });
         }
 
         if (currentErr.name === 'AbortError') {
@@ -210,7 +276,9 @@ async function openAiStreamWithFallback({
         } else if (currentErr.status === 429) {
           userMsg = 'API limiti aşıldı (rate limit). 1-2 dəqiqə gözləyib yenidən cəhd edin.';
         } else if (currentErr.status === 503) {
-          userMsg = 'AI servisi müvəqqəti əlçatmazdır. Mesajınız çox böyük ola bilər — daha qısa mesaj göndərin və ya bir neçə dəqiqə gözləyin.';
+          userMsg = providerCandidates.length > 1
+            ? 'AI servisləri hazırda müvəqqəti əlçatmaz oldu. Sistem arxa planda alternativ provider-ləri sınadı, amma cavab ala bilmədi. Bir az sonra yenidən yoxlayaq.'
+            : 'AI servisi müvəqqəti əlçatmazdır. Mesajınız çox böyük ola bilər — daha qısa mesaj göndərin və ya bir neçə dəqiqə gözləyin.';
         } else if (currentErr.status === 404) {
           if (isOllamaUrl) {
             userMsg = `Ollama-da "${nextModel}" modeli quraşdırılmayıb. Terminal-da bunu icra edin: \`ollama pull ${nextModel}\``;
@@ -227,7 +295,9 @@ async function openAiStreamWithFallback({
         ) {
           userMsg = `🦙 Ollama xidməti işləmir (${nextProvider.baseURL}). Terminal-da bunu icra edin:\n\n\`\`\`\nollama serve\n\`\`\`\n\nSonra modeli yükləyin: \`ollama pull ${nextModel}\`\n\nVə ya AYARLAR-dan Cloud modelinə (Claude Sonnet 4.5 və ya 'Auto') keçin.`;
         } else if (errLower.includes('connection error') || errLower.includes('fetch failed') || errLower.includes('econnrefused')) {
-          userMsg = `Şəbəkə xətası: ${nextProvider.baseURL}-ə qoşula bilmədim. İnternet bağlantınızı və baseURL-i yoxlayın.`;
+          userMsg = providerCandidates.length > 1
+            ? 'Şəbəkə problemi səbəbilə AI provider-lərlə əlaqə qurmaq alınmadı. Sistem alternativləri sınadı, amma bu dəfə cavab çıxmadı.'
+            : `Şəbəkə xətası: ${nextProvider.baseURL}-ə qoşula bilmədim. İnternet bağlantınızı və baseURL-i yoxlayın.`;
         }
 
         return {
@@ -241,5 +311,7 @@ async function openAiStreamWithFallback({
 }
 
 module.exports = {
-  openAiStreamWithFallback
+  openAiStreamWithFallback,
+  isRetryableProviderError,
+  modelDisablesTools
 };

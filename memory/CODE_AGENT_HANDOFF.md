@@ -194,3 +194,90 @@ Run these again after new edits.
   2. confirm browser opens
   3. confirm chat shows Action Center checkpoint instead of `❌ Xəta: network error`
   4. click `Login oldum` only after manual login
+
+## Update — 2026-07-09 OmniRoute P0
+
+Web BahAI üçün provider routing artıq daha məqsədli işləyir.
+
+- `backend/chat/providers.js`
+  - `buildProviderCandidates(...)` indi `hasImageAttachment` və `webTaskType` qəbul edir.
+  - `web_chat` üçün ayrıca model routing əlavə olunub:
+    - `WEB_CHAT_FAST_MODEL`
+    - `WEB_CHAT_SMART_MODEL`
+    - `WEB_CHAT_VISION_MODEL`
+    - `WEB_CHAT_CODE_MODEL`
+  - OmniRoute gateway üstünlüyü əlavə olunub:
+    - `OMNIROUTE_ENABLED`
+    - `OMNIROUTE_BASE_URL`
+    - `OMNIROUTE_API_KEY`
+    - `OMNIROUTE_MODEL`
+
+- `backend/routes/chat.js`
+  - web chat sorğusu indi sadə şəkildə `general / code / vision` kimi təsnif olunur
+  - image attachment varsa `vision` route prioritet alır
+
+- `backend/chat/runner.js`
+  - provider failover davranışı sərtləşdirilib
+  - 503 / 429 / timeout / network tipli xətalarda alternativ provider-lərə sakit retry edilir
+  - cooldown-da olan provider başlanğıcda skip oluna bilir
+  - multi-provider tam uğursuz olanda userə daha yumşaq error mesajı qaytarılır
+
+- Testlər
+  - `backend/tests/providers.test.js` genişləndirilib
+  - `backend/tests/runner.test.js` əlavə olunub
+  - Keçən yoxlamalar:
+    - `npm test --prefix backend -- tests/providers.test.js tests/runner.test.js`
+    - `node --check backend/chat/providers.js`
+    - `node --check backend/chat/runner.js`
+    - `node --check backend/routes/chat.js`
+
+### Növbəti ən doğru addım
+
+OmniRoute P1:
+
+1. ardıcıl fail edən provider-lər üçün session-level sticky avoidance əlavə et
+2. hansı provider/model seçildiyini server-side event/log səviyyəsində izlə
+3. web məhsulunda live smoke ilə `weather / current facts / image analysis / code question` matrisi yoxla
+4. provider telemetry-ni sonradan admin/debug panelə bağlamaq mümkündür
+
+### Update — 2026-07-09 P1 Telemetry
+
+- `backend/chat/sse.js`
+  - `emitProviderTelemetry(...)` əlavə olunub
+
+- `backend/chat/runner.js`
+  - provider lifecycle event-ləri emit edir:
+    - `provider_skip_cooldown`
+    - `provider_stream_start`
+    - `provider_failure`
+    - `provider_failover`
+    - `provider_wireapi_downgrade`
+
+- `backend/routes/chat.js`
+  - telemetry event-ləri SSE üzərindən ötürülür
+  - `baseURL` sahələri user-facing stream-də redact olunur
+
+- `backend/tests/runner.test.js`
+  - failover zamanı telemetry event-lərinin gəldiyi ayrıca yoxlanır
+
+### Update — 2026-07-09 P1 Session Sticky Avoidance
+
+- `backend/helpers.js`
+  - provider runtime artıq session-level avoid memory saxlayır
+  - yeni helper-lər:
+    - `markSessionProviderFailure(sessionKey, providerId)`
+    - `markSessionProviderSuccess(sessionKey, providerId)`
+    - `shouldAvoidProviderForSession(sessionKey, providerId)`
+    - `reorderCandidatesForSession(sessionKey, candidates)`
+
+- `backend/routes/chat.js`
+  - provider candidate siyahısı request başlamazdan əvvəl `providerSessionKey` ilə reorder olunur
+  - `providerSessionKey` formatı:
+    - `${productMode}:${userId || 'anon'}:${conversationId || 'default'}`
+
+- `backend/chat/runner.js`
+  - provider failure/success halları artıq session memory-yə də yazılır
+  - eyni conversation içində indicə fail etmiş provider növbəti turn-lərdə arxaya düşür
+
+- `backend/tests/runner.test.js`
+  - session failure/success marker çağırışları da yoxlanır

@@ -31,7 +31,7 @@ const { buildExecutionArtifact, buildExecutionArtifactContext, compactMessagesFo
 const { getToolDefinitions } = require('../tools/registry');
 const { getToolsForProfile, getToolsForRole } = require('../tools/profiles');
 const { buildProviderCandidates, normalizeProviderBaseUrl, detectWireApi, isResponsesSchemaMismatchError, buildOpenAIClient } = require('../chat/providers');
-const { writeSse, initSse, emitOrchestrationPrelude, emitTaskPlan, emitGovernanceState } = require('../chat/sse');
+const { writeSse, initSse, emitOrchestrationPrelude, emitTaskPlan, emitGovernanceState, emitProviderTelemetry } = require('../chat/sse');
 const { collectStreamOutput } = require('../chat/stream');
 const { executeToolCalls } = require('../chat/toolExecutor');
 const { openAiStreamWithFallback } = require('../chat/runner');
@@ -191,6 +191,8 @@ router.post('/', async (req, res) => {
   const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '6', 10);
   const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '180000', 10);
   const LLM_TIMEOUT_CHAT = parseInt(process.env.LLM_TIMEOUT_CHAT || '60000', 10);
+  const providerRuntime = require('../helpers').providerRuntime || { markProviderFailure: () => {}, canUseProviderNow: () => true, markProviderSuccess: () => {}, reorderCandidatesForSession: (items) => items };
+  const providerSessionKey = `${productMode || 'desktop_code'}:${req.user?.id || 'anon'}:${conversationId || 'default'}`;
 
   // --- Auto-routing ---
   const autoIntent = frontendModel === 'auto'
@@ -209,13 +211,13 @@ router.post('/', async (req, res) => {
     return 'general';
   })();
 
-  const providerCandidates = buildProviderCandidates({
+  const providerCandidates = providerRuntime.reorderCandidatesForSession(providerSessionKey, buildProviderCandidates({
     frontendApiKey, frontendBaseUrl, frontendModel, autoIntent,
     hasImageAttachment, webTaskType,
     productMode, executionMode, env: process.env,
     parseProviderPoolFromEnv: require('../helpers').parseProviderPoolFromEnv,
     looksLikeOllamaModel
-  });
+  }));
 
   if (providerCandidates.length === 0) {
     return res.status(503).json({ error: 'Heç bir AI provider konfiqurasiya edilməyib. Ayarlardan API açarı və model seçin.' });
@@ -429,7 +431,7 @@ ${generateToolsSystemPrompt(TOOLS)}`;
       reqUser: req.user,
       dependencies: {
         MAX_STEPS, effectiveModelRef, activeProviderRef, clientRef, isLocalOrFlakyModel,
-        providerCandidates, providerRuntime: require('../helpers').providerRuntime || { markProviderFailure: () => {}, canUseProviderNow: () => true, markProviderSuccess: () => {} },
+        providerCandidates, providerRuntime,
         buildOpenAIClient, normalizeMessagesForModel,
         mapMessagesToResponsesInput, mapToolsToResponsesTools,
         isResponsesSchemaMismatchError, buildDeepSeekRecoveryMessages,
@@ -441,6 +443,15 @@ ${generateToolsSystemPrompt(TOOLS)}`;
         buildToolRecoveryInstruction, normalizeUserFacingError,
         crypto, hasAttachmentInRequest, safeMode, runId,
         entryPath, initialGateReceipt,
+        providerSessionKey,
+        onProviderTelemetry: (payload) => {
+          const safePayload = {
+            ...payload,
+            baseURL: payload?.baseURL ? '[redacted]' : undefined,
+            toBaseURL: payload?.toBaseURL ? '[redacted]' : undefined
+          };
+          emitProviderTelemetry(res, safePayload);
+        },
         buildFinalGateReceipt: ({ plannerArtifact, executionArtifacts }) => buildGateReceipt({ plannerArtifact, executionArtifacts })
       }
     });

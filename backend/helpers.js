@@ -46,6 +46,20 @@ function createProviderRuntime(opts) {
   var cooldownMs = (opts && opts.providerCooldownMs) || 20000;
   var failureCounts = {};
   var cooldowns = {};
+  var sessionAvoid = {};
+
+  function cleanupSession(sessionKey) {
+    if (!sessionKey || !sessionAvoid[sessionKey]) return;
+    var entries = sessionAvoid[sessionKey];
+    var now = Date.now();
+    Object.keys(entries).forEach(function(providerId) {
+      if (!entries[providerId] || entries[providerId] <= now) {
+        delete entries[providerId];
+      }
+    });
+    if (Object.keys(entries).length === 0) delete sessionAvoid[sessionKey];
+  }
+
   return {
     markProviderFailure: function(providerId) {
       cooldowns[providerId] = Date.now() + cooldownMs;
@@ -61,6 +75,31 @@ function createProviderRuntime(opts) {
     },
     getFailureCount: function(providerId) {
       return failureCounts[providerId] || 0;
+    },
+    markSessionProviderFailure: function(sessionKey, providerId) {
+      if (!sessionKey || !providerId) return;
+      cleanupSession(sessionKey);
+      if (!sessionAvoid[sessionKey]) sessionAvoid[sessionKey] = {};
+      sessionAvoid[sessionKey][providerId] = Date.now() + cooldownMs;
+    },
+    markSessionProviderSuccess: function(sessionKey, providerId) {
+      if (!sessionKey || !providerId || !sessionAvoid[sessionKey]) return;
+      delete sessionAvoid[sessionKey][providerId];
+      cleanupSession(sessionKey);
+    },
+    shouldAvoidProviderForSession: function(sessionKey, providerId) {
+      if (!sessionKey || !providerId) return false;
+      cleanupSession(sessionKey);
+      return Boolean(sessionAvoid[sessionKey] && sessionAvoid[sessionKey][providerId] && sessionAvoid[sessionKey][providerId] > Date.now());
+    },
+    reorderCandidatesForSession: function(sessionKey, candidates) {
+      if (!sessionKey || !Array.isArray(candidates) || candidates.length < 2) return Array.isArray(candidates) ? [...candidates] : [];
+      cleanupSession(sessionKey);
+      return [...candidates].sort(function(a, b) {
+        var avoidA = sessionAvoid[sessionKey] && sessionAvoid[sessionKey][a.id] ? 1 : 0;
+        var avoidB = sessionAvoid[sessionKey] && sessionAvoid[sessionKey][b.id] ? 1 : 0;
+        return avoidA - avoidB;
+      });
     }
   };
 }
