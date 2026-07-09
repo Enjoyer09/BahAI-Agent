@@ -92,6 +92,8 @@ function buildProviderCandidates({
   autoIntent,
   productMode = 'desktop_code',
   executionMode = 'cloud',
+  hasImageAttachment = false,
+  webTaskType = 'general',
   env,
   parseProviderPoolFromEnv,
   looksLikeOllamaModel
@@ -103,6 +105,56 @@ function buildProviderCandidates({
   const defaultLocalModel = env.DESKTOP_LOCAL_DEFAULT_MODEL || env.OLLAMA_DEFAULT_MODEL || 'gemma4:12b';
   const cloudOnly = productMode === 'web_chat' || executionMode === 'cloud';
   const localOnly = productMode === 'desktop_code' && executionMode === 'local';
+  const omniRouteEnabled = String(env.OMNIROUTE_ENABLED || '').toLowerCase() === 'true';
+  const omniRouteApiKey = env.OMNIROUTE_API_KEY || '';
+  const omniRouteBase = normalizeProviderBaseUrl(env.OMNIROUTE_BASE_URL || '');
+  const omniRouteModel = env.OMNIROUTE_MODEL || '';
+
+  function buildCloudProvider({ id, apiKey, baseURL, model }) {
+    if (!apiKey || !baseURL || !model) return null;
+    return {
+      id,
+      apiKey,
+      baseURL: normalizeProviderBaseUrl(baseURL),
+      model,
+      wireApi: detectWireApi(baseURL)
+    };
+  }
+
+  function resolveWebAutoPlan() {
+    const normalizedEnvBase = normalizeProviderBaseUrl(env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1');
+    const defaultBase = omniRouteEnabled && omniRouteBase ? omniRouteBase : normalizedEnvBase;
+    const defaultKey = (omniRouteEnabled && omniRouteApiKey) ? omniRouteApiKey : (frontendApiKey || env.OPENAI_API_KEY || '');
+    const defaultModel = omniRouteModel || env.OPENAI_MODEL || env.AUTO_SMART_MODEL || env.AUTO_FAST_MODEL || 'gpt-5.5';
+    const frontLooksLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));
+    const requestedBase = normalizedFrontendBaseUrl && !frontLooksLocal ? normalizedFrontendBaseUrl : '';
+    const effectiveBase = requestedBase || defaultBase;
+    const effectiveKey = (requestedBase && frontendApiKey) ? frontendApiKey : defaultKey;
+    const fastModel = env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel;
+    const smartModel = env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || fastModel;
+    const visionModel = env.WEB_CHAT_VISION_MODEL || smartModel;
+    const codeModel = env.WEB_CHAT_CODE_MODEL || smartModel;
+    const primaryTask = hasImageAttachment ? 'vision' : webTaskType;
+    const orderedModels = primaryTask === 'vision'
+      ? [visionModel, smartModel, fastModel, codeModel]
+      : primaryTask === 'code'
+        ? [codeModel, smartModel, fastModel, visionModel]
+        : autoIntent === 'smart'
+          ? [smartModel, fastModel, codeModel, visionModel]
+          : [fastModel, smartModel, codeModel, visionModel];
+
+    return orderedModels
+      .filter(Boolean)
+      .map((model, index) => buildCloudProvider({
+        id: index === 0
+          ? (omniRouteEnabled && omniRouteBase ? `web_${primaryTask}_primary_omniroute` : `web_${primaryTask}_primary`)
+          : `web_${primaryTask}_fallback_${index}`,
+        apiKey: effectiveKey,
+        baseURL: effectiveBase,
+        model
+      }))
+      .filter(Boolean);
+  }
 
   if (localOnly) {
     const chosenLocalModel = looksLikeOllamaModel(frontendModel) ? frontendModel : defaultLocalModel;
@@ -116,6 +168,9 @@ function buildProviderCandidates({
   }
 
   if (!localOnly && frontendModel === 'auto') {
+    if (productMode === 'web_chat') {
+      list.push(...resolveWebAutoPlan());
+    } else {
     const cloudKey = frontendApiKey || env.OPENAI_API_KEY || '';
     const normalizedEnvBase = normalizeProviderBaseUrl(env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1');
     const frontendLooksLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));
@@ -136,6 +191,7 @@ function buildProviderCandidates({
     } else {
       list.push(localProvider);
       if (cloudProvider) list.push(cloudProvider);
+    }
     }
   } else if (!localOnly && frontendModel && looksLikeOllamaModel(frontendModel) && !cloudOnly) {
     list.push({

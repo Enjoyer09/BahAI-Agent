@@ -180,6 +180,7 @@ router.post('/', async (req, res) => {
   const requestAttachment = req.body.attachment || lastUserMessage?.attachments?.[0];
   const hasAttachment = Boolean(requestAttachment);
   const hasAttachmentInRequest = hasAttachment && !latestUserText;
+  const hasImageAttachment = Boolean(requestAttachment && /^image\//i.test(String(requestAttachment.mimetype || requestAttachment.type || '')));
 
   if (!latestUserText && !hasAttachmentInRequest) {
     return res.status(400).json({ error: 'Mesaj tələb olunur' });
@@ -195,9 +196,22 @@ router.post('/', async (req, res) => {
   const autoIntent = frontendModel === 'auto'
     ? classifyTaskComplexity({ userMessage: latestUserText, messageHistoryLen: normalizedMessages.length, hasAttachments: hasAttachment })
     : null;
+  const webTaskType = (() => {
+    if (productMode !== 'web_chat') return 'general';
+    if (hasImageAttachment) return 'vision';
+    const text = String(latestUserText || '').toLowerCase();
+    if (!text) return 'general';
+    if (
+      /```|function\s*\(|const\s+\w+|let\s+\w+|class\s+\w+|import\s+.+from|console\.log|npm\s|yarn\s|pnpm\s|docker|sql|regex|typescript|javascript|python|bug|fix|refactor|repo|code|kod|api|backend|frontend|deploy|build|test|stack trace|error\b/.test(text)
+    ) {
+      return 'code';
+    }
+    return 'general';
+  })();
 
   const providerCandidates = buildProviderCandidates({
     frontendApiKey, frontendBaseUrl, frontendModel, autoIntent,
+    hasImageAttachment, webTaskType,
     productMode, executionMode, env: process.env,
     parseProviderPoolFromEnv: require('../helpers').parseProviderPoolFromEnv,
     looksLikeOllamaModel
