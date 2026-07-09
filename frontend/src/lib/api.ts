@@ -188,6 +188,7 @@ export async function sendChatMessage(
   let sawDoneMarker = false;
   let sawAnyEvent = false;
   let sawAssistantOutput = false;
+  let sawFinalAssistantMessage = false;
 
   try {
     while (!done) {
@@ -212,6 +213,9 @@ export async function sendChatMessage(
             if (data?.type === 'assistant_delta' || data?.type === 'assistant_message') {
               sawAssistantOutput = true;
             }
+            if (data?.type === 'assistant_message') {
+              sawFinalAssistantMessage = true;
+            }
             onEvent(data);
           } catch {
             // ignore
@@ -222,7 +226,7 @@ export async function sendChatMessage(
   } catch (err: any) {
     const message = String(err?.message || '');
     if (sawDoneMarker || sawAnyEvent || /network error|failed to fetch|load failed/i.test(message)) {
-      if (!sawDoneMarker && sawAnyEvent && !signal?.aborted) {
+      if (!sawDoneMarker && sawAnyEvent && !signal?.aborted && !sawFinalAssistantMessage) {
         onEvent({
           type: 'error',
           message: sawAssistantOutput
@@ -245,13 +249,16 @@ export async function sendChatMessage(
       if (data?.type === 'assistant_delta' || data?.type === 'assistant_message') {
         sawAssistantOutput = true;
       }
+      if (data?.type === 'assistant_message') {
+        sawFinalAssistantMessage = true;
+      }
       onEvent(data);
     } catch {
       // ignore
     }
   }
 
-  if (!sawDoneMarker && sawAnyEvent && !signal?.aborted) {
+  if (!sawDoneMarker && sawAnyEvent && !signal?.aborted && !sawFinalAssistantMessage) {
     onEvent({
       type: 'error',
       message: sawAssistantOutput

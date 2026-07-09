@@ -80,6 +80,32 @@ export function chooseAssistantContent(streamedRaw: string, finalRaw: string): s
   return finalContent;
 }
 
+export function simplifyAssistantTextForDedupe(value: string): string {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\([^)]*°f[^)]*\)/gi, '')
+    .replace(/\([^)]*mph[^)]*\)/gi, '')
+    .replace(/\b\d+\s*°f\b/gi, '')
+    .replace(/\b\d+\s*mph\b/gi, '')
+    .replace(/[.!?…]+$/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+export function areAssistantMessagesNearDuplicate(a: string, b: string): boolean {
+  const left = simplifyAssistantTextForDedupe(a);
+  const right = simplifyAssistantTextForDedupe(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.length > 120 && right.length > 120) {
+    if (left.includes(right) || right.includes(left)) return true;
+    const leftHead = left.slice(0, 180);
+    const rightHead = right.slice(0, 180);
+    if (leftHead === rightHead) return true;
+  }
+  return false;
+}
+
 function normalizeWeatherUnits(content: string): string {
   let text = String(content || '');
   if (!text) return text;

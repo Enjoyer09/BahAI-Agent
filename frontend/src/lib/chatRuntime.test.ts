@@ -7,6 +7,7 @@ import {
   normalizeAssistantText,
   isToolCallLikeText,
   chooseAssistantContent,
+  areAssistantMessagesNearDuplicate,
   normalizeUiErrorMessage,
   extractRepoProfileFromToolResult,
   mergeRepoProfileIntoMemory,
@@ -151,6 +152,18 @@ describe('chooseAssistantContent', () => {
 
   it('prefers final when it is complete and reasonable length', () => {
     expect(chooseAssistantContent('start of response', 'Complete final response with all details')).toBe('Complete final response with all details');
+  });
+});
+
+describe('areAssistantMessagesNearDuplicate', () => {
+  it('detects long assistant replies with the same leading content as duplicates', () => {
+    const a = 'Teessüf ki, hazırda laptopmarket.az saytına daxil ola bilmirəm, çünki serverdə Playwright browser quraşdırılmayıb. Amma sənə başqa yolla kömək edə bilərəm.';
+    const b = 'Teessüf ki, hazırda laptopmarket.az saytına daxil ola bilmirəm, çünki serverdə Playwright browser quraşdırılmayıb. Amma sənə başqa yolla kömək edə bilərəm. İstəsən modeli dəqiqləşdirək.';
+    expect(areAssistantMessagesNearDuplicate(a, b)).toBe(true);
+  });
+
+  it('does not treat different replies as duplicates', () => {
+    expect(areAssistantMessagesNearDuplicate('Bakıda hava 30°C-dir.', 'JavaScript-də async/await asinxron axını sadələşdirir.')).toBe(false);
   });
 });
 

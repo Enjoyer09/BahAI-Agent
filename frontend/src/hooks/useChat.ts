@@ -45,6 +45,8 @@ import {
   mergeGuiCapabilitiesIntoMemory,
   resolveActiveGuiSessionInMemory,
   isToolCallLikeText,
+  areAssistantMessagesNearDuplicate,
+  simplifyAssistantTextForDedupe,
 } from '../lib/chatRuntime';
 import type { SendMessageContext } from '../store/chatService';
 
@@ -340,15 +342,6 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const normalizedLast = String(lastMsg?.content || '').trim();
       const nonSystemMessages = msgs.filter((item) => item.role !== 'system');
       const hasUserMessage = msgs.some((item) => item.role === 'user');
-      const simplifyAssistantText = (value: string) => value
-        .replace(/\s+/g, ' ')
-        .replace(/\([^)]*°f[^)]*\)/gi, '')
-        .replace(/\([^)]*mph[^)]*\)/gi, '')
-        .replace(/\b\d+\s*°f\b/gi, '')
-        .replace(/\b\d+\s*mph\b/gi, '')
-        .replace(/[.!?…]+$/g, '')
-        .trim()
-        .toLowerCase();
       if (
         msg.role === 'assistant' &&
         normalizedIncoming &&
@@ -361,12 +354,12 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         }
         return;
       }
-      const normalizedIncomingLoose = simplifyAssistantText(normalizedIncoming);
-      const normalizedLastLoose = simplifyAssistantText(normalizedLast);
+      const normalizedIncomingLoose = simplifyAssistantTextForDedupe(normalizedIncoming);
+      const normalizedLastLoose = simplifyAssistantTextForDedupe(normalizedLast);
       const recentAssistantContents = msgs
         .filter((item) => item.role === 'assistant')
         .slice(-3)
-        .map((item) => simplifyAssistantText(String(item.content || '').trim()))
+        .map((item) => simplifyAssistantTextForDedupe(String(item.content || '').trim()))
         .filter(Boolean);
       if (!normalizedIncoming && lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
         msgs.pop();
@@ -383,7 +376,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
           normalizedIncoming === lastFinalAssistantContentRef.current ||
           (lastMsg?.role === 'assistant' && normalizedIncoming === normalizedLast) ||
           (normalizedIncomingLoose && lastMsg?.role === 'assistant' && normalizedIncomingLoose === normalizedLastLoose) ||
-          recentAssistantContents.includes(normalizedIncomingLoose)
+          recentAssistantContents.includes(normalizedIncomingLoose) ||
+          (lastMsg?.role === 'assistant' && areAssistantMessagesNearDuplicate(normalizedIncoming, normalizedLast)) ||
+          recentAssistantContents.some((item) => areAssistantMessagesNearDuplicate(normalizedIncomingLoose, item))
         )
       ) {
         return;
