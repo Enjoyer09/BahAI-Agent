@@ -55,17 +55,17 @@ export default function ChatArea({
 
         {/* Heading */}
         <h2 className="text-lg sm:text-2xl font-semibold mb-5 sm:mb-8 text-center" style={{ color: 'var(--fg-main)' }}>
-          {productMode === 'web_chat' ? 'Bu gün nə etmək istəyirsiniz?' : 'BahAI Desktop ilə nə qururuq?'}
+          {productMode === 'web_chat' ? 'Bu gün nədən başlayaq?' : 'BahAI Desktop ilə nə qururuq?'}
         </h2>
 
         {/* Suggestion cards */}
         <div className="grid grid-cols-1 sm:flex sm:flex-row sm:flex-wrap justify-center gap-2 sm:gap-3 max-w-2xl w-full">
           {(productMode === 'web_chat'
             ? [
-                { label: 'Mətn yaz', prompt: 'Mənə bu ideyanı daha aydın və peşəkar formada yazmağa kömək et' },
-                { label: 'Plan qur', prompt: 'Bu iş üçün mənə qısa və praktik plan hazırla' },
-                { label: 'SEO fikri ver', prompt: 'Bu sayt üçün əsas SEO tövsiyələrini çıxart' },
-                { label: 'Audit et', prompt: 'Bu ideyanı və ya mətni qısa audit edib zəif tərəflərini de' },
+                { label: 'Yazını yaxşılaşdır', prompt: 'Bu mətni daha aydın, peşəkar və axıcı formada yenidən yaz' },
+                { label: 'Qısa plan qur', prompt: 'Bu iş üçün mənə qısa, praktik və prioritetləşdirilmiş plan hazırla' },
+                { label: 'Məlumatı izah et', prompt: 'Bu mövzunu sadə dildə, qısa və anlaşılan formada izah et' },
+                { label: 'Sürətli audit', prompt: 'Bu ideyanın və ya mətnin zəif tərəflərini qısa audit et və yaxşılaşdırma təklif et' },
               ]
             : [
                 { label: 'Repo audit et', prompt: 'Bu layihəni senior engineer kimi audit et, əsas riskləri və prioritet düzəlişləri çıxart' },

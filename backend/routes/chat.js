@@ -472,3 +472,4 @@ ${generateToolsSystemPrompt(TOOLS)}`;
 });
 
 module.exports = router;
+module.exports.getDirectWebChatReply = getDirectWebChatReply;

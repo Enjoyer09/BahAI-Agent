@@ -318,56 +318,54 @@ function AppContent() {
           </div>
         )}
 
-        <div
-          className="px-3 sm:px-4 py-2 shrink-0"
-          style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}
-        >
-          <div className={isMobile ? 'max-w-3xl mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar whitespace-nowrap pb-1' : 'max-w-3xl mx-auto flex flex-wrap items-center gap-2'}>
-            <span
-              className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
-              style={{ background: 'var(--bg-hover)', color: 'var(--fg-main)', border: '1px solid var(--border)' }}
-            >
-              {isWebProduct ? 'BahAI Cloud' : `Desktop • ${settings.executionMode === 'local' ? 'Local' : 'Cloud'}`}
-            </span>
-            {isDesktopProduct && (
-              <>
+        {isDesktopProduct && (
+          <div
+            className="px-3 sm:px-4 py-2 shrink-0"
+            style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}
+          >
+            <div className={isMobile ? 'max-w-3xl mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar whitespace-nowrap pb-1' : 'max-w-3xl mx-auto flex flex-wrap items-center gap-2'}>
+              <span
+                className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
+                style={{ background: 'var(--bg-hover)', color: 'var(--fg-main)', border: '1px solid var(--border)' }}
+              >
+                {`Desktop • ${settings.executionMode === 'local' ? 'Local' : 'Cloud'}`}
+              </span>
+              <span
+                className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
+                style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
+              >
+                {settings.orchestrationMode ? `Workflow: ${selectedWorkflow?.name || settings.workflow}` : 'Workflow off'}
+              </span>
+              {!desktopIsLocal && (
                 <span
                   className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
                   style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
                 >
-                  {settings.orchestrationMode ? `Workflow: ${selectedWorkflow?.name || settings.workflow}` : 'Workflow off'}
+                  Browser: {browserModeLabel}
                 </span>
-                {!desktopIsLocal && (
-                  <span
-                    className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
-                    style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
-                  >
-                    Browser: {browserModeLabel}
-                  </span>
-                )}
-              </>
-            )}
-            <span
-              className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
-              style={{
-                background: chat.safeMode ? 'rgba(245, 158, 11, 0.12)' : 'rgba(34, 197, 94, 0.12)',
-                color: chat.safeMode ? '#fbbf24' : '#86efac',
-                border: '1px solid var(--border)'
-              }}
-            >
-              {chat.safeMode ? 'Safe Mode' : 'Auto Execute'}
-            </span>
-            {!isWebProduct && chat.activeProject && (
+              )}
               <span
-                className="text-[11px] px-2.5 py-1 rounded-md truncate max-w-[180px] shrink-0"
-                style={{ background: 'var(--bg-hover)', color: 'var(--fg-muted)', border: '1px solid var(--border)' }}
-                title={chat.activeProject.path}
+                className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
+                style={{
+                  background: chat.safeMode ? 'rgba(245, 158, 11, 0.12)' : 'rgba(34, 197, 94, 0.12)',
+                  color: chat.safeMode ? '#fbbf24' : '#86efac',
+                  border: '1px solid var(--border)'
+                }}
               >
-                {chat.activeProject.name}
+                {chat.safeMode ? 'Safe Mode' : 'Auto Execute'}
               </span>
-            )}
+              {chat.activeProject && (
+                <span
+                  className="text-[11px] px-2.5 py-1 rounded-md truncate max-w-[180px] shrink-0"
+                  style={{ background: 'var(--bg-hover)', color: 'var(--fg-muted)', border: '1px solid var(--border)' }}
+                  title={chat.activeProject.path}
+                >
+                  {chat.activeProject.name}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Chat area */}
         <ChatArea
