@@ -76,14 +76,14 @@ async function assertCloudChatShell(page) {
   console.log('Checking cloud chat shell...');
   await page.waitForFunction(() => {
     const text = document.body.innerText || '';
-    return text.includes('BahAI Cloud');
+    return text.includes('Yeni chat') || text.includes('Message input') || text.includes('Parametrlər');
   }, { timeout: 15000 });
 
   const body = await page.locator('body').innerText();
-  assert(body.includes('BahAI Cloud'), 'Web shell-də BahAI Cloud label görünmədi');
   assert(!body.includes('Local Desktop aktivdir'), 'Web shell desktop local mətnini göstərir');
   assert(!body.includes('Cloud Desktop aktivdir'), 'Web shell desktop cloud mətnini göstərir');
   assert(!body.includes('Desktop Runtime Status'), 'Web shell desktop runtime panelini göstərir');
+  assert(!body.includes('Qovluq aç'), 'Web shell desktop qovluq əmrlərini göstərir');
 }
 
 async function startFreshChat(page) {

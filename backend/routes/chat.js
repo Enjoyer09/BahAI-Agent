@@ -72,6 +72,20 @@ async function getDirectWebChatReply(latestUserText = '', messages = []) {
   if (asksDate) {
     return `Bu gün ${prettyDate}-dir.`;
   }
+
+  function formatTemperatureCelsius(rawTemp = '') {
+    const normalized = String(rawTemp || '').trim();
+    if (!normalized) return '';
+    const match = normalized.match(/(-?\d+(?:\.\d+)?)\s*°?\s*([FC])?/i);
+    if (!match) return normalized.replace(/°?[FC]/gi, '');
+    const numeric = Number(match[1]);
+    const unit = String(match[2] || 'C').toUpperCase();
+    if (Number.isNaN(numeric)) return normalized.replace(/°?[FC]/gi, '');
+    if (unit === 'F') {
+      return String(Math.round(((numeric - 32) * 5) / 9));
+    }
+    return String(Math.round(numeric));
+  }
   const weatherCityMap = {
     baku: { wttr: 'Baku', label: 'Bakıda' },
     bakı: { wttr: 'Baku', label: 'Bakıda' },
@@ -103,7 +117,7 @@ async function getDirectWebChatReply(latestUserText = '', messages = []) {
           const raw = (await wttrRes.text()).trim();
           const [conditionRaw = '', tempRaw = '', windRaw = '', humidityRaw = ''] = raw.split('|');
           const condition = String(conditionRaw).replace(/\s+/g, ' ').trim();
-          const tempC = String(tempRaw).replace(/\+/g, '').replace(/\s+/g, '').trim();
+          const tempC = formatTemperatureCelsius(String(tempRaw).replace(/\+/g, '').replace(/\s+/g, '').trim());
           const wind = String(windRaw).replace(/\s+/g, ' ').trim();
           const humidity = String(humidityRaw).replace(/\s+/g, '').trim();
           const windMetric = wind
