@@ -16,22 +16,25 @@ Google ilə giriş funksiyasını aktivləşdirmək üçün aşağıdakı addım
 4. **Authorized JavaScript origins** bölməsinə əlavə edin:
    ```
    http://localhost:5173
-   http://localhost:3000
+   http://localhost:3001
+   https://bahai-agent-production.up.railway.app
    ```
 5. **Authorized redirect URIs** bölməsinə əlavə edin:
    ```
-   http://localhost:5173
-   http://localhost:3000
+   http://localhost:3001/api/auth/google-callback
+   https://bahai-agent-production.up.railway.app/api/auth/google-callback
    ```
 6. **Create** düyməsinə basın
 7. Client ID-ni kopyalayın (məsələn: `123456789-abc.apps.googleusercontent.com`)
 
 ## 3. .env Faylını Yeniləyin
 
-Layihənin kök qovluğundakı `.env` faylını açın və aşağıdakı sətri əlavə edin:
+Layihənin kök qovluğundakı `.env` faylını açın və aşağıdakı sətirləri əlavə edin:
 
 ```bash
 GOOGLE_CLIENT_ID=your-client-id-here.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3001,https://bahai-agent-production.up.railway.app
 ```
 
 **Nümunə:**
@@ -54,7 +57,7 @@ npm start
 ## Qeydlər
 
 - Google OAuth yalnız HTTPS və ya localhost üzərində işləyir
-- Production üçün domain əlavə etməyi unutmayın
+- Production üçün `https://bahai-agent-production.up.railway.app` origin və `https://bahai-agent-production.up.railway.app/api/auth/google-callback` redirect URI əlavə etməyi unutmayın
 - Client ID-ni heç vaxt public repository-də paylaşmayın (`.env` faylı `.gitignore`-dadır)
 
 ## Troubleshooting
@@ -64,8 +67,10 @@ npm start
 - Serveri yenidən başlatdınız?
 
 **Problem:** "redirect_uri_mismatch" xətası
-- Google Cloud Console-da Authorized redirect URIs düzgün əlavə olunub?
-- URL-lər tam olaraq uyğundur? (http vs https, port nömrəsi)
+- Google Cloud Console-da Authorized redirect URIs bölməsinə dəqiq callback path əlavə olunub?
+- Lokal üçün: `http://localhost:3001/api/auth/google-callback`
+- Production üçün: `https://bahai-agent-production.up.railway.app/api/auth/google-callback`
+- URL-lər tam olaraq uyğun olmalıdır (http vs https, port və path daxil olmaqla)
 
 **Problem:** "Access blocked: This app's request is invalid"
 - OAuth consent screen konfiqurasiya olunub?

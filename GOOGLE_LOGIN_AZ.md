@@ -16,12 +16,13 @@ Google ilə giriş funksiyası **artıq kodda mövcuddur**, sadəcə Google Clie
 6. **Authorized JavaScript origins** əlavə edin:
    ```
    http://localhost:5173
-   http://localhost:3000
+   http://localhost:3001
+   https://bahai-agent-production.up.railway.app
    ```
 7. **Authorized redirect URIs** əlavə edin:
    ```
-   http://localhost:5173
-   http://localhost:3000
+   http://localhost:3001/api/auth/google-callback
+   https://bahai-agent-production.up.railway.app/api/auth/google-callback
    ```
 8. **CREATE** düyməsinə basın
 9. **Client ID**-ni kopyalayın (nümunə: `123456789-abc.apps.googleusercontent.com`)
@@ -37,15 +38,19 @@ Google ilə giriş funksiyası **artıq kodda mövcuddur**, sadəcə Google Clie
 
 ### Addım 3: .env Faylını Yeniləyin
 
-Layihənin kök qovluğundakı `.env` faylını açın və bu sətri əlavə edin:
+Layihənin kök qovluğundakı `.env` faylını açın və bu sətirləri əlavə edin:
 
 ```bash
 GOOGLE_CLIENT_ID=sizin-client-id-buraya.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=sizin-google-client-secret
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3001,https://bahai-agent-production.up.railway.app
 ```
 
 **Nümunə:**
 ```bash
 GOOGLE_CLIENT_ID=123456789-abc123def456.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-xxxx
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3001,https://bahai-agent-production.up.railway.app
 ```
 
 ### Addım 4: Serveri Yenidən Başladın
@@ -79,8 +84,10 @@ npm start
 
 ### Problem: "redirect_uri_mismatch" xətası
 **Həll:**
-- Google Cloud Console-da **Authorized redirect URIs** düzgün əlavə olunub?
-- URL-lər tam olaraq uyğundur? (http:// və port nömrəsi)
+- Google Cloud Console-da **Authorized redirect URIs** bölməsinə dəqiq callback path əlavə olunub?
+- Lokal üçün: `http://localhost:3001/api/auth/google-callback`
+- Production üçün: `https://bahai-agent-production.up.railway.app/api/auth/google-callback`
+- URL tam uyğun olmalıdır: domain, protokol, port və path birlikdə
 
 ### Problem: "Access blocked: This app's request is invalid"
 **Həll:**
@@ -95,8 +102,9 @@ npm start
 ## 🔒 Təhlükəsizlik Qeydləri
 
 - ⚠️ **Client ID-ni heç vaxt public repository-də paylaşmayın**
+- ⚠️ **Client Secret-i də heç vaxt public repository-də paylaşmayın**
 - ✅ `.env` faylı `.gitignore`-da olduğundan əmin olun
-- ✅ Production üçün domain əlavə etməyi unutmayın
+- ✅ Production üçün həm origin, həm də callback URI əlavə etməyi unutmayın
 - ✅ Google OAuth yalnız HTTPS və ya localhost üzərində işləyir
 
 ## 📚 Əlavə Məlumat
@@ -106,9 +114,9 @@ Backend-də Google login artıq tam işləyir:
 - Token doğrulaması: `https://oauth2.googleapis.com/tokeninfo`
 - Avtomatik user yaradılması və JWT token generasiyası
 
-Frontend-də Google Sign-In düyməsi:
+Frontend-də Google Sign-In düyməsi popup OAuth axını ilə işləyir:
 - `frontend/src/components/auth/AuthModal.tsx`
-- Google Sign-In SDK avtomatik yüklənir
+- Redirect URI avtomatik olaraq `${API_BASE_URL}/api/auth/google-callback` qurulur
 - Responsive və tema dəstəyi
 
 ---
