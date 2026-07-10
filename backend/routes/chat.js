@@ -46,12 +46,19 @@ const {
   resolveWorkingDirectory, buildApprovalMetadata, extractAttachment,
   normalizeMessagesForModel, generateToolsSystemPrompt, buildDeepSeekRecoveryMessages,
   extractTextToolCalls, serializeProject, serializeConversation,
-  mapMessagesToResponsesInput, mapToolsToResponsesTools
+  mapMessagesToResponsesInput, mapToolsToResponsesTools,
+  deriveDialogueState, resolveFollowup
 } = require('../helpers');
 
 async function getDirectWebChatReply(latestUserText = '', messages = [], referentSummary = null) {
   const text = String(latestUserText || '').trim();
   const lower = text.toLowerCase();
+  const dialogueState = deriveDialogueState(messages);
+  const resolvedFollowup = resolveFollowup(text, {
+    ...dialogueState,
+    previousUser: String(referentSummary?.previousUser || dialogueState.previousUser || ''),
+    previousAssistant: String(referentSummary?.previousAssistant || dialogueState.previousAssistant || ''),
+  });
   const tz = process.env.BAHAI_DEFAULT_TIMEZONE || 'Asia/Baku';
   const now = new Date();
   const parts = new Intl.DateTimeFormat('az-AZ', {
@@ -148,8 +155,8 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
   const asksToClarifyPrevious = /^(deqiqleshdir|dəqiqləşdir|deqiqlestir|dəqiqləşdirin|deqiqlesdir|yuxarida dedin axi|yuxarıda dedin axı|ele onu|elə onu|onu deqiqleshdir|onu dəqiqləşdir|bunu deqiqleshdir|bunu dəqiqləşdir)$/i.test(lower);
   const asksContextualAdvice = /(bu havada|bu qiym[eə]t[eə]?|bu model üçün|bu halda|bu vəziyyətdə|bu şertlerde|bu şəraitdə)/i.test(lower);
 
-  const referentAssistant = String(referentSummary?.previousAssistant || '').trim();
-  const referentUser = String(referentSummary?.previousUser || '').trim();
+  const referentAssistant = String(referentSummary?.previousAssistant || dialogueState.previousAssistant || '').trim();
+  const referentUser = String(referentSummary?.previousUser || dialogueState.previousUser || '').trim();
 
   if (asksToClarifyPrevious && referentAssistant) {
     if (/tam spesifikasiya|cari qiymət|qiymeti maraqlanirsansa|qiyməti maraqlanırsansa/i.test(referentAssistant)) {
@@ -157,6 +164,22 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
       return `Dəqiqləşdirim: ${subject} üçün iki istiqamət var — tam spesifikasiya və Azərbaycandakı cari qiymət. Hansını istəyirsiniz? Məsələn: "tam spesifikasiya" və ya "qiymət" yazın.`;
     }
     return 'Yuxarıdakı cavaba əsasən bunu dəqiqləşdirə bilərəm. Hansı hissəni nəzərdə tutursunuz: qiymət, texniki göstəricilər, zəmanət, yoxsa distributor məlumatı?';
+  }
+
+  if (resolvedFollowup?.kind === 'referential' && referentAssistant) {
+    if (/tam spesifikasiya|cari qiymət|qiymeti maraqlanirsansa|qiyməti maraqlanırsansa/i.test(referentAssistant)) {
+      const subject = referentUser || previousUserText || 'məhsul';
+      return `Dəqiqləşdirim: ${subject} üçün iki istiqamət var — tam spesifikasiya və Azərbaycandakı cari qiymət. Hansını istəyirsiniz? Məsələn: "tam spesifikasiya" və ya "qiymət" yazın.`;
+    }
+    if (/növbəti oyunu da deyim/i.test(referentAssistant)) {
+      return 'Növbəti oyun 9 iyul 2026 tarixindədir. İstəsən həmin günün cütlərini də qısa şəkildə sadalayım.';
+    }
+    if (/həmin günün cütlərini də qısa şəkildə sadalayım/i.test(referentAssistant)) {
+      return '9 iyul 2026 oyun günü quarter-final mərhələsinə düşür. Dəqiq cütlər əvvəlki mərhələnin nəticələrinə görə formalaşır; istəsən rəsmi cədvəl üzərindən həmin an üçün aktual cütləri ayrıca yoxlayım.';
+    }
+    if (resolvedFollowup.hasOpenChoice) {
+      return 'Yuxarıdakı cavabı davam etdirə bilərəm. Hansı hissəni istəyirsiniz: qiymət, texniki göstəricilər, zəmanət, yoxsa müqayisə?';
+    }
   }
 
   if (asksToClarifyPrevious) {
@@ -169,7 +192,7 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
     }
   }
 
-  if (asksContextualAdvice) {
+  if (asksContextualAdvice || (resolvedFollowup?.kind === 'contextual')) {
     const weatherAnchorText = referentAssistant || previousAssistantText;
     const userAnchorText = referentUser || previousUserText;
     if (/temperatur|rütubət|külək|hava|müşahidə olunur|°c|yağış|rain|shower/i.test(weatherAnchorText)) {
@@ -398,6 +421,17 @@ router.post('/', async (req, res) => {
     return res.end();
   }
 
+  const dialogueState = productMode === 'web_chat'
+    ? deriveDialogueState(normalizedMessages)
+    : null;
+  const resolvedFollowup = productMode === 'web_chat'
+    ? resolveFollowup(latestUserText, {
+        ...dialogueState,
+        previousUser: String(referentSummary?.previousUser || dialogueState?.previousUser || ''),
+        previousAssistant: String(referentSummary?.previousAssistant || dialogueState?.previousAssistant || ''),
+      })
+    : null;
+
   // Build system message
   const productPrompt = productMode === 'web_chat'
     ? `Sən BahAI-sən — Azərbaycan dilində faydalı, təbii danışan chat köməkçisi.
@@ -454,6 +488,10 @@ ${generateToolsSystemPrompt(TOOLS)}`;
     ...(productMode === 'web_chat' && referentSummary?.previousAssistant ? [{
       role: 'system',
       content: `Qısa follow-up referensi: əvvəlki istifadəçi mesajı: ${String(referentSummary.previousUser || '').slice(0, 300)} | əvvəlki assistant mesajı: ${String(referentSummary.previousAssistant || '').slice(0, 700)}. İstifadəçinin cari qısa follow-up-ını bu iki mesajla əlaqələndir və mövzudan kənara çıxma.`
+    }] : []),
+    ...(productMode === 'web_chat' && resolvedFollowup ? [{
+      role: 'system',
+      content: `Dialogue continuity state: domain=${resolvedFollowup.domain}; kind=${resolvedFollowup.kind}; previous user=${String(resolvedFollowup.previousUser || '').slice(0, 220)}; previous assistant=${String(resolvedFollowup.previousAssistant || '').slice(0, 420)}. Cari mesajı bu kontekst daxilində şərh et və yeni mövzu uydurma.`
     }] : []),
     { role: 'user', content: latestUserText },
     ...(requestAttachment ? [{

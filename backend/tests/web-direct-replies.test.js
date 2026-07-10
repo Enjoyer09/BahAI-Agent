@@ -55,4 +55,26 @@ describe('web direct replies', () => {
     expect(reply).toContain('çətir');
     expect(reply).toContain('qapalı məkanda');
   });
+
+  it('keeps prior product thread on short confirmation follow-up', async () => {
+    const reply = await getDirectWebChatReply('bəli', [
+      { role: 'user', content: 'HP 250 G10' },
+      { role: 'assistant', content: 'HP 250 G10 üçün tam spesifikasiya və ya Azərbaycandakı cari qiyməti dəqiqləşdirə bilərəm. İstəsən davam edək.' },
+    ]);
+
+    expect(reply).toContain('HP 250 G10');
+    expect(reply).toContain('tam spesifikasiya');
+  });
+
+  it('binds previous user to the latest assistant instead of the latest short user follow-up', async () => {
+    const reply = await getDirectWebChatReply('deqiqleshdir', [
+      { role: 'user', content: 'Bes 120 laptop TecPro DC shirketinnen bu il mayda alinib.' },
+      { role: 'assistant', content: 'Anladım. 120 laptop barədə qeyd etdiniz. Hansı modeldir?' },
+      { role: 'user', content: 'HP 250 G10' },
+      { role: 'assistant', content: 'Bud, HP 250 G10. Tam spesifikasiya və ya Azərbaycandakı cari qiyməti maraqlanırsansa, birbaşa soruş, dəqiqləşdirim.' },
+    ]);
+
+    expect(reply).toContain('HP 250 G10');
+    expect(reply).not.toContain('120 laptop');
+  });
 });

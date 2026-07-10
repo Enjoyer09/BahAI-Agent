@@ -172,6 +172,53 @@ function isFileClarificationLoop(text = '') {
   return /(hansı faylı|fayl.*belirt|app\.py|read_file alətini|json formatında çağır|yolun doğru olduğunu yoxlayın|yalnız bir faylı audit)/i.test(String(text));
 }
 
+function deriveDialogueState(messages = []) {
+  const list = Array.isArray(messages) ? messages : [];
+  const recent = list
+    .filter((item) => item && typeof item.content === 'string' && String(item.content || '').trim())
+    .slice(-14);
+  const previousAssistant = [...recent].reverse().find((item) => item.role === 'assistant');
+  const previousAssistantIndex = previousAssistant ? recent.lastIndexOf(previousAssistant) : -1;
+  const previousUser = previousAssistantIndex > 0
+    ? [...recent.slice(0, previousAssistantIndex)].reverse().find((item) => item.role === 'user')
+    : [...recent].reverse().find((item) => item.role === 'user');
+  const previousAssistantText = String(previousAssistant?.content || '').trim();
+  const previousUserText = String(previousUser?.content || '').trim();
+
+  let domain = 'general';
+  if (/hava|temperatur|külək|rütubət|yağış|°c|weather/i.test(`${previousUserText} ${previousAssistantText}`)) domain = 'weather';
+  else if (/qiymət|manat|azn|büdcə|büdcə|price/i.test(`${previousUserText} ${previousAssistantText}`)) domain = 'pricing';
+  else if (/zəmanət|qarantiya|warranty|distributor/i.test(`${previousUserText} ${previousAssistantText}`)) domain = 'warranty';
+  else if (/hp|lenovo|dell|asus|acer|model|notebook|laptop/i.test(`${previousUserText} ${previousAssistantText}`)) domain = 'product';
+
+  const hasOpenChoice = /və ya|hansını istəyirsiniz|istəsən .* deyim|dəqiqləşdirim/i.test(previousAssistantText);
+  return {
+    domain,
+    previousUser: previousUserText,
+    previousAssistant: previousAssistantText,
+    hasOpenChoice,
+  };
+}
+
+function resolveFollowup(latestUserText = '', dialogueState = {}) {
+  const text = String(latestUserText || '').trim();
+  const lower = text.toLowerCase();
+  if (!text) return null;
+
+  const isReferential = /^(onu|bunu|el[eə] onu|orada dediyin|deqiqleshdir|dəqiqləşdir|onu dəqiqləşdir|onu deqiqleshdir|bunu dəqiqləşdir|bunu deqiqleshdir|yuxarida dedin axi|yuxarıda dedin axı|davam et|buyur|olar|hə|he|bəli|beli|ok|oke)$/i.test(lower);
+  const isContextual = /(bu havada|bu qiym[eə]t[eə]?|bu model üçün|bu halda|bu vəziyyətdə|bu şertlerde|bu şəraitdə)/i.test(lower);
+  if (!isReferential && !isContextual) return null;
+
+  return {
+    latestUserText: text,
+    kind: isReferential ? 'referential' : 'contextual',
+    domain: dialogueState.domain || 'general',
+    previousUser: String(dialogueState.previousUser || ''),
+    previousAssistant: String(dialogueState.previousAssistant || ''),
+    hasOpenChoice: Boolean(dialogueState.hasOpenChoice),
+  };
+}
+
 // ==========================================
 // Tool naming / caching helpers
 // ==========================================
@@ -1416,6 +1463,7 @@ module.exports = {
   looksLikeOllamaModel, parseProviderPoolFromEnv,
   classifyTaskComplexity, isAuditStyleRequest,
   isCurrentFactsOrPublicWebsiteRequest, isFileClarificationLoop,
+  deriveDialogueState, resolveFollowup,
 
   // Tool helpers
   normalizeToolName, buildToolCallCacheKey, isCacheableTool, isSensitiveTool,
