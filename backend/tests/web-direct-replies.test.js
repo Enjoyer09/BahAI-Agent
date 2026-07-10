@@ -100,6 +100,22 @@ describe('web direct replies', () => {
     expect(reply).not.toContain('sənədi görmürəm');
     expect(reply).not.toContain('yenidən paylaş');
   });
+
+  it('does not pretend there was a previous attachment in a fresh chat', async () => {
+    const reply = await getDirectWebChatReply('bu sekil nedir?', [
+      {
+        role: 'user',
+        content: 'bu sekil nedir?',
+        attachments: [{ id: 'a1', name: 'doc.jpg', type: 'image', mimeType: 'image/jpeg', extractedText: 'DISTRIBUTERIN ETIBARNAMESININ FORMASI' }],
+      },
+    ], {
+      previousUser: 'old message',
+      previousAssistant: 'old assistant',
+      previousAttachment: { name: 'old.jpg', type: 'image', mimeType: 'image/jpeg', extractedText: 'OLD' }
+    });
+
+    expect(reply).not.toContain('əvvəlki attachment');
+  });
 });
 
 describe('dialogue continuity hint', () => {

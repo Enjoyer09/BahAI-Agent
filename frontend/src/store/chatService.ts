@@ -127,9 +127,12 @@ function buildWebReferentSummary(messages: Message[], latestInput: string): Reco
   const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant' && String(item.content || '').trim());
   const previousUser = [...history].reverse().find((item) => item.role === 'user' && String(item.content || '').trim() && String(item.content || '').trim().toLowerCase() !== latestNormalized);
   if (!previousAssistant) return null;
+  if (!previousUser) return null;
 
   const previousVisualMessage = [...history].reverse().find((item) => item.role === 'user' && Array.isArray(item.attachments) && item.attachments.length > 0);
   const previousAttachment = previousVisualMessage?.attachments?.[0];
+  const hasMeaningfulPriorThread = history.filter((item) => item.role === 'assistant' || item.role === 'user').length >= 2;
+  if (!hasMeaningfulPriorThread) return null;
 
   return {
     latestFollowup: latestInput,

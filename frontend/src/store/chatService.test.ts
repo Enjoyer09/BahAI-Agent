@@ -125,6 +125,14 @@ describe('buildWebReferentSummary', () => {
     expect((result as any).previousAttachment.name).toBe('doc.jpg');
     expect((result as any).previousAttachment.extractedText).toContain('DISTRIBUTERIN');
   });
+
+  it('does not build referent summary for a fresh chat with only the current attachment message', () => {
+    const result = buildWebReferentSummary([
+      { id: '1', role: 'user', content: 'bu sekil nedir?', attachments: [{ id: 'a1', name: 'doc.jpg', type: 'image', mimeType: 'image/jpeg', extractedText: 'TEXT' }], timestamp: 1 },
+    ] as any, 'bu sekil nedir?');
+
+    expect(result).toBeNull();
+  });
 });
 
 describe('buildConversationTitleFromInput', () => {

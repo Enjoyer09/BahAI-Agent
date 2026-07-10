@@ -53,11 +53,13 @@ const {
 async function getDirectWebChatReply(latestUserText = '', messages = [], referentSummary = null) {
   const text = String(latestUserText || '').trim();
   const lower = text.toLowerCase();
+  const hasConversationHistory = Array.isArray(messages) && messages.filter((item) => item && (item.role === 'user' || item.role === 'assistant') && String(item.content || '').trim()).length >= 2;
+  const scopedReferentSummary = hasConversationHistory ? referentSummary : null;
   const dialogueState = deriveDialogueState(messages);
   const resolvedFollowup = resolveFollowup(text, {
     ...dialogueState,
-    previousUser: String(referentSummary?.previousUser || dialogueState.previousUser || ''),
-    previousAssistant: String(referentSummary?.previousAssistant || dialogueState.previousAssistant || ''),
+    previousUser: String(scopedReferentSummary?.previousUser || dialogueState.previousUser || ''),
+    previousAssistant: String(scopedReferentSummary?.previousAssistant || dialogueState.previousAssistant || ''),
   });
   const tz = process.env.BAHAI_DEFAULT_TIMEZONE || 'Asia/Baku';
   const now = new Date();
@@ -155,10 +157,10 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
   const asksToClarifyPrevious = /^(deqiqleshdir|dəqiqləşdir|deqiqlestir|dəqiqləşdirin|deqiqlesdir|yuxarida dedin axi|yuxarıda dedin axı|ele onu|elə onu|onu deqiqleshdir|onu dəqiqləşdir|bunu deqiqleshdir|bunu dəqiqləşdir)$/i.test(lower);
   const asksContextualAdvice = /(bu havada|bu qiym[eə]t[eə]?|bu model üçün|bu halda|bu vəziyyətdə|bu şertlerde|bu şəraitdə)/i.test(lower);
 
-  const referentAssistant = String(referentSummary?.previousAssistant || dialogueState.previousAssistant || '').trim();
-  const referentUser = String(referentSummary?.previousUser || dialogueState.previousUser || '').trim();
-  const referentAttachment = referentSummary?.previousAttachment || dialogueState.previousAttachment || null;
-  const hasVisualReferent = Boolean(referentAttachment || resolvedFollowup?.hasRecentVisualReferent);
+  const referentAssistant = String(scopedReferentSummary?.previousAssistant || dialogueState.previousAssistant || '').trim();
+  const referentUser = String(scopedReferentSummary?.previousUser || dialogueState.previousUser || '').trim();
+  const referentAttachment = hasConversationHistory ? (scopedReferentSummary?.previousAttachment || dialogueState.previousAttachment || null) : null;
+  const hasVisualReferent = hasConversationHistory && Boolean(referentAttachment || resolvedFollowup?.hasRecentVisualReferent);
 
   if (hasVisualReferent && /(bu sənəd|bu sened|bu şəkil|bu sekil|bu fayl|buradakı sənəd|burdaki sened|bu sənəd məhsulların qarantiyada olduğunu təsdiqləyir|bu sened mehsullarin qarantiyada oldugunu tesdiqleyir)/i.test(text)) {
     const anchor = `${referentAssistant} ${referentUser}`.toLowerCase();
@@ -420,7 +422,9 @@ router.post('/', async (req, res) => {
   // --- Main Chat Processing ---
   const TOOLS = getToolDefinitions();
   const db = require('../db');
-  const directWebReply = productMode === 'web_chat' ? await getDirectWebChatReply(latestUserText, normalizedMessages, referentSummary || null) : '';
+  const historyMessageCount = normalizedMessages.filter((item) => item && (item.role === 'user' || item.role === 'assistant') && String(item.content || '').trim()).length;
+  const safeReferentSummary = productMode === 'web_chat' && historyMessageCount >= 2 ? (referentSummary || null) : null;
+  const directWebReply = productMode === 'web_chat' ? await getDirectWebChatReply(latestUserText, normalizedMessages, safeReferentSummary) : '';
 
   if (directWebReply) {
     initSse(res);
@@ -432,7 +436,7 @@ router.post('/', async (req, res) => {
   }
 
   const continuity = productMode === 'web_chat'
-    ? buildDialogueContinuityHint(normalizedMessages, latestUserText, referentSummary || null)
+    ? buildDialogueContinuityHint(normalizedMessages, latestUserText, safeReferentSummary)
     : null;
   const dialogueState = continuity?.dialogueState || null;
   const resolvedFollowup = continuity?.resolvedFollowup || null;
@@ -491,9 +495,9 @@ ${generateToolsSystemPrompt(TOOLS)}`;
 
   const apiMessages = [
     { role: 'system', content: systemPrompt },
-    ...(productMode === 'web_chat' && referentSummary?.previousAssistant ? [{
+    ...(productMode === 'web_chat' && safeReferentSummary?.previousAssistant ? [{
       role: 'system',
-      content: `Qısa follow-up referensi: əvvəlki istifadəçi mesajı: ${String(referentSummary.previousUser || '').slice(0, 300)} | əvvəlki assistant mesajı: ${String(referentSummary.previousAssistant || '').slice(0, 700)}. İstifadəçinin cari qısa follow-up-ını bu iki mesajla əlaqələndir və mövzudan kənara çıxma.`
+      content: `Qısa follow-up referensi: əvvəlki istifadəçi mesajı: ${String(safeReferentSummary.previousUser || '').slice(0, 300)} | əvvəlki assistant mesajı: ${String(safeReferentSummary.previousAssistant || '').slice(0, 700)}. İstifadəçinin cari qısa follow-up-ını bu iki mesajla əlaqələndir və mövzudan kənara çıxma.`
     }] : []),
     ...(productMode === 'web_chat' && resolvedFollowup ? [{
       role: 'system',
