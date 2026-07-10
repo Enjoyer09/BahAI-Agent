@@ -65,6 +65,24 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
   }, [onClose]);
 
   useEffect(() => {
+    const poll = window.setInterval(() => {
+      try {
+        const raw = localStorage.getItem('bahai_google_oauth_result');
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data?.token) {
+          localStorage.removeItem('bahai_google_oauth_result');
+          localStorage.removeItem('signed_out');
+          localStorage.setItem('auth_token', data.token);
+          if (data.refreshToken) localStorage.setItem('refresh_token', data.refreshToken);
+          window.location.reload();
+        }
+      } catch {}
+    }, 700);
+    return () => window.clearInterval(poll);
+  }, []);
+
+  useEffect(() => {
     if (!window.electron?.onAuthCallback) return;
     const dispose = window.electron.onAuthCallback((payload) => {
       if (!payload?.token) return;
@@ -83,7 +101,8 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
     // Open Google OAuth in a popup window (works in Electron)
     const redirectUri = `${API_BASE_URL}/api/auth/google-callback`;
     const scope = 'openid email profile';
-    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&prompt=select_account`;
+    const state = encodeURIComponent(JSON.stringify({ productMode }));
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&prompt=select_account&state=${state}`;
     
     const width = 500, height = 600;
     const left = window.screenX + (window.outerWidth - width) / 2;

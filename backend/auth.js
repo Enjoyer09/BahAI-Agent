@@ -353,12 +353,19 @@ router.post('/google-login-desktop', async (req, res) => {
 
 // Google OAuth Authorization Code callback (for desktop/popup flow)
 router.get('/google-callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
   if (!code) {
     return res.status(400).send('Authorization code tapılmadı');
   }
 
   try {
+    let oauthState = {};
+    try {
+      oauthState = JSON.parse(String(state || '{}'));
+    } catch {
+      oauthState = {};
+    }
+    const isWebProduct = oauthState?.productMode === 'web_chat';
     const publicAppOrigin = getPublicAppOrigin(req);
     const redirectUri = `${publicAppOrigin}/api/auth/google-callback`;
     // Exchange code for tokens
@@ -444,9 +451,22 @@ router.get('/google-callback', async (req, res) => {
     var data = ${payload};
     data.type = 'google-oauth-credential';
     var targetOrigin = ${safeOrigin};
+    var isWebProduct = ${JSON.stringify(isWebProduct)};
     if (window.opener) {
-      window.opener.postMessage(data, targetOrigin);
+      try {
+        window.opener.postMessage(data, targetOrigin);
+      } catch (e) {}
+      try {
+        if (window.opener.localStorage) {
+          window.opener.localStorage.setItem('bahai_google_oauth_result', JSON.stringify(data));
+        }
+      } catch (e) {}
       setTimeout(function() { window.close(); }, 1000);
+    } else if (isWebProduct) {
+      try {
+        localStorage.setItem('bahai_google_oauth_result', JSON.stringify(data));
+      } catch (e) {}
+      document.body.innerHTML = '<p style="font-family:sans-serif;text-align:center;margin-top:40vh;color:#666;">Giriş tamamlandı. Əsas pəncərəyə qayıdın.</p>';
     } else {
       window.location.href = 'bahai://auth/callback?token=' + encodeURIComponent(data.token);
     }
