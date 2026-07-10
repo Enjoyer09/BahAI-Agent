@@ -101,7 +101,7 @@ export async function sendChatMessage(
   baseUrl: string,
   model: string,
   workingDirectory: string,
-  options: { safeMode: boolean; projectId?: string | null; conversationId?: string | null; orchestrationMode?: boolean; workflow?: string; guiBrowserMode?: string; guiBrowserPath?: string; guiBrowserCdpUrl?: string; productMode?: 'web_chat' | 'desktop_code'; executionMode?: 'cloud' | 'local' },
+  options: { safeMode: boolean; projectId?: string | null; conversationId?: string | null; orchestrationMode?: boolean; workflow?: string; guiBrowserMode?: string; guiBrowserPath?: string; guiBrowserCdpUrl?: string; productMode?: 'web_chat' | 'desktop_code'; executionMode?: 'cloud' | 'local'; referentSummary?: Record<string, unknown> | null },
   onEvent: (event: SSEEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
@@ -121,6 +121,7 @@ export async function sendChatMessage(
     guiBrowserMode: options.guiBrowserMode,
     guiBrowserPath: options.guiBrowserPath,
     guiBrowserCdpUrl: options.guiBrowserCdpUrl,
+    referentSummary: options.referentSummary || undefined,
   });
 
   const doFetch = async () => apiFetch(`${API_BASE_URL}/api/chat`, {

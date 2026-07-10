@@ -49,7 +49,7 @@ const {
   mapMessagesToResponsesInput, mapToolsToResponsesTools
 } = require('../helpers');
 
-async function getDirectWebChatReply(latestUserText = '', messages = []) {
+async function getDirectWebChatReply(latestUserText = '', messages = [], referentSummary = null) {
   const text = String(latestUserText || '').trim();
   const lower = text.toLowerCase();
   const tz = process.env.BAHAI_DEFAULT_TIMEZONE || 'Asia/Baku';
@@ -147,6 +147,17 @@ async function getDirectWebChatReply(latestUserText = '', messages = []) {
   const isShortFollowup = /^(de|də|he|hə|beli|bəli|olar|buyur|ok|oke|hmm)\.?$/i.test(text);
   const asksToClarifyPrevious = /^(deqiqleshdir|dəqiqləşdir|deqiqlestir|dəqiqləşdirin|deqiqlesdir|yuxarida dedin axi|yuxarıda dedin axı|ele onu|elə onu|onu deqiqleshdir|onu dəqiqləşdir|bunu deqiqleshdir|bunu dəqiqləşdir)$/i.test(lower);
 
+  const referentAssistant = String(referentSummary?.previousAssistant || '').trim();
+  const referentUser = String(referentSummary?.previousUser || '').trim();
+
+  if (asksToClarifyPrevious && referentAssistant) {
+    if (/tam spesifikasiya|cari qiymət|qiymeti maraqlanirsansa|qiyməti maraqlanırsansa/i.test(referentAssistant)) {
+      const subject = referentUser || previousUserText || 'məhsul';
+      return `Dəqiqləşdirim: ${subject} üçün iki istiqamət var — tam spesifikasiya və Azərbaycandakı cari qiymət. Hansını istəyirsiniz? Məsələn: "tam spesifikasiya" və ya "qiymət" yazın.`;
+    }
+    return 'Yuxarıdakı cavaba əsasən bunu dəqiqləşdirə bilərəm. Hansı hissəni nəzərdə tutursunuz: qiymət, texniki göstəricilər, zəmanət, yoxsa distributor məlumatı?';
+  }
+
   if (asksToClarifyPrevious) {
     if (/tam spesifikasiya|cari qiymət|qiymeti maraqlanirsansa|qiyməti maraqlanırsansa/i.test(previousAssistantText)) {
       const subject = previousUserText || 'məhsul';
@@ -206,7 +217,7 @@ router.post('/', async (req, res) => {
   // --- Extract request params ---
   const { message, messages, conversationId, projectId, safeMode, productMode, executionMode,
     orchestrationMode, workflow, frontendApiKey, frontendBaseUrl, frontendModel,
-    guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl } = req.body;
+    guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, referentSummary } = req.body;
 
   const normalizedMessages = Array.isArray(messages) ? messages : [];
   const lastUserMessage = [...normalizedMessages]
@@ -361,7 +372,7 @@ router.post('/', async (req, res) => {
   // --- Main Chat Processing ---
   const TOOLS = getToolDefinitions();
   const db = require('../db');
-  const directWebReply = productMode === 'web_chat' ? await getDirectWebChatReply(latestUserText, normalizedMessages) : '';
+  const directWebReply = productMode === 'web_chat' ? await getDirectWebChatReply(latestUserText, normalizedMessages, referentSummary || null) : '';
 
   if (directWebReply) {
     initSse(res);
@@ -425,6 +436,10 @@ ${generateToolsSystemPrompt(TOOLS)}`;
 
   const apiMessages = [
     { role: 'system', content: systemPrompt },
+    ...(productMode === 'web_chat' && referentSummary?.previousAssistant ? [{
+      role: 'system',
+      content: `Qısa follow-up referensi: əvvəlki istifadəçi mesajı: ${String(referentSummary.previousUser || '').slice(0, 300)} | əvvəlki assistant mesajı: ${String(referentSummary.previousAssistant || '').slice(0, 700)}. İstifadəçinin cari qısa follow-up-ını bu iki mesajla əlaqələndir və mövzudan kənara çıxma.`
+    }] : []),
     { role: 'user', content: latestUserText },
     ...(requestAttachment ? [{
       role: 'user',

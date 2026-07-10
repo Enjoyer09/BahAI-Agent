@@ -116,6 +116,25 @@ function sanitizeWebChatHistory(messages: Message[]): Message[] {
   return filtered.slice(-8);
 }
 
+function buildWebReferentSummary(messages: Message[], latestInput: string): Record<string, unknown> | null {
+  const history = sanitizeWebChatHistory(messages);
+  if (history.length < 2) return null;
+  const latestNormalized = String(latestInput || '').trim().toLowerCase();
+  if (!latestNormalized) return null;
+  const isReferentialFollowup = /^(onu|bunu|el[eə] onu|orada dediyin|deqiqleshdir|dəqiqləşdir|onu dəqiqləşdir|onu deqiqleshdir|bunu dəqiqləşdir|bunu deqiqleshdir|yuxarida dedin axi|yuxarıda dedin axı)$/i.test(latestNormalized);
+  if (!isReferentialFollowup) return null;
+
+  const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant' && String(item.content || '').trim());
+  const previousUser = [...history].reverse().find((item) => item.role === 'user' && String(item.content || '').trim() && String(item.content || '').trim().toLowerCase() !== latestNormalized);
+  if (!previousAssistant) return null;
+
+  return {
+    latestFollowup: latestInput,
+    previousAssistant: String(previousAssistant.content || '').slice(0, 1200),
+    previousUser: previousUser ? String(previousUser.content || '').slice(0, 400) : '',
+  };
+}
+
 function buildConversationTitleFromInput(input: string, productMode?: Settings['productMode']): string {
   const text = String(input || '')
     .replace(/\s+/g, ' ')
@@ -234,6 +253,9 @@ export async function handleSendMessage(
     });
 
     const activeGuiSession = projectMemory?.activeGuiSession as any;
+    const referentSummary = settings.productMode === 'web_chat'
+      ? buildWebReferentSummary(currentMsgs, input)
+      : null;
     const preparedMessages = activeGuiSession?.sessionId && settings.workflow === 'gui'
       ? [{
           role: 'system' as const,
@@ -256,6 +278,7 @@ export async function handleSendMessage(
         guiBrowserCdpUrl: settings.guiBrowserCdpUrl,
         productMode: settings.productMode,
         executionMode: settings.executionMode,
+        referentSummary,
       },
       (event: any) => handleSSEEvent(event, {
         convId,
@@ -675,6 +698,7 @@ export {
   getWelcomeMessage,
   isWelcomeLikeAssistantMessage,
   sanitizeWebChatHistory,
+  buildWebReferentSummary,
   buildConversationTitleFromInput,
   loadWorkspaceState,
   listConversations,

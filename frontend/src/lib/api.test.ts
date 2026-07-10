@@ -5,6 +5,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   loadWorkspaceState,
+  sendChatMessage,
   createProjectOnServer,
   updateProjectOnServer,
   deleteProjectOnServer,
@@ -346,6 +347,19 @@ describe('API Client', () => {
           vi.fn(),
         ),
       ).rejects.toThrow('Giriş tələb olunur');
+    });
+
+    it('includes referentSummary when provided', async () => {
+      mockFetch.mockResolvedValueOnce(mockSSEResponse([{ type: 'assistant_message', message: { content: 'Done' } } as any]));
+      await sendChatMessage(
+        [{ role: 'user', content: 'deqiqleshdir' }],
+        'key', 'url', 'model', '/wd',
+        { safeMode: false, referentSummary: { previousUser: 'HP 250 G10', previousAssistant: 'Tam spesifikasiya və ya qiymət?' } },
+        vi.fn(),
+      );
+      const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
+      expect(body.referentSummary.previousUser).toBe('HP 250 G10');
+      expect(body.referentSummary.previousAssistant).toContain('Tam spesifikasiya');
     });
   });
 });

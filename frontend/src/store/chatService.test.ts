@@ -10,6 +10,7 @@ import {
   getWelcomeMessage,
   isWelcomeLikeAssistantMessage,
   sanitizeWebChatHistory,
+  buildWebReferentSummary,
   normalizeUiErrorMessage,
 } from './chatService';
 
@@ -93,6 +94,19 @@ describe('sanitizeWebChatHistory', () => {
     expect(result).toHaveLength(2);
     expect(result[0].content).toContain('HP warranty');
     expect(result[1].content).toContain('120 ədəd notebook');
+  });
+});
+
+describe('buildWebReferentSummary', () => {
+  it('builds referent summary for deqiqleshdir follow-up', () => {
+    const result = buildWebReferentSummary([
+      { id: '1', role: 'user', content: 'HP 250 G10', timestamp: 1 },
+      { id: '2', role: 'assistant', content: 'Tam spesifikasiya və ya qiymət maraqlıdırsa, dəqiqləşdirim.', timestamp: 2 },
+    ] as any, 'deqiqleshdir');
+
+    expect(result).toBeTruthy();
+    expect((result as any).previousUser).toBe('HP 250 G10');
+    expect((result as any).previousAssistant).toContain('dəqiqləşdirim');
   });
 });
 
