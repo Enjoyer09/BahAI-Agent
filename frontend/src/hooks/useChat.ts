@@ -369,16 +369,16 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         }
         return;
       }
+      // Less aggressive dedup: only drop if content is EXACTLY identical
+      // or is a near-duplicate of the IMMEDIATELY PRECEDING assistant message
+      // (not the last 3, which was too aggressive)
       if (
         msg.role === 'assistant' &&
         normalizedIncoming &&
         (
           normalizedIncoming === lastFinalAssistantContentRef.current ||
           (lastMsg?.role === 'assistant' && normalizedIncoming === normalizedLast) ||
-          (normalizedIncomingLoose && lastMsg?.role === 'assistant' && normalizedIncomingLoose === normalizedLastLoose) ||
-          recentAssistantContents.includes(normalizedIncomingLoose) ||
-          (lastMsg?.role === 'assistant' && areAssistantMessagesNearDuplicate(normalizedIncoming, normalizedLast)) ||
-          recentAssistantContents.some((item) => areAssistantMessagesNearDuplicate(normalizedIncomingLoose, item))
+          (normalizedIncomingLoose && lastMsg?.role === 'assistant' && normalizedIncomingLoose === normalizedLastLoose && normalizedIncomingLoose.length > 200)
         )
       ) {
         return;

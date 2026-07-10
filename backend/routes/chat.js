@@ -286,8 +286,8 @@ router.post('/', async (req, res) => {
   const workspaceRoot = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../../sandbox'));
   const resolvedWD = productMode === 'web_chat' ? '' : resolveWorkingDirectory(undefined, req.user);
   const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '6', 10);
-  const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '180000', 10);
-  const LLM_TIMEOUT_CHAT = parseInt(process.env.LLM_TIMEOUT_CHAT || '90000', 10);
+  const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '60000', 10);
+  const LLM_TIMEOUT_CHAT = parseInt(process.env.LLM_TIMEOUT_CHAT || '45000', 10);
   const providerRuntime = require('../helpers').providerRuntime || { markProviderFailure: () => {}, canUseProviderNow: () => true, markProviderSuccess: () => {}, reorderCandidatesForSession: (items) => items };
   const providerSessionKey = `${productMode || 'desktop_code'}:${req.user?.id || 'anon'}:${conversationId || 'default'}`;
 

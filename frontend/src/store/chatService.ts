@@ -113,7 +113,7 @@ function isWebChatHistoryNoise(message: Message): boolean {
 
 function sanitizeWebChatHistory(messages: Message[]): Message[] {
   const filtered = messages.filter((message) => !isWebChatHistoryNoise(message));
-  return filtered.slice(-8);
+  return filtered.slice(-12);
 }
 
 function buildWebReferentSummary(messages: Message[], latestInput: string): Record<string, unknown> | null {
@@ -227,7 +227,7 @@ export async function handleSendMessage(
       .catch(() => sink.setTaskPlan([]));
 
     const isLikelyLocalModel = !settings.model.includes('/') || settings.baseUrl.includes('localhost') || settings.baseUrl.includes('127.0.0.1');
-    const MAX_HISTORY_MESSAGES = isLikelyLocalModel ? 8 : 16;
+    const MAX_HISTORY_MESSAGES = isLikelyLocalModel ? 12 : 20;
     const historySource = settings.productMode === 'web_chat'
       ? sanitizeWebChatHistory(currentMsgs)
       : currentMsgs;

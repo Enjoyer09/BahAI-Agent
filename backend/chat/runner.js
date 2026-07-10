@@ -35,7 +35,15 @@ async function openAiStreamWithFallback({
   providerSessionKey
 }) {
   const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), llmTimeoutMs);
+  const FIRST_CHUNK_TIMEOUT_MS = Math.min(llmTimeoutMs, 15000); // First chunk within 15s
+  let firstChunkTimer = setTimeout(() => abortController.abort(), FIRST_CHUNK_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => {
+    if (firstChunkTimer) {
+      clearTimeout(firstChunkTimer);
+      firstChunkTimer = null;
+    }
+    abortController.abort();
+  }, llmTimeoutMs);
 
   let stream;
   let nextProvider = activeProvider;
@@ -48,6 +56,11 @@ async function openAiStreamWithFallback({
   async function createStream(provider, providerClient, model, messages, disableTools = false) {
     const apiInputMessages = await normalizeMessagesForModel(messages, model);
     const shouldDisableTools = disableTools || modelDisablesTools(model);
+    // Clear first-chunk timer when we successfully create a stream
+    if (firstChunkTimer) {
+      clearTimeout(firstChunkTimer);
+      firstChunkTimer = null;
+    }
     if (provider.wireApi === 'responses') {
       return providerClient.responses.create({
         model,
@@ -307,6 +320,10 @@ async function openAiStreamWithFallback({
     }
   } finally {
     clearTimeout(timeoutId);
+    if (firstChunkTimer) {
+      clearTimeout(firstChunkTimer);
+      firstChunkTimer = null;
+    }
   }
 }
 

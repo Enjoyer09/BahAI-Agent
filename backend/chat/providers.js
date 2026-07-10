@@ -14,7 +14,7 @@ function createProviderRuntime({ providerCooldownMs }) {
     const fails = prev.fails + 1;
     runtime.set(providerId, {
       fails,
-      cooldownUntil: Date.now() + Math.min(providerCooldownMs * fails, 120000)
+      cooldownUntil: Date.now() + Math.min(providerCooldownMs * fails, 60000)
     });
   }
 

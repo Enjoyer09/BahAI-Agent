@@ -192,7 +192,7 @@ protectedPaths.forEach(function(p) { app.use(p, verifyToken); });
 var { createChatRuntime } = require('./chat/queue');
 var MAX_ACTIVE_CHAT_TOTAL = parseInt(process.env.MAX_ACTIVE_CHAT_TOTAL || '50', 10);
 var MAX_ACTIVE_CHAT_PER_USER = parseInt(process.env.MAX_ACTIVE_CHAT_PER_USER || '5', 10);
-var CHAT_QUEUE_TIMEOUT_MS = parseInt(process.env.CHAT_QUEUE_TIMEOUT_MS || '15000', 10);
+var CHAT_QUEUE_TIMEOUT_MS = parseInt(process.env.CHAT_QUEUE_TIMEOUT_MS || '10000', 10);
 var CHAT_SLOT_MAX_AGE_MS = parseInt(process.env.CHAT_SLOT_MAX_AGE_MS || '300000', 10);
 var chatRuntime = createChatRuntime({
   maxActiveChatTotal: MAX_ACTIVE_CHAT_TOTAL,
