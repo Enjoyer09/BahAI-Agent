@@ -146,6 +146,7 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
   const previousUserText = String(previousUser?.content || '').trim();
   const isShortFollowup = /^(de|də|he|hə|beli|bəli|olar|buyur|ok|oke|hmm)\.?$/i.test(text);
   const asksToClarifyPrevious = /^(deqiqleshdir|dəqiqləşdir|deqiqlestir|dəqiqləşdirin|deqiqlesdir|yuxarida dedin axi|yuxarıda dedin axı|ele onu|elə onu|onu deqiqleshdir|onu dəqiqləşdir|bunu deqiqleshdir|bunu dəqiqləşdir)$/i.test(lower);
+  const asksContextualAdvice = /(bu havada|bu qiym[eə]t[eə]?|bu model üçün|bu halda|bu vəziyyətdə|bu şertlerde|bu şəraitdə)/i.test(lower);
 
   const referentAssistant = String(referentSummary?.previousAssistant || '').trim();
   const referentUser = String(referentSummary?.previousUser || '').trim();
@@ -165,6 +166,20 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
     }
     if (previousAssistantText) {
       return 'Yuxarıdakı cavaba əsasən bunu dəqiqləşdirə bilərəm. Hansı hissəni nəzərdə tutursunuz: qiymət, texniki göstəricilər, zəmanət, yoxsa distributor məlumatı?';
+    }
+  }
+
+  if (asksContextualAdvice) {
+    const weatherAnchorText = referentAssistant || previousAssistantText;
+    const userAnchorText = referentUser || previousUserText;
+    if (/temperatur|rütubət|külək|hava|müşahidə olunur|°c|yağış|rain|shower/i.test(weatherAnchorText)) {
+      return `Hazırkı şəraitə görə qısa məsləhət: yağış və külək olduğuna görə yüngül gəzişdən çox qapalı məkanda plan daha rahat olar. Çölə çıxacaqsınızsa çətir və ya nazik yağışlıq götürün, ayaqqabı da suya davamlı olsa yaxşıdır.`;
+    }
+    if (/qiymət|manat|azn/i.test(weatherAnchorText)) {
+      return 'Bu qiymət aralığında əsasən qiymət-performans balansına baxmaq daha məntiqlidir. İstəsən həmin büdcəyə görə 2-3 daha uyğun variantı müqayisə edim.';
+    }
+    if (/hp|lenovo|dell|asus|model/i.test(weatherAnchorText) || /hp|lenovo|dell|asus|model/i.test(userAnchorText)) {
+      return `Bu model üçün qərar verməkdən əvvəl 3 şeyə baxmaq yaxşı olar: zəmanət kimdədir, RAM/SSD konfiqurasiyası nədir, bir də ekran tipi və batareya səviyyəsi. İstəsən bunu sənin model üzrə bir-bir dəqiqləşdirim.`;
     }
   }
   const clarifiesWorldCupAfterDisambiguation =

@@ -42,4 +42,17 @@ describe('web direct replies', () => {
     expect(reply).toContain('tam spesifikasiya');
     expect(reply).toContain('qiymət');
   });
+
+  it('uses previous weather answer for contextual follow-up advice', async () => {
+    const reply = await getDirectWebChatReply('bu havada ne etmek meslehet gorursen?', [
+      { role: 'user', content: 'Bakida bugun hava necedir?' },
+      { role: 'assistant', content: 'Bakıda hazırda light rain shower müşahidə olunur. Temperatur təxminən 22°C-dir. Külək 13 km/saat təşkil edir. Rütubət 91%-dir.' },
+    ], {
+      previousUser: 'Bakida bugun hava necedir?',
+      previousAssistant: 'Bakıda hazırda light rain shower müşahidə olunur. Temperatur təxminən 22°C-dir. Külək 13 km/saat təşkil edir. Rütubət 91%-dir.'
+    });
+
+    expect(reply).toContain('çətir');
+    expect(reply).toContain('qapalı məkanda');
+  });
 });
