@@ -139,8 +139,23 @@ async function getDirectWebChatReply(latestUserText = '', messages = []) {
   const previousAssistant = [...(Array.isArray(messages) ? messages : [])]
     .reverse()
     .find((item) => item && item.role === 'assistant' && typeof item.content === 'string');
+  const previousUser = [...(Array.isArray(messages) ? messages : [])]
+    .reverse()
+    .find((item) => item && item.role === 'user' && typeof item.content === 'string' && String(item.content || '').trim() !== text);
   const previousAssistantText = String(previousAssistant?.content || '');
+  const previousUserText = String(previousUser?.content || '').trim();
   const isShortFollowup = /^(de|də|he|hə|beli|bəli|olar|buyur|ok|oke|hmm)\.?$/i.test(text);
+  const asksToClarifyPrevious = /^(deqiqleshdir|dəqiqləşdir|deqiqlestir|dəqiqləşdirin|deqiqlesdir|yuxarida dedin axi|yuxarıda dedin axı|ele onu|elə onu|onu deqiqleshdir|onu dəqiqləşdir|bunu deqiqleshdir|bunu dəqiqləşdir)$/i.test(lower);
+
+  if (asksToClarifyPrevious) {
+    if (/tam spesifikasiya|cari qiymət|qiymeti maraqlanirsansa|qiyməti maraqlanırsansa/i.test(previousAssistantText)) {
+      const subject = previousUserText || 'məhsul';
+      return `Dəqiqləşdirim: ${subject} üçün iki istiqamət var — tam spesifikasiya və Azərbaycandakı cari qiymət. Hansını istəyirsiniz? Məsələn: "tam spesifikasiya" və ya "qiymət" yazın.`;
+    }
+    if (previousAssistantText) {
+      return 'Yuxarıdakı cavaba əsasən bunu dəqiqləşdirə bilərəm. Hansı hissəni nəzərdə tutursunuz: qiymət, texniki göstəricilər, zəmanət, yoxsa distributor məlumatı?';
+    }
+  }
   const clarifiesWorldCupAfterDisambiguation =
     /hansı turniri nəzərdə tutduğunuzu bir sətirdə dəqiqləşdirin/i.test(previousAssistantText) &&
     /\bfifa\b/i.test(text) &&

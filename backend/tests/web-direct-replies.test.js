@@ -32,4 +32,14 @@ describe('web direct replies', () => {
     expect(reply).toContain('Hansı turniri nəzərdə tutduğunuzu');
     expect(reply).toContain('FIFA Dünya Kuboku');
   });
+
+  it('resolves deqiqleshdir follow-up against the previous assistant offer', async () => {
+    const reply = await getDirectWebChatReply('deqiqleshdir', [
+      { role: 'user', content: 'HP 250 G10' },
+      { role: 'assistant', content: 'Bud, HP 250 G10. Tam spesifikasiya və ya Azərbaycandakı cari qiyməti maraqlanırsansa, birbaşa soruş, dəqiqləşdirim.' },
+    ]);
+    expect(reply).toContain('HP 250 G10');
+    expect(reply).toContain('tam spesifikasiya');
+    expect(reply).toContain('qiymət');
+  });
 });
