@@ -121,17 +121,26 @@ function buildWebReferentSummary(messages: Message[], latestInput: string): Reco
   if (history.length < 2) return null;
   const latestNormalized = String(latestInput || '').trim().toLowerCase();
   if (!latestNormalized) return null;
-  const isReferentialFollowup = /^(onu|bunu|el[eə] onu|orada dediyin|deqiqleshdir|dəqiqləşdir|onu dəqiqləşdir|onu deqiqleshdir|bunu dəqiqləşdir|bunu deqiqleshdir|yuxarida dedin axi|yuxarıda dedin axı)$/i.test(latestNormalized);
+  const isReferentialFollowup = /^(onu|bunu|el[eə] onu|orada dediyin|deqiqleshdir|dəqiqləşdir|onu dəqiqləşdir|onu deqiqleshdir|bunu dəqiqləşdir|bunu deqiqleshdir|yuxarida dedin axi|yuxarıda dedin axı|bu sənəd|bu sened|bu şəkil|bu sekil|bu fayl|bu file|buradakı sənəd|burdaki sened)$/i.test(latestNormalized);
   if (!isReferentialFollowup) return null;
 
   const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant' && String(item.content || '').trim());
   const previousUser = [...history].reverse().find((item) => item.role === 'user' && String(item.content || '').trim() && String(item.content || '').trim().toLowerCase() !== latestNormalized);
   if (!previousAssistant) return null;
 
+  const previousVisualMessage = [...history].reverse().find((item) => item.role === 'user' && Array.isArray(item.attachments) && item.attachments.length > 0);
+  const previousAttachment = previousVisualMessage?.attachments?.[0];
+
   return {
     latestFollowup: latestInput,
     previousAssistant: String(previousAssistant.content || '').slice(0, 1200),
     previousUser: previousUser ? String(previousUser.content || '').slice(0, 400) : '',
+    previousAttachment: previousAttachment ? {
+      name: previousAttachment.name || '',
+      type: previousAttachment.type || '',
+      mimeType: previousAttachment.mimeType || '',
+      extractedText: String(previousAttachment.extractedText || '').slice(0, 1200),
+    } : null,
   };
 }
 

@@ -184,12 +184,15 @@ function deriveDialogueState(messages = []) {
     : [...recent].reverse().find((item) => item.role === 'user');
   const previousAssistantText = String(previousAssistant?.content || '').trim();
   const previousUserText = String(previousUser?.content || '').trim();
+  const previousVisualMessage = [...list].reverse().find((item) => item && item.role === 'user' && Array.isArray(item.attachments) && item.attachments.length > 0);
+  const previousAttachment = previousVisualMessage?.attachments?.[0] || null;
 
   let domain = 'general';
   if (/hava|temperatur|külək|rütubət|yağış|°c|weather/i.test(`${previousUserText} ${previousAssistantText}`)) domain = 'weather';
   else if (/qiymət|manat|azn|büdcə|büdcə|price/i.test(`${previousUserText} ${previousAssistantText}`)) domain = 'pricing';
   else if (/zəmanət|qarantiya|warranty|distributor/i.test(`${previousUserText} ${previousAssistantText}`)) domain = 'warranty';
   else if (/hp|lenovo|dell|asus|acer|model|notebook|laptop/i.test(`${previousUserText} ${previousAssistantText}`)) domain = 'product';
+  else if (previousAttachment && /image|pdf|file/i.test(`${previousAttachment.type || ''} ${previousAttachment.mimeType || ''}`)) domain = 'document';
 
   const hasOpenChoice = /və ya|hansını istəyirsiniz|istəsən .* deyim|dəqiqləşdirim/i.test(previousAssistantText);
   return {
@@ -197,6 +200,8 @@ function deriveDialogueState(messages = []) {
     previousUser: previousUserText,
     previousAssistant: previousAssistantText,
     hasOpenChoice,
+    previousAttachment,
+    hasRecentVisualReferent: Boolean(previousAttachment),
   };
 }
 
@@ -245,6 +250,8 @@ function buildDialogueContinuityHint(messages = [], latestUserText = '', referen
       previousUser: referentUser,
       previousAssistant: referentAssistant,
       hasOpenChoice: Boolean(dialogueState.hasOpenChoice),
+      previousAttachment: referentSummary?.previousAttachment || dialogueState.previousAttachment || null,
+      hasRecentVisualReferent: Boolean(referentSummary?.previousAttachment || dialogueState.hasRecentVisualReferent),
       latestUserText: latestText,
     },
   };
@@ -255,7 +262,7 @@ function resolveFollowup(latestUserText = '', dialogueState = {}) {
   const lower = text.toLowerCase();
   if (!text) return null;
 
-  const isReferential = /^(onu|bunu|el[eə] onu|orada dediyin|deqiqleshdir|dəqiqləşdir|onu dəqiqləşdir|onu deqiqleshdir|bunu dəqiqləşdir|bunu deqiqleshdir|yuxarida dedin axi|yuxarıda dedin axı|davam et|buyur|olar|hə|he|bəli|beli|ok|oke)$/i.test(lower);
+  const isReferential = /^(onu|bunu|el[eə] onu|orada dediyin|deqiqleshdir|dəqiqləşdir|onu dəqiqləşdir|onu deqiqleshdir|bunu dəqiqləşdir|bunu deqiqleshdir|yuxarida dedin axi|yuxarıda dedin axı|davam et|buyur|olar|hə|he|bəli|beli|ok|oke|bu sənəd|bu sened|bu şəkil|bu sekil|bu fayl|buradakı sənəd|burdaki sened)$/i.test(lower);
   const isContextual = /(bu havada|bu qiym[eə]t[eə]?|bu model üçün|bu halda|bu vəziyyətdə|bu şertlerde|bu şəraitdə)/i.test(lower);
   if (!isReferential && !isContextual) return null;
 
@@ -266,6 +273,8 @@ function resolveFollowup(latestUserText = '', dialogueState = {}) {
     previousUser: String(dialogueState.previousUser || ''),
     previousAssistant: String(dialogueState.previousAssistant || ''),
     hasOpenChoice: Boolean(dialogueState.hasOpenChoice),
+    previousAttachment: dialogueState.previousAttachment || null,
+    hasRecentVisualReferent: Boolean(dialogueState.hasRecentVisualReferent),
   };
 }
 

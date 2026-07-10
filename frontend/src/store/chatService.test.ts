@@ -114,6 +114,17 @@ describe('buildWebReferentSummary', () => {
     expect((result as any).previousUser).toBe('HP 250 G10');
     expect((result as any).previousAssistant).toContain('dəqiqləşdirim');
   });
+
+  it('includes previous attachment for visual referential follow-up', () => {
+    const result = buildWebReferentSummary([
+      { id: '1', role: 'user', content: 'bu sekil ne senedidir?', attachments: [{ id: 'a1', name: 'doc.jpg', type: 'image', mimeType: 'image/jpeg', extractedText: 'DISTRIBUTERIN ETIBARNAMESININ FORMASI' }], timestamp: 1 },
+      { id: '2', role: 'assistant', content: 'Bu şəkil distributer etibarnaməsidir.', timestamp: 2 },
+    ] as any, 'bu sened');
+
+    expect(result).toBeTruthy();
+    expect((result as any).previousAttachment.name).toBe('doc.jpg');
+    expect((result as any).previousAttachment.extractedText).toContain('DISTRIBUTERIN');
+  });
 });
 
 describe('buildConversationTitleFromInput', () => {

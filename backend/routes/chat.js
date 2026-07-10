@@ -157,6 +157,16 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
 
   const referentAssistant = String(referentSummary?.previousAssistant || dialogueState.previousAssistant || '').trim();
   const referentUser = String(referentSummary?.previousUser || dialogueState.previousUser || '').trim();
+  const referentAttachment = referentSummary?.previousAttachment || dialogueState.previousAttachment || null;
+  const hasVisualReferent = Boolean(referentAttachment || resolvedFollowup?.hasRecentVisualReferent);
+
+  if (hasVisualReferent && /(bu sənəd|bu sened|bu şəkil|bu sekil|bu fayl|buradakı sənəd|burdaki sened|bu sənəd məhsulların qarantiyada olduğunu təsdiqləyir|bu sened mehsullarin qarantiyada oldugunu tesdiqleyir)/i.test(text)) {
+    const anchor = `${referentAssistant} ${referentUser}`.toLowerCase();
+    if (/distributer|distributor|səlahiyyət|selahiyyet|authorization|etibarnamə|etibarname/i.test(anchor)) {
+      return 'Xeyr, bu sənəd birbaşa məhsulların qarantiyada olduğunu təsdiqləmir. Bu daha çox distribyutor və ya təchizat səlahiyyətini göstərən sənədə bənzəyir. Qarantiyanı təsdiqləmək üçün warranty sənədi, serial yoxlaması, invoice və ya rəsmi servis/distribyutor təsdiqi daha uyğun sübut olar.';
+    }
+    return 'Bu sənədi əvvəlki attachment kimi nəzərə alıram. Onu yenidən paylaşmağa ehtiyac yoxdur; istəsən indi onun qarantiyanı təsdiqləyib-təsdiqləmədiyini ayrıca şərh edim.';
+  }
 
   if (asksToClarifyPrevious && referentAssistant) {
     if (/tam spesifikasiya|cari qiymət|qiymeti maraqlanirsansa|qiyməti maraqlanırsansa/i.test(referentAssistant)) {
@@ -492,6 +502,10 @@ ${generateToolsSystemPrompt(TOOLS)}`;
     ...(productMode === 'web_chat' && continuityHint ? [{
       role: 'system',
       content: `Söhbət davamlılığı ipucu: bu mesaj böyük ehtimalla eyni dialoqun davamıdır. Mövcud mövzu=${continuityHint.domain}. Son istifadəçi mesajı=${String(continuityHint.previousUser || '').slice(0, 220)}. Son assistant cavabı=${String(continuityHint.previousAssistant || '').slice(0, 420)}. Cari mesajı əvvəlki kontekstə bağla; ancaq istifadəçi açıq yeni mövzu açıbsa zorla köhnə mövzuya qaytarma.`
+    }] : []),
+    ...(productMode === 'web_chat' && continuityHint?.hasRecentVisualReferent ? [{
+      role: 'system',
+      content: 'Visual referent ipucu: istifadəçi bu thread-də daha əvvəl attachment və ya şəkil göndərib. Cari follow-up böyük ehtimalla həmin sənədə aiddir. Attachment-i itmiş sayma, yenidən upload/fayl yolu istəmə və "sənədi görmürəm" fallback-ına qaçma.'
     }] : []),
     { role: 'user', content: latestUserText },
     ...(requestAttachment ? [{

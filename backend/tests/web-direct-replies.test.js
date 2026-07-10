@@ -78,6 +78,28 @@ describe('web direct replies', () => {
     expect(reply).toContain('HP 250 G10');
     expect(reply).not.toContain('120 laptop');
   });
+
+  it('does not lose a previously recognized document referent in follow-up warranty question', async () => {
+    const reply = await getDirectWebChatReply('bu sened mehsullarin qarantiyada oldugunu tesdiqleyir?', [
+      {
+        role: 'user',
+        content: 'bu sekil ne senedidir?',
+        attachments: [{ id: 'a1', name: 'techpro-doc.jpg', type: 'image', mimeType: 'image/jpeg', extractedText: 'DISTRIBUTERIN ETIBARNAMESININ FORMASI' }],
+      },
+      {
+        role: 'assistant',
+        content: 'Bu şəkil distributerin etibarnaməsinin forması sənədidir. Techpro DC LTD tərəfindən verilən səlahiyyət məktubudur.'
+      },
+    ], {
+      previousUser: 'bu sekil ne senedidir?',
+      previousAssistant: 'Bu şəkil distributerin etibarnaməsinin forması sənədidir. Techpro DC LTD tərəfindən verilən səlahiyyət məktubudur.',
+      previousAttachment: { name: 'techpro-doc.jpg', type: 'image', mimeType: 'image/jpeg', extractedText: 'DISTRIBUTERIN ETIBARNAMESININ FORMASI' }
+    });
+
+    expect(reply).toContain('birbaşa məhsulların qarantiyada olduğunu təsdiqləmir');
+    expect(reply).not.toContain('sənədi görmürəm');
+    expect(reply).not.toContain('yenidən paylaş');
+  });
 });
 
 describe('dialogue continuity hint', () => {
