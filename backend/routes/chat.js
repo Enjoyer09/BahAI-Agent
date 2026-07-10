@@ -47,7 +47,7 @@ const {
   normalizeMessagesForModel, generateToolsSystemPrompt, buildDeepSeekRecoveryMessages,
   extractTextToolCalls, serializeProject, serializeConversation,
   mapMessagesToResponsesInput, mapToolsToResponsesTools,
-  deriveDialogueState, resolveFollowup
+  deriveDialogueState, resolveFollowup, buildDialogueContinuityHint
 } = require('../helpers');
 
 async function getDirectWebChatReply(latestUserText = '', messages = [], referentSummary = null) {
@@ -421,16 +421,12 @@ router.post('/', async (req, res) => {
     return res.end();
   }
 
-  const dialogueState = productMode === 'web_chat'
-    ? deriveDialogueState(normalizedMessages)
+  const continuity = productMode === 'web_chat'
+    ? buildDialogueContinuityHint(normalizedMessages, latestUserText, referentSummary || null)
     : null;
-  const resolvedFollowup = productMode === 'web_chat'
-    ? resolveFollowup(latestUserText, {
-        ...dialogueState,
-        previousUser: String(referentSummary?.previousUser || dialogueState?.previousUser || ''),
-        previousAssistant: String(referentSummary?.previousAssistant || dialogueState?.previousAssistant || ''),
-      })
-    : null;
+  const dialogueState = continuity?.dialogueState || null;
+  const resolvedFollowup = continuity?.resolvedFollowup || null;
+  const continuityHint = continuity?.continuityHint || null;
 
   // Build system message
   const productPrompt = productMode === 'web_chat'
@@ -492,6 +488,10 @@ ${generateToolsSystemPrompt(TOOLS)}`;
     ...(productMode === 'web_chat' && resolvedFollowup ? [{
       role: 'system',
       content: `Dialogue continuity state: domain=${resolvedFollowup.domain}; kind=${resolvedFollowup.kind}; previous user=${String(resolvedFollowup.previousUser || '').slice(0, 220)}; previous assistant=${String(resolvedFollowup.previousAssistant || '').slice(0, 420)}. Cari mesajı bu kontekst daxilində şərh et və yeni mövzu uydurma.`
+    }] : []),
+    ...(productMode === 'web_chat' && continuityHint ? [{
+      role: 'system',
+      content: `Söhbət davamlılığı ipucu: bu mesaj böyük ehtimalla eyni dialoqun davamıdır. Mövcud mövzu=${continuityHint.domain}. Son istifadəçi mesajı=${String(continuityHint.previousUser || '').slice(0, 220)}. Son assistant cavabı=${String(continuityHint.previousAssistant || '').slice(0, 420)}. Cari mesajı əvvəlki kontekstə bağla; ancaq istifadəçi açıq yeni mövzu açıbsa zorla köhnə mövzuya qaytarma.`
     }] : []),
     { role: 'user', content: latestUserText },
     ...(requestAttachment ? [{

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import chatRouter from '../routes/chat.js';
+import { buildDialogueContinuityHint } from '../helpers.js';
 
 const { getDirectWebChatReply } = chatRouter;
 
@@ -76,5 +77,26 @@ describe('web direct replies', () => {
 
     expect(reply).toContain('HP 250 G10');
     expect(reply).not.toContain('120 laptop');
+  });
+});
+
+describe('dialogue continuity hint', () => {
+  it('builds continuation hint for short same-thread follow-up', () => {
+    const result = buildDialogueContinuityHint([
+      { role: 'user', content: 'HP 250 G10' },
+      { role: 'assistant', content: 'HP 250 G10 üçün tam spesifikasiya və ya qiyməti dəqiqləşdirə bilərəm.' },
+    ], 'bəli');
+
+    expect(result.continuityHint).toBeTruthy();
+    expect(result.continuityHint.previousUser).toContain('HP 250 G10');
+  });
+
+  it('does not force continuity when user clearly starts a fresh topic', () => {
+    const result = buildDialogueContinuityHint([
+      { role: 'user', content: 'HP 250 G10' },
+      { role: 'assistant', content: 'HP 250 G10 üçün tam spesifikasiya və ya qiyməti dəqiqləşdirə bilərəm.' },
+    ], 'Bakıda hava necədir?');
+
+    expect(result.continuityHint).toBeNull();
   });
 });

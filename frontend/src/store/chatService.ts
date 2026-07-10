@@ -386,7 +386,12 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
 
   if (event.type === 'error') {
     trackChatError(ctx.settings.model, event.message);
-    sink.addSystemMessage(`❌ Xəta: ${normalizeUiErrorMessage(event.message)}`);
+    const normalizedError = normalizeUiErrorMessage(event.message);
+    const bufferedAssistant = normalizeAssistantText(streamBufferRef.current || '');
+    if (isWebChat && bufferedAssistant && /cavabın görünən hissəsi saxlanıldı|gələn hissə göstərildi/i.test(normalizedError)) {
+      return;
+    }
+    sink.addSystemMessage(`❌ Xəta: ${normalizedError}`);
     return;
   }
 
@@ -721,4 +726,5 @@ export {
   saveProjectMemory,
   submitApproval,
   normalizeUiErrorMessage,
+  handleSSEEvent,
 };

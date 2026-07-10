@@ -3,6 +3,11 @@
 // ==========================================
 
 import { describe, expect, it, vi } from 'vitest';
+vi.mock('../lib/telemetry', () => ({
+  trackToolUse: vi.fn(),
+  trackChatError: vi.fn(),
+}));
+
 import {
   buildConversationTitleFromInput,
   getDefaultConversationTitle,
@@ -12,6 +17,7 @@ import {
   sanitizeWebChatHistory,
   buildWebReferentSummary,
   normalizeUiErrorMessage,
+  handleSSEEvent,
 } from './chatService';
 
 // ==========================================
@@ -167,5 +173,39 @@ describe('normalizeUiErrorMessage', () => {
 
   it('keeps regular text as-is', () => {
     expect(normalizeUiErrorMessage('Something went wrong')).toBe('Something went wrong');
+  });
+});
+
+describe('handleSSEEvent', () => {
+  it('suppresses noisy partial-stream disconnect error in web chat when text is already visible', () => {
+    const sink = {
+      setTaskPlan: vi.fn(),
+      addSystemMessage: vi.fn(),
+      updateAssistantMessage: vi.fn(),
+      finalizeAssistantMessage: vi.fn(),
+      updateToolExecution: vi.fn(),
+      addToolResult: vi.fn(),
+      addApproval: vi.fn(),
+      removeApproval: vi.fn(),
+      setHumanCheckpoint: vi.fn(),
+      setPlannerArtifact: vi.fn(),
+      setExecutionArtifacts: vi.fn(),
+      mergeProjectMemory: vi.fn(),
+      updateProjectPort: vi.fn(),
+      incrementPreviewKey: vi.fn(),
+    };
+
+    handleSSEEvent({ type: 'error', message: 'Cavabın görünən hissəsi saxlanıldı. Qalan hissə yarımçıq kəsildi; davamı üçün yenidən göndərin.' } as any, {
+      convId: 'c1',
+      projectMemory: {},
+      activeProject: null,
+      serverBacked: false,
+      settings: { productMode: 'web_chat', model: 'gpt-4o', workflow: 'quick' } as any,
+      sink: sink as any,
+      currentMsgs: { current: [] },
+      streamBufferRef: { current: 'Bakıda bu gün hava təxminən 30°C-dir.' },
+    });
+
+    expect(sink.addSystemMessage).not.toHaveBeenCalled();
   });
 });

@@ -190,6 +190,7 @@ export async function sendChatMessage(
   let sawAnyEvent = false;
   let sawAssistantOutput = false;
   let sawFinalAssistantMessage = false;
+  let sawStreamingAssistantDelta = false;
 
   try {
     while (!done) {
@@ -214,6 +215,9 @@ export async function sendChatMessage(
             if (data?.type === 'assistant_delta' || data?.type === 'assistant_message') {
               sawAssistantOutput = true;
             }
+            if (data?.type === 'assistant_delta') {
+              sawStreamingAssistantDelta = true;
+            }
             if (data?.type === 'assistant_message') {
               sawFinalAssistantMessage = true;
             }
@@ -231,7 +235,9 @@ export async function sendChatMessage(
         onEvent({
           type: 'error',
           message: sawAssistantOutput
-            ? 'Cavab tamamlanmadan əlaqə kəsildi. Gələn hissə göstərildi; qalıq üçün yenidən göndərin.'
+            ? (sawStreamingAssistantDelta
+              ? 'Cavabın görünən hissəsi saxlanıldı. Qalan hissə yarımçıq kəsildi; davamı üçün yenidən göndərin.'
+              : 'Cavab tamamlanmadan əlaqə kəsildi. Gələn hissə göstərildi; qalıq üçün yenidən göndərin.')
             : 'Cavab başlamadan əlaqə kəsildi. Yenidən cəhd edin.'
         } as SSEEvent);
       }
@@ -250,6 +256,9 @@ export async function sendChatMessage(
       if (data?.type === 'assistant_delta' || data?.type === 'assistant_message') {
         sawAssistantOutput = true;
       }
+      if (data?.type === 'assistant_delta') {
+        sawStreamingAssistantDelta = true;
+      }
       if (data?.type === 'assistant_message') {
         sawFinalAssistantMessage = true;
       }
@@ -263,7 +272,9 @@ export async function sendChatMessage(
     onEvent({
       type: 'error',
       message: sawAssistantOutput
-        ? 'Cavab tamamlanmadan əlaqə kəsildi. Gələn hissə göstərildi; qalıq üçün yenidən göndərin.'
+        ? (sawStreamingAssistantDelta
+          ? 'Cavabın görünən hissəsi saxlanıldı. Qalan hissə yarımçıq kəsildi; davamı üçün yenidən göndərin.'
+          : 'Cavab tamamlanmadan əlaqə kəsildi. Gələn hissə göstərildi; qalıq üçün yenidən göndərin.')
         : 'Cavab yarımçıq dayandı. Yenidən cəhd edin.'
     } as SSEEvent);
   }

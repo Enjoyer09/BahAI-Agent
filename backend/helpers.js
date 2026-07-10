@@ -200,6 +200,56 @@ function deriveDialogueState(messages = []) {
   };
 }
 
+function buildDialogueContinuityHint(messages = [], latestUserText = '', referentSummary = null) {
+  const dialogueState = deriveDialogueState(messages);
+  const latestText = String(latestUserText || '').trim();
+  const latestLower = latestText.toLowerCase();
+  const referentUser = String(referentSummary?.previousUser || dialogueState.previousUser || '').trim();
+  const referentAssistant = String(referentSummary?.previousAssistant || dialogueState.previousAssistant || '').trim();
+  const resolvedFollowup = resolveFollowup(latestText, {
+    ...dialogueState,
+    previousUser: referentUser,
+    previousAssistant: referentAssistant,
+  });
+
+  const isExplicitFreshTopic = /\b(hava|weather|tarix|date|bugün|bugun|fifa|dünya çempionatı|dunya cempionati|qiymət|qiymet|warranty|qarantiya|zəmanət|seo|google|wix|laptop|hp|lenovo|dell|asus|acer)\b/i.test(latestText)
+    && !/^(onu|bunu|el[eə] onu|orada dediyin|deqiqleshdir|dəqiqləşdir|davam et|buyur|olar|hə|he|bəli|beli|ok|oke)$/i.test(latestLower);
+
+  if (isExplicitFreshTopic || !referentAssistant) {
+    return {
+      dialogueState,
+      resolvedFollowup,
+      continuityHint: null,
+    };
+  }
+
+  const shortContinuation = latestText.length <= 120 && (
+    resolvedFollowup ||
+    /^(bes|yaxsi|yaxşı|onda|indi|yəni|yeni|demeli|deməli|bəs)/i.test(latestLower) ||
+    /\b(de|da|də)\b/i.test(latestLower)
+  );
+
+  if (!shortContinuation) {
+    return {
+      dialogueState,
+      resolvedFollowup,
+      continuityHint: null,
+    };
+  }
+
+  return {
+    dialogueState,
+    resolvedFollowup,
+    continuityHint: {
+      domain: dialogueState.domain || 'general',
+      previousUser: referentUser,
+      previousAssistant: referentAssistant,
+      hasOpenChoice: Boolean(dialogueState.hasOpenChoice),
+      latestUserText: latestText,
+    },
+  };
+}
+
 function resolveFollowup(latestUserText = '', dialogueState = {}) {
   const text = String(latestUserText || '').trim();
   const lower = text.toLowerCase();
@@ -1463,7 +1513,7 @@ module.exports = {
   looksLikeOllamaModel, parseProviderPoolFromEnv,
   classifyTaskComplexity, isAuditStyleRequest,
   isCurrentFactsOrPublicWebsiteRequest, isFileClarificationLoop,
-  deriveDialogueState, resolveFollowup,
+  deriveDialogueState, resolveFollowup, buildDialogueContinuityHint,
 
   // Tool helpers
   normalizeToolName, buildToolCallCacheKey, isCacheableTool, isSensitiveTool,
