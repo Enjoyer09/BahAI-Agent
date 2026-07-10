@@ -52,6 +52,14 @@ import type { SendMessageContext } from '../store/chatService';
 
 export function useChat(settings: Settings, userKey?: string | number | null) {
   const [state, dispatch] = useReducer(chatReducer, undefined, createInitialState);
+  // ==========================================
+  // RACE CONDITION FIX: stateRef mirrors latest state so
+  // eventSink closures always see the latest values even
+  // when useMemo deps haven't changed.
+  // ==========================================
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const activeConvIdRef = useRef<string | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
   const projectsRef = useRef<Project[]>([]);
@@ -62,21 +70,28 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   const storageTimeout = useRef<any>(null);
   const loadingOlderMessagesRef = useRef<Set<string>>(new Set());
 
+  // ==========================================
+  // RACE CONDITION FIX: Sync ALL refs in a SINGLE effect
+  // to prevent timing gaps where one ref is updated but
+  // another is not yet.
+  // ==========================================
   useEffect(() => {
     activeConvIdRef.current = state.activeConvId;
-  }, [state.activeConvId]);
-
-  useEffect(() => {
     conversationsRef.current = state.conversations;
-  }, [state.conversations]);
-
-  useEffect(() => {
     projectsRef.current = state.projects;
-  }, [state.projects]);
-
-  useEffect(() => {
     serverBackedRef.current = state.serverBacked;
-  }, [state.serverBacked]);
+  }, [
+    state.activeConvId,
+    state.conversations,
+    state.projects,
+    state.serverBacked
+  ]);
+
+  // Clean up lastFinalAssistantContentRef when conversation changes
+  // to prevent stale dedup across conversations
+  useEffect(() => {
+    lastFinalAssistantContentRef.current = '';
+  }, [state.activeConvId]);
 
   // Reset on userKey change (cross-account bleed prevention)
   useEffect(() => {
@@ -452,8 +467,12 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       });
     },
 
+    // RACE CONDITION FIX: Use stateRef.current instead of `state` so
+    // the closure always reads the latest state value even when
+    // useMemo deps haven't changed.
     removeApproval: (approvalId: string) => {
-      const interaction = state.actionCenterInteractions.find(i => i.id === approvalId);
+      const currentInteractions = stateRef.current.actionCenterInteractions;
+      const interaction = currentInteractions.find(i => i.id === approvalId);
       if (interaction) {
         dispatch({ type: 'ADD_INTERACTION_HISTORY', interaction });
       }
@@ -551,18 +570,33 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   }, [settings.productMode]);
 
   // ==========================================
-  // sendMessage
+  // sendMessage — RACE CONDITION FIXES:
+  // 1. Use stateRef.current.abortController instead of state.abortController
+  //    to ensure we always abort the LATEST controller.
+  // 2. Guard: if conversation changed during async ensureConversationForSend,
+  //    abort the send to prevent messages going to wrong conversation.
+  // 3. Use stateRef.current for other state reads to prevent stale closures.
   // ==========================================
   const sendMessageFn = useCallback(async (input: string, attachments: any[] = []) => {
     if (!input.trim() && attachments.length === 0) return;
 
-    if (state.abortController) {
-      state.abortController.abort();
+    // RACE FIX: abort via stateRef to get latest controller
+    const currentController = stateRef.current.abortController;
+    if (currentController) {
+      currentController.abort();
       dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
     }
 
     const ensured = await ensureConversationForSend();
     const convId = ensured.convId;
+
+    // RACE FIX: stale guard — if the active conversation changed
+    // while we were creating the project/conversation, abort the send.
+    if (convId !== activeConvIdRef.current) {
+      console.warn('[useChat] sendMessage aborted: conversation changed during async setup');
+      return;
+    }
+
     const activeConv = conversationsRef.current.find(c => c.id === convId) || null;
     const resolvedProject = ensured.project || activeProject;
     const userMsg: Message = { id: generateId(), role: 'user', content: input, attachments, timestamp: Date.now() };
@@ -577,12 +611,12 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     const baseMessages = Array.isArray(activeConv?.messages) ? activeConv.messages : [];
     const currentMsgs = [...baseMessages, userMsg];
     dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: currentMsgs });
-    if (state.serverBacked) {
+    if (stateRef.current.serverBacked) {
       dispatch({ type: 'UPDATE_CONVERSATION', id: convId, updates: { messagesLoaded: true } });
     }
     if (shouldAutoRenameConversation && nextTitle) {
       dispatch({ type: 'UPDATE_CONVERSATION', id: convId, updates: { title: nextTitle } });
-      if (state.serverBacked) {
+      if (stateRef.current.serverBacked) {
         updateConversationOnServer(convId, { title: nextTitle, messages: currentMsgs }).catch(console.error);
       }
     }
@@ -602,11 +636,11 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       activeConvId: convId,
       activeProject: resolvedProject,
       messages: currentMsgs,
-      projectMemory: state.projectMemory,
-      plannerArtifact: state.plannerArtifact,
-      executionArtifacts: state.executionArtifacts,
-      serverBacked: state.serverBacked,
-      safeMode: state.safeMode,
+      projectMemory: stateRef.current.projectMemory,
+      plannerArtifact: stateRef.current.plannerArtifact,
+      executionArtifacts: stateRef.current.executionArtifacts,
+      serverBacked: stateRef.current.serverBacked,
+      safeMode: stateRef.current.safeMode,
       signal: controller.signal,
       sink: eventSink,
     };
@@ -619,7 +653,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const responseTime = Date.now() - userMsg.timestamp;
       trackChatMessage(settings.model, responseTime);
     }
-  }, [state.abortController, state.projectMemory, state.plannerArtifact, state.executionArtifacts, state.serverBacked, state.safeMode, messages, activeProject, settings, eventSink, ensureConversationForSend]);
+  }, [stateRef, activeProject, settings, eventSink, ensureConversationForSend]);
 
   // ==========================================
   // Callbacks
@@ -841,7 +875,8 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     plannerArtifact: state.plannerArtifact,
     executionArtifacts: state.executionArtifacts,
     sendMessage: sendMessageFn,
-    stop: () => { state.abortController?.abort(); dispatch({ type: 'SET_LOADING', loading: false }); },
+    // RACE FIX: use stateRef for abort controller to always get latest
+    stop: () => { stateRef.current.abortController?.abort(); dispatch({ type: 'SET_LOADING', loading: false }); },
     decideApproval,
     resolveHumanCheckpoint,
     runHealthCheck,
@@ -849,9 +884,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     getDiffPreview,
     applyDiffPreview,
     setActiveConvId: (id: string | null) => {
-      if (id !== state.activeConvId) {
-        if (state.abortController) {
-          state.abortController.abort();
+      if (id !== stateRef.current.activeConvId) {
+        const ctrl = stateRef.current.abortController;
+        if (ctrl) {
+          ctrl.abort();
           dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
         }
         dispatch({ type: 'SET_LOADING', loading: false });

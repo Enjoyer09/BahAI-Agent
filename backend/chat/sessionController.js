@@ -290,9 +290,9 @@ async function runChatSession({
             ].filter(Boolean).join('\n\n')
           });
           currentMessages = compactMessagesForNextPhase(currentMessages, {
-            preserveSystemCount: 8,
-            preserveRecentConversationCount: 8,
-            preserveRecentToolCount: 6
+            preserveSystemCount: 12,
+            preserveRecentConversationCount: 10,
+            preserveRecentToolCount: 8
           });
           writeSse(res, {
             type: 'orchestration_phase',

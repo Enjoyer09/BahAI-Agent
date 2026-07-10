@@ -102,9 +102,14 @@ function isWebChatHistoryNoise(message: Message): boolean {
   if (!content) return true;
   if (message.role === 'system' || message.role === 'tool') return true;
   if (isToolCallLikeText(content)) return true;
+  // Error messages (exact format)
   if (/^❌\s*xəta:/i.test(content)) return true;
   if (/cavab tamamlanmadan əlaqə kəsildi/i.test(content)) return true;
-  if (/^(workflow:|faza:|marşrut:|səbəb:)/i.test(content)) return true;
+  // System-generated orchestration messages (match EXACT format, not just first word)
+  if (/^Workflow:\s*\*\*[^*]+\*\*\s*\|/i.test(content)) return true;
+  if (/^Faza:\s*\*\*[^*]+\*\*/i.test(content)) return true;
+  if (/^[☁️🦙]\s*Auto\s*→/i.test(content)) return true;
+  // GUI/browser session noise
   if (/active gui session|cari visible browser sessiyası açıqdır/i.test(content)) return true;
   if (/eyni browser sessiyasında davam edirəm/i.test(content)) return true;
   if (/hazırdır\.\s*istəsən növbəti addımı bu sessiyada davam etdirə bilərik/i.test(content)) return true;
