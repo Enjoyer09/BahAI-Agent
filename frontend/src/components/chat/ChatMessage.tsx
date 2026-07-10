@@ -186,11 +186,13 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
   return (
     <div className="group animate-in" style={{ animationDelay: '50ms' }}>
       <div className="flex items-start gap-2.5 sm:gap-4">
-        {/* Avatar — circular */}
         <div
           className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
           style={{
-            background: isBot ? 'var(--color-accent)' : '#8e8e8e',
+            background: isBot
+              ? 'linear-gradient(180deg, rgba(16,163,127,0.96), rgba(16,163,127,0.78))'
+              : 'linear-gradient(180deg, rgba(148,163,184,0.9), rgba(100,116,139,0.82))',
+            boxShadow: isBot ? '0 10px 24px rgba(16,163,127,0.18)' : '0 10px 24px rgba(100,116,139,0.14)',
           }}
         >
           {isBot ? (
@@ -204,7 +206,6 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
           )}
         </div>
 
-        {/* Content — no bubble */}
         <div className="flex-1 min-w-0">
           {/* Running indicator */}
           {isBot && hasRunningTools && (
@@ -221,8 +222,17 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
             </div>
           )}
 
-          {/* Message content — plain text */}
-          <div className="leading-relaxed break-words">
+          <div
+            className="leading-relaxed break-words rounded-[22px] px-4 py-3 sm:px-4.5 sm:py-3.5"
+            style={isBot ? {
+              background: 'var(--bg-surface-elevated, rgba(255,255,255,0.03))',
+              border: '1px solid var(--border-subtle)',
+              boxShadow: '0 14px 34px rgba(0,0,0,0.06)'
+            } : {
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.05)'
+            }}
+          >
             {/* Attachments */}
             {message.attachments && message.attachments.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-2.5 sm:mb-3">

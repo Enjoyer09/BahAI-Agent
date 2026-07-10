@@ -548,9 +548,9 @@ function AppContent() {
       </Suspense>
 
       {/* ElevenLabs Real-Time Voice Widget / Setup Helper */}
-      {signedUrl ? (
+      {settings.productMode !== 'web_chat' && signedUrl ? (
         <ElevenLabsWidget signed-url={signedUrl}></ElevenLabsWidget>
-      ) : (
+      ) : settings.productMode !== 'web_chat' ? (
         <button
           onClick={() => setShowElevenLabsHelp(true)}
           className="hidden sm:flex fixed bottom-6 right-6 w-12 h-12 rounded-full items-center justify-center transition-all duration-300 z-40 group shadow-lg cursor-pointer hover:scale-110 active:scale-95"
@@ -569,7 +569,7 @@ function AppContent() {
             Səsli Dialoq Rejimi (ElevenLabs)
           </div>
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

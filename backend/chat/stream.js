@@ -20,11 +20,14 @@ async function collectStreamOutput({
   let accumulatedReasoning = '';
   const accumulatedToolCalls = [];
   let finishReason = null;
+  let sawAssistantDelta = false;
+  let sawCompletedEvent = false;
 
   for await (const chunk of stream) {
     if (wireApi === 'responses') {
       if (chunk.type === 'response.output_text.delta') {
         accumulatedContent += chunk.delta;
+        sawAssistantDelta = true;
         writeSse(res, { type: 'assistant_delta', content: chunk.delta });
       }
 
@@ -54,6 +57,7 @@ async function collectStreamOutput({
 
       if (chunk.type === 'response.completed') {
         finishReason = 'stop';
+        sawCompletedEvent = true;
       }
       continue;
     }
@@ -63,6 +67,7 @@ async function collectStreamOutput({
 
     if (delta.content) {
       accumulatedContent += delta.content;
+      sawAssistantDelta = true;
       writeSse(res, { type: 'assistant_delta', content: delta.content });
     }
 
@@ -145,6 +150,8 @@ async function collectStreamOutput({
 
   return {
     finishReason,
+    sawAssistantDelta,
+    sawCompletedEvent,
     accumulatedContent,
     accumulatedReasoning,
     normalizedToolCalls,

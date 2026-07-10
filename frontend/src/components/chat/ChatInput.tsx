@@ -177,7 +177,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
   return (
     <div className={isMobile ? 'px-2 pb-2 pt-1 safe-bottom mobile-chat-input-wrap' : 'px-4 pb-4 pt-2'}>
       <div className="max-w-3xl mx-auto">
-        {!isMobile && onSafeModeToggle && (
+        {!isMobile && onSafeModeToggle && productMode !== 'web_chat' && (
           <div className="flex justify-center items-center gap-2 mb-2">
             <button
               onClick={onSafeModeToggle}
@@ -199,11 +199,15 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
         <div
           className="relative flex items-end rounded-3xl transition-all tahoe-glass"
           style={{
-            background: 'var(--glass-surface)',
-            border: '1px solid var(--border)',
+            background: productMode === 'web_chat'
+              ? 'linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.05))'
+              : 'var(--glass-surface)',
+            border: productMode === 'web_chat' ? '1px solid rgba(255,255,255,0.08)' : '1px solid var(--border)',
             padding: isMobile ? '9px 10px' : '12px 14px',
             borderRadius: isMobile ? '22px' : undefined,
-            boxShadow: isMobile ? '0 8px 30px rgba(0, 0, 0, 0.22)' : undefined,
+            boxShadow: productMode === 'web_chat'
+              ? '0 22px 60px rgba(0, 0, 0, 0.16)'
+              : (isMobile ? '0 8px 30px rgba(0, 0, 0, 0.22)' : undefined),
           }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
@@ -247,7 +251,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             className="flex-1 bg-transparent border-none outline-none resize-none min-h-[24px] leading-relaxed px-1.5"
             style={{
               color: 'var(--fg-main)',
-              fontSize: isMobile ? '16px' : '14px', // 16px prevents iOS zoom
+              fontSize: isMobile ? '16px' : '15px',
               maxHeight: isMobile ? '120px' : '200px',
             }}
             disabled={blockedByActionCenter}
@@ -365,9 +369,11 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
         )}
 
         {/* Disclaimer */}
-        <div className={isMobile ? 'text-center mt-1 px-1 pb-1' : 'text-center mt-2'}>
+        <div className={isMobile ? 'text-center mt-1 px-2 pb-0' : 'text-center mt-2'}>
           <span className="text-xs" style={{ color: 'var(--fg-muted)' }}>
-            bahAI səhv edə bilər. Vacib məlumatları yoxlayın.
+            {productMode === 'web_chat'
+              ? 'Cavabları kritik qərardan əvvəl qısa yoxlamaq faydalıdır.'
+              : 'bahAI səhv edə bilər. Vacib məlumatları yoxlayın.'}
           </span>
         </div>
       </div>

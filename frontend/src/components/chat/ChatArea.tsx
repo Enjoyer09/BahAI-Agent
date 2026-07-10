@@ -45,21 +45,26 @@ export default function ChatArea({
   if (messages.length === 0 && !loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pb-16 sm:pb-32">
-        {/* Logo */}
         <div
-          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mb-5 sm:mb-6"
-          style={{ background: 'var(--color-accent)' }}
+          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mb-5 sm:mb-6 shadow-[0_18px_50px_rgba(16,163,127,0.18)]"
+          style={{
+            background: 'linear-gradient(180deg, rgba(16,163,127,0.96), rgba(16,163,127,0.78))',
+            border: '1px solid rgba(255,255,255,0.16)'
+          }}
         >
           <MessageSquare size={28} className="text-white" />
         </div>
 
-        {/* Heading */}
-        <h2 className="text-lg sm:text-2xl font-semibold mb-5 sm:mb-8 text-center" style={{ color: 'var(--fg-main)' }}>
+        <h2 className="text-xl sm:text-3xl font-semibold mb-2 text-center tracking-tight" style={{ color: 'var(--fg-main)' }}>
           {productMode === 'web_chat' ? 'Bu gün nədən başlayaq?' : 'BahAI Desktop ilə nə qururuq?'}
         </h2>
+        <p className="text-sm sm:text-base text-center mb-6 sm:mb-8 max-w-xl leading-7" style={{ color: 'var(--fg-secondary)' }}>
+          {productMode === 'web_chat'
+            ? 'Sual verin, mətni yaxşılaşdırın, ideyanı dəqiqləşdirin və ya bir şəkil göndərin.'
+            : 'Repo ilə işləyin, audit etdirin, bug düzəltdirin və yeni funksiya qurun.'}
+        </p>
 
-        {/* Suggestion cards */}
-        <div className="grid grid-cols-1 sm:flex sm:flex-row sm:flex-wrap justify-center gap-2 sm:gap-3 max-w-2xl w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 max-w-2xl w-full">
           {(productMode === 'web_chat'
             ? [
                 { label: 'Yazını yaxşılaşdır', prompt: 'Bu mətni daha aydın, peşəkar və axıcı formada yenidən yaz' },
@@ -76,14 +81,22 @@ export default function ChatArea({
             <button
               key={item.label}
               onClick={() => onSend(item.prompt)}
-              className="px-4 py-3 sm:py-2.5 rounded-xl text-sm transition-all text-left"
+              className="px-4 py-3.5 rounded-2xl text-sm transition-all text-left"
               style={{
                 border: '1px solid var(--border)',
                 color: 'var(--fg-secondary)',
                 minHeight: '44px',
+                background: 'var(--bg-surface-elevated, rgba(255,255,255,0.03))',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.08)'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-hover)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--bg-surface-elevated, rgba(255,255,255,0.03))';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
             >
               {item.label}
             </button>
@@ -100,7 +113,7 @@ export default function ChatArea({
       className="flex-1 overflow-y-auto premium-scroll"
       style={{ scrollBehavior: 'smooth' }}
     >
-      <div className="max-w-3xl mx-auto px-3 sm:px-4 py-3 sm:py-6 space-y-3.5 sm:space-y-6">
+      <div className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-7 space-y-4 sm:space-y-6">
         <style>{`
           @keyframes bahai-wave {
             0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
@@ -138,15 +151,23 @@ export default function ChatArea({
           <div className="flex items-start gap-3 sm:gap-4 animate-in">
             <div
               className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: 'var(--color-accent)' }}
+              style={{
+                background: 'linear-gradient(180deg, rgba(16,163,127,0.96), rgba(16,163,127,0.78))',
+                boxShadow: '0 10px 24px rgba(16,163,127,0.18)'
+              }}
             >
               <Spinner size={14} className="text-white" />
             </div>
             <div className="flex-1 pt-0.5 flex items-center gap-3">
               <div
-                className="flex items-center px-1"
+                className="flex items-center px-3 py-2.5 rounded-2xl"
                 aria-label="Assistant is thinking"
                 title="BahAI cavab hazırlayır"
+                style={{
+                  background: 'var(--bg-surface-elevated, rgba(255,255,255,0.03))',
+                  border: '1px solid var(--border-subtle)',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.06)'
+                }}
               >
                 <div className="flex items-end gap-1.5 h-5" aria-hidden="true">
                   {[0, 1, 2, 3, 4].map((i) => (

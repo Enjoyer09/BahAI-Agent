@@ -135,6 +135,9 @@ async function runChatSession({
       currentMessages = runnerResult.currentMessages || currentMessages;
 
       const {
+        finishReason,
+        sawAssistantDelta,
+        sawCompletedEvent,
         accumulatedContent,
         normalizedToolCalls,
         message: msg
@@ -162,6 +165,7 @@ async function runChatSession({
 
       const hasToolCalls = normalizedToolCalls.length > 0;
       const hasTextContent = accumulatedContent.trim().length > 0;
+      const hasRecoverablePartialText = !hasToolCalls && hasTextContent && sawAssistantDelta && !sawCompletedEvent;
       const artifactQuality = classifyArtifactQuality(accumulatedContent, normalizedToolCalls.map((tc) => tc?.function?.name).filter(Boolean));
       const activeRole = phaseContext.activePhase?.role || 'Solo Agent';
       const phaseRecoveryKey = `${step}:${activeRole}`;
@@ -199,6 +203,14 @@ async function runChatSession({
         continue;
       }
 
+      if (!hasToolCalls && !hasTextContent && sawAssistantDelta) {
+        currentMessages.push({
+          role: 'system',
+          content: 'Model stream zamanı mətn göndərdi, amma final cavab boş qaldı. Eyni mövzunu təkrarlamadan, artıq başladığın cavabı 1 qısa yekun cavab kimi tamamla.'
+        });
+        continue;
+      }
+
       currentMessages.push(msg);
 
       if (phaseContext.activePhase?.role === 'Planner' && !hasToolCalls && hasTextContent) {
@@ -224,6 +236,13 @@ async function runChatSession({
       }
 
       writeSse(res, { type: 'assistant_message', message: msg });
+
+      if (hasRecoverablePartialText && finishReason !== 'tool_calls') {
+        currentMessages.push({
+          role: 'system',
+          content: 'Əvvəlki cavab yarımçıq kəsildi. Eyni məlumatı təkrarlama, sadəcə qaldığın yerdən 1 qısa yekun abzasla tamamla.'
+        });
+      }
 
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         currentMessages = await executeToolCalls({

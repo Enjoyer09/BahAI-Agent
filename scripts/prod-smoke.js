@@ -186,6 +186,26 @@ async function runSmokeMatrix(page) {
       name: 'code',
       prompt: 'JavaScript-də async await nədir? Bir qısa nümunə ver.',
       matcher: (body) => /async await/i.test(body) && /await/i.test(body)
+    },
+    {
+      name: 'continuity_product',
+      prompt: 'HP 250 G10',
+      matcher: (body) => /HP 250 G10/i.test(body) && /(spesifikasiya|qiymət|qiymet)/i.test(body)
+    },
+    {
+      name: 'continuity_followup',
+      prompt: 'dəqiqləşdir',
+      matcher: (body) => /HP 250 G10/i.test(body) && /(tam spesifikasiya|cari qiymət|qiymət)/i.test(body)
+    },
+    {
+      name: 'continuity_weather_followup',
+      prompt: 'bu havada nə etmək məsləhətdir?',
+      matcher: (body) => /(çətir|qapalı məkanda|yağışlıq)/i.test(body)
+    },
+    {
+      name: 'long_answer_stream',
+      prompt: 'Azərbaycan vergi məcəlləsinin əsas hissələrini 5-6 cümlə ilə sadə dildə izah et.',
+      matcher: (body) => /(Vergi Məcəlləsi|əsas hissə|ümumi hissə|xüsusi hissə)/i.test(body)
     }
   ];
 
@@ -197,6 +217,14 @@ async function runSmokeMatrix(page) {
     console.log(`Matrix case ok: ${testCase.name}`);
   }
   return results;
+}
+
+async function assertNoChatRegressionArtifacts(page) {
+  const body = await page.locator('body').innerText();
+  assert(!body.includes('Cavab tamamlanmadan əlaqə kəsildi'), 'UI-da köhnə partial disconnect xətası göründü');
+  assert(!body.includes('Cavabın görünən hissəsi saxlanıldı'), 'UI-da stream disconnect xəbərdarlığı göründü');
+  assert(!body.includes('function_call_output'), 'Raw function_call_output UI-da qaldı');
+  assert(!body.includes('"arguments"'), 'Raw arguments JSON UI-da qaldı');
 }
 
 async function createCheckpointFlow(token) {
@@ -301,6 +329,7 @@ async function main() {
 
     if (MATRIX_MODE) {
       const matrixResults = await runSmokeMatrix(page);
+      await assertNoChatRegressionArtifacts(page);
       console.log('Smoke matrix ok');
       for (const result of matrixResults) {
         console.log(`- ${result.name}: ok`);
