@@ -278,6 +278,14 @@ function getAuthConfig(req, res) {
   });
 }
 
+function getPublicAppOrigin(req) {
+  const configured = String(process.env.PUBLIC_APP_ORIGIN || process.env.APP_URL || '').trim();
+  if (configured) return configured.replace(/\/$/, '');
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const proto = forwardedProto || req.protocol || 'http';
+  return `${proto}://${req.get('host')}`.replace(/\/$/, '');
+}
+
 // Desktop OAuth callback page - redirects token back to Electron via custom protocol
 router.get('/desktop-callback', (req, res) => {
   // SEC-FIX: encodeURIComponent already escapes most things, but values
@@ -351,6 +359,8 @@ router.get('/google-callback', async (req, res) => {
   }
 
   try {
+    const publicAppOrigin = getPublicAppOrigin(req);
+    const redirectUri = `${publicAppOrigin}/api/auth/google-callback`;
     // Exchange code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -359,7 +369,7 @@ router.get('/google-callback', async (req, res) => {
         code: String(code),
         client_id: process.env.GOOGLE_CLIENT_ID || '',
         client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
-        redirect_uri: `${req.protocol}://${req.get('host')}/api/auth/google-callback`,
+        redirect_uri: redirectUri,
         grant_type: 'authorization_code'
       })
     });
@@ -424,7 +434,7 @@ router.get('/google-callback', async (req, res) => {
     // P2-FIX: Derive the allowed postMessage origin from ALLOWED_ORIGINS env
     // or the request origin. Using '*' is risky — any window could intercept.
     const postMessageOrigin = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean)[0]
-      || `${req.protocol}://${req.get('host')}`;
+      || publicAppOrigin;
     const safeOrigin = safeJsonScript(postMessageOrigin);
     res.send(`<!DOCTYPE html>
 <html><head><title>bahAI Login</title></head>

@@ -18,6 +18,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 
 const app = express();
+app.set('trust proxy', 1);
 const db = require('./db');
 const { router: authRoutes, verifyToken } = require('./auth');
 
