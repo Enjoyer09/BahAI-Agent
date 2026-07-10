@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Mail, Lock, User, Loader2, ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../lib/constants';
@@ -112,6 +112,56 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
 
   if (!isOpen) return null;
 
+  // Focus trap refs
+  const modalRef = useRef<HTMLDivElement>(null);
+  const firstFocusableRef = useRef<HTMLButtonElement>(null);
+  const lastFocusableRef = useRef<HTMLButtonElement>(null);
+
+  // Focus trap keyboard handler
+  useEffect(() => {
+    if (!isOpen) return;
+    const modal = modalRef.current;
+    if (!modal) return;
+
+    // Focus first element on open
+    const focusable = modal.querySelectorAll<HTMLElement>(
+      'button, input, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length > 0) {
+      firstFocusableRef.current = focusable[0] as HTMLButtonElement;
+      lastFocusableRef.current = focusable[focusable.length - 1] as HTMLButtonElement;
+      setTimeout(() => focusable[0].focus(), 50);
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const firstFocusable = firstFocusableRef.current;
+      const lastFocusable = lastFocusableRef.current;
+      if (e.shiftKey) {
+        if (document.activeElement === firstFocusable) {
+          e.preventDefault();
+          lastFocusable?.focus();
+        }
+      } else {
+        if (document.activeElement === lastFocusable) {
+          e.preventDefault();
+          firstFocusable?.focus();
+        }
+      }
+    };
+
+    modal.addEventListener('keydown', handleKeyDown);
+    return () => modal.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  const handleOverlayClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) onClose();
+  }, [onClose]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -148,8 +198,11 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
       role="dialog"
       aria-modal="true"
       aria-labelledby="auth-title"
+      ref={modalRef}
+      onClick={handleOverlayClick}
+      data-focus-trap
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
       <div
         className="relative w-full max-w-sm rounded-2xl p-6 sm:p-8 animate-scale-in"
         style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
@@ -160,6 +213,7 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
           className="absolute top-4 right-4 p-2 rounded-md transition-colors"
           style={{ color: 'var(--fg-muted)', minHeight: '44px', minWidth: '44px' }}
           aria-label="Bağla"
+          tabIndex={0}
         >
           <X size={18} />
         </button>
@@ -297,14 +351,13 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
             >
               {showPassword ? 'Gizlə' : 'Göstər'}
             </button>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            data-testid={isLogin ? 'auth-login-submit' : 'auth-register-submit'}
-            aria-label={isLogin ? 'E-poçt ilə daxil ol' : 'Qeydiyyatdan keç'}
-            className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+          </div>            <button
+              type="submit"
+              disabled={loading}
+              data-testid={isLogin ? 'auth-login-submit' : 'auth-register-submit'}
+              aria-label={isLogin ? 'E-poçt ilə daxil ol' : 'Qeydiyyatdan keç'}
+              aria-busy={loading}
+              className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
             style={{
               background: 'var(--color-accent)',
               color: 'var(--fg-on-accent)',
@@ -323,6 +376,7 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
             onClick={() => { setIsLogin(!isLogin); setError(null); }}
             data-testid="auth-mode-toggle"
             aria-label={isLogin ? 'Qeydiyyata keç' : 'Login-ə keç'}
+            aria-pressed={!isLogin}
             className="text-sm"
             style={{ color: 'var(--fg-muted)' }}
           >

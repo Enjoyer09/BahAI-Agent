@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { ActionCenterInteraction } from '../../lib/types';
 
 interface Props {
@@ -63,6 +64,42 @@ function formatMetaLine({ runId, phaseRole, conversationId, expiresAt }: { runId
 export default function ActionCenterModal({ interactions, history = [], onResolveCheckpoint, onApprove }: Props) {
   if (interactions.length === 0) return null;
 
+  // Focus trap
+  const modalRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (interactions.length === 0) return;
+    const modal = modalRef.current;
+    if (!modal) return;
+    const focusable = modal.querySelectorAll<HTMLElement>(
+      'button, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length > 0) {
+      setTimeout(() => focusable[0].focus(), 50);
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Don't close on Escape - let the parent handle it
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const firstFocusable = focusable[0];
+      const lastFocusable = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === firstFocusable) {
+          e.preventDefault();
+          lastFocusable?.focus();
+        }
+      } else {
+        if (document.activeElement === lastFocusable) {
+          e.preventDefault();
+          firstFocusable?.focus();
+        }
+      }
+    };
+    modal.addEventListener('keydown', handleKeyDown);
+    return () => modal.removeEventListener('keydown', handleKeyDown);
+  }, [interactions.length]);
+
   const grouped = interactions.reduce<Record<string, ActionCenterInteraction[]>>((acc, item) => {
     const runKey = item.checkpoint?.runId || item.approval?.runId || 'no-run';
     if (!acc[runKey]) acc[runKey] = [];
@@ -83,10 +120,12 @@ export default function ActionCenterModal({ interactions, history = [], onResolv
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4" style={{ background: 'rgba(0,0,0,0.45)' }} role="dialog" aria-modal="true" aria-label="Action Center">
       <div
+        ref={modalRef}
         className="w-full max-w-2xl rounded-lg p-4 sm:p-5 max-h-[85vh] overflow-y-auto premium-scroll"
         style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
+        data-focus-trap
       >
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="text-sm font-semibold" style={{ color: 'var(--fg-main)' }}>

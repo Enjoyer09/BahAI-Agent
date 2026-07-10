@@ -65,6 +65,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       onMouseLeave={(e) => {
         e.currentTarget.style.opacity = disabled ? '0.5' : '1';
       }}
+
       {...props}
     >
       {loading ? <Spinner size={14} /> : icon}
@@ -84,6 +85,8 @@ export function Spinner({ size = 20, className = '' }: { size?: number; classNam
       size={size}
       className={`animate-spin ${className}`}
       style={{ animation: 'spin 0.8s linear infinite' }}
+      role="status"
+      aria-label="Yüklənir..."
     />
   );
 }
@@ -164,10 +167,12 @@ interface TooltipProps {
 
 export function Tooltip({ content, side = 'top', children }: TooltipProps) {
   return (
-    <div className="group relative inline-flex">
+    <div className="group relative inline-flex" role="tooltip">
       {children}
       <div
         className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+        role="tooltip"
+        aria-hidden="true"
         style={{
           ...(side === 'top' && { bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: '6px' }),
           ...(side === 'bottom' && { top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '6px' }),

@@ -225,6 +225,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             }}
             title="Fayl əlavə et"
             aria-label="Attach file"
+            tabIndex={0}
           >
             <Plus size={isMobile ? 17 : 20} />
           </button>
@@ -291,6 +292,8 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                 }}
                 title={isListening ? "Səsli daxiletməni dayandır" : "Səslə danış"}
                 aria-label="Toggle voice input"
+                aria-pressed={isListening}
+                tabIndex={0}
               >
                 {isListening ? <MicOff size={isMobile ? 16 : 18} /> : <Mic size={isMobile ? 16 : 18} />}
               </button>
@@ -309,6 +312,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                   border: '1px solid rgba(239, 68, 68, 0.18)',
                 }}
                 aria-label="Stop generation"
+                tabIndex={0}
               >
                 <Square size={isMobile ? 14 : 16} fill="currentColor" />
               </button>
@@ -329,6 +333,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                   border: canSend ? '1px solid rgba(16, 163, 127, 0.65)' : '1px solid rgba(255,255,255,0.08)',
                 }}
                 aria-label="Send message"
+                tabIndex={0}
               >
                 <Send size={isMobile ? 14 : 16} />
               </button>
@@ -370,7 +375,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
 
         {/* Disclaimer */}
         <div className={isMobile ? 'text-center mt-1 px-2 pb-0' : 'text-center mt-2'}>
-          <span className="text-xs" style={{ color: 'var(--fg-muted)' }}>
+          <span className="text-xs" style={{ color: 'var(--fg-muted)' }} role="note">
             {productMode === 'web_chat'
               ? 'Cavabları kritik qərardan əvvəl qısa yoxlamaq faydalıdır.'
               : 'bahAI səhv edə bilər. Vacib məlumatları yoxlayın.'}

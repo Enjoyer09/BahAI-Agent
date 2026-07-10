@@ -44,6 +44,14 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
     setTimeout(() => setCopied(false), 2000);
   }, [message.content]);
 
+  // Keyboard handler for action buttons
+  const handleActionKeyDown = useCallback((e: React.KeyboardEvent, action: () => void) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      action();
+    }
+  }, []);
+
   const speakWithBrowser = useCallback((text: string) => {
     if (!window.speechSynthesis) {
       alert("Bu cihazda səs oxuma dəstəklənmir.");
@@ -155,9 +163,8 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
     toast.info('Yenidən yazma üçün yeni mesaj göndərin');
   }, [message.id, toast]);
 
-  if (message.role === 'tool') return null;
 
-  // FUNC-FIX: 'system' role is used for in-chat infrastructure notes such as
+  if (message.role === 'tool') return null;
   // the Auto router's choice. Render as a small inline pill so it doesn't
   // dominate the conversation.
   if (message.role === 'system') {
@@ -310,9 +317,10 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
 
           {/* Message actions — always visible on mobile */}
           {isBot && !hasRunningTools && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-1 mobile-visible" style={{ opacity: 1 }}>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-1 mobile-visible" style={{ opacity: 1 }} role="group" aria-label="Message actions">
               <button
                 onClick={copyToClipboard}
+                onKeyDown={(e) => handleActionKeyDown(e, copyToClipboard)}
                 className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-md transition-colors sm:p-2"
                 style={{ color: 'var(--fg-muted)', minHeight: '40px' }}
                 aria-label="Copy message"
@@ -322,6 +330,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
               </button>
               <button
                 onClick={handleThumbsUp}
+                onKeyDown={(e) => handleActionKeyDown(e, handleThumbsUp)}
                 className="p-2 rounded-md transition-colors"
                 style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Good response"
@@ -330,6 +339,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
               </button>
               <button
                 onClick={handleThumbsDown}
+                onKeyDown={(e) => handleActionKeyDown(e, handleThumbsDown)}
                 className="p-2 rounded-md transition-colors"
                 style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Bad response"
@@ -338,6 +348,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
               </button>
               <button
                 onClick={speakMessage}
+                onKeyDown={(e) => handleActionKeyDown(e, speakMessage)}
                 className="p-2 rounded-md transition-colors flex items-center justify-center"
                 style={{
                   color: isPlaying ? 'var(--color-accent)' : 'var(--fg-muted)',
@@ -352,6 +363,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
               </button>
               <button
                 onClick={handleRegenerate}
+                onKeyDown={(e) => handleActionKeyDown(e, handleRegenerate)}
                 className="p-2 rounded-md transition-colors"
                 style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Regenerate"
