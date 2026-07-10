@@ -461,12 +461,19 @@ router.get('/google-callback', async (req, res) => {
           window.opener.localStorage.setItem('bahai_google_oauth_result', JSON.stringify(data));
         }
       } catch (e) {}
-      setTimeout(function() { window.close(); }, 1000);
+      setTimeout(function() {
+        try { window.open('', '_self'); } catch (e) {}
+        try { window.close(); } catch (e) {}
+      }, 300);
     } else if (isWebProduct) {
       try {
         localStorage.setItem('bahai_google_oauth_result', JSON.stringify(data));
       } catch (e) {}
       document.body.innerHTML = '<p style="font-family:sans-serif;text-align:center;margin-top:40vh;color:#666;">Giriş tamamlandı. Əsas pəncərəyə qayıdın.</p>';
+      setTimeout(function() {
+        try { window.open('', '_self'); } catch (e) {}
+        try { window.close(); } catch (e) {}
+      }, 1200);
     } else {
       window.location.href = 'bahai://auth/callback?token=' + encodeURIComponent(data.token);
     }
