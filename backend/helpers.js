@@ -324,6 +324,17 @@ function normalizeFinalAssistantReport(content = '', context = {}) {
   } = context;
 
   const isWebChatProduct = productMode === 'web_chat';
+  if (isWebChatProduct) {
+    return text
+      .replace(/\bopen electron\b/gi, 'desktop tətbiqini aç')
+      .replace(/\belectron\b/gi, 'desktop tətbiqi')
+      .replace(/bahai:\/\/auth\/callback\?[^\s)]+/gi, '')
+      .replace(/\bdesktop app\b/gi, 'desktop tətbiqi')
+      .replace(/\blocal app\b/gi, 'desktop tətbiqi')
+      .replace(/\bterminal-da .*?icra edin\b/gi, 'bu addım web versiyada tələb olunmur')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
   const hasPlannerMaterial = Boolean(
     plannerArtifact?.summary ||
     (Array.isArray(plannerArtifact?.implementationSteps) && plannerArtifact.implementationSteps.length > 0) ||
