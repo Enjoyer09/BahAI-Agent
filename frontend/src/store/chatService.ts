@@ -489,12 +489,13 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'assistant_delta') {
-    const deltaText = normalizeAssistantText(String(event.content || ''));
-    if (/Düşünürəm/i.test(deltaText)) return;
-    if (!deltaText) return;
-    streamBufferRef.current = normalizeAssistantText((streamBufferRef.current || '') + deltaText);
-    if (!streamBufferRef.current) return;
-    sink.updateAssistantMessage(streamBufferRef.current);
+    const rawDelta = String(event.content || '');
+    if (/Düşünürəm/i.test(rawDelta)) return;
+    if (!rawDelta) return;
+    streamBufferRef.current = (streamBufferRef.current || '') + rawDelta;
+    const normalizedBuffer = normalizeAssistantText(streamBufferRef.current);
+    if (!normalizedBuffer) return;
+    sink.updateAssistantMessage(normalizedBuffer);
     return;
   }
 

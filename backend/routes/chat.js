@@ -493,6 +493,8 @@ BİRBAŞA NÜMUNƏ:
 
 ${generateToolsSystemPrompt(TOOLS)}`;
 
+  const historyMessages = Array.isArray(messages) && messages.length > 1 ? messages.slice(0, -1) : [];
+
   const apiMessages = [
     { role: 'system', content: systemPrompt },
     ...(productMode === 'web_chat' && safeReferentSummary?.previousAssistant ? [{
@@ -511,6 +513,7 @@ ${generateToolsSystemPrompt(TOOLS)}`;
       role: 'system',
       content: 'Visual referent ipucu: istifadəçi bu thread-də daha əvvəl attachment və ya şəkil göndərib. Cari follow-up böyük ehtimalla həmin sənədə aiddir. Attachment-i itmiş sayma, yenidən upload/fayl yolu istəmə və "sənədi görmürəm" fallback-ına qaçma.'
     }] : []),
+    ...historyMessages,
     { role: 'user', content: latestUserText },
     ...(requestAttachment ? [{
       role: 'user',
