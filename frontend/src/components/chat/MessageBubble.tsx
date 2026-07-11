@@ -3,6 +3,7 @@
  * Adapted from LibreChat's Message components.
  * Renders user/assistant messages with markdown, attachments, and action buttons.
  */
+import MarkdownRenderer from '../common/MarkdownRenderer';
 
 import { User, Bot, Edit2, RotateCcw } from 'lucide-react';
 
@@ -57,10 +58,7 @@ export function MessageBubble({ message, onEdit, onRegenerate }: MessageBubblePr
 
           {/* Text Bubble */}
           <div className={`p-3 rounded-lg ${isUser ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-100' : 'bg-gray-800 border border-gray-700 text-gray-200'}`}>
-            {/* In a real app, this would use react-markdown, remark-gfm, rehype-katex */}
-            <div className="whitespace-pre-wrap break-words text-sm">
-              {message.content}
-            </div>
+            <MarkdownRenderer content={message.content} />
           </div>
 
           {/* Action Buttons (Hover) */}

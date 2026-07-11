@@ -34,7 +34,10 @@ export function isToolCallLikeText(content: string): boolean {
     /(?:^|[\s,{])"url"\s*:\s*"https?:\/\/[^\s"]*$/is.test(text) ||
     /^(?:```(?:json)?\s*)?"date"\s*:\s*"[^"]+/is.test(text) ||
     /^(?:```(?:json)?\s*)?\{\s*"date"\s*:\s*"[^"]+/is.test(text) ||
-    /^```json\s*$/i.test(text) ||
+    /^```(?:json)?\s*\{\s*$/is.test(text) ||
+    /^```(?:json)?\s*\{\s*"[\w]+"?\s*$/is.test(text) ||
+    /^\{\s*"[\w]+"?\s*$/is.test(text) ||
+    /^```(?:json)?\s*$/i.test(text) ||
     /^```\s*$/i.test(text)
   );
 }
