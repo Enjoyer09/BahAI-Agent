@@ -47,22 +47,34 @@ export function Composer({ onSendMessage, disabled }: ComposerProps) {
   };
 
   return (
-    <div className="flex flex-col w-full bg-gray-800 rounded-lg border border-gray-700 shadow-sm p-3 relative">
+    <div 
+      className="flex flex-col w-full rounded-lg shadow-sm p-3 relative"
+      style={{
+        backgroundColor: 'var(--bg-elevated)',
+        border: '1px solid var(--border)',
+        color: 'var(--fg-main)'
+      }}
+    >
       {/* Attachment Tray */}
       {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-3 pb-3 border-b border-gray-700">
+        <div className="flex flex-wrap gap-2 mb-3 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
           {attachments.map(att => (
-            <div key={att.id} className="relative flex items-center justify-center bg-gray-900 rounded-md p-1 border border-gray-600 h-16 w-16 group">
+            <div 
+              key={att.id} 
+              className="relative flex items-center justify-center rounded-md p-1 h-16 w-16 group"
+              style={{ backgroundColor: 'var(--bg-surface-alt)', border: '1px solid var(--border-subtle)' }}
+            >
               {att.previewUrl ? (
                 <img src={att.previewUrl} alt="preview" className="h-full w-full object-cover rounded" />
               ) : (
-                <FileText size={24} className="text-gray-400" />
+                <FileText size={24} style={{ color: 'var(--fg-muted)' }} />
               )}
               <button
                 onClick={() => removeAttachment(att.id)}
-                className="absolute -top-2 -right-2 bg-gray-700 hover:bg-red-500 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -top-2 -right-2 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ backgroundColor: 'var(--color-danger)', color: 'white' }}
               >
-                <X size={12} className="text-white" />
+                <X size={12} />
               </button>
             </div>
           ))}
@@ -73,7 +85,8 @@ export function Composer({ onSendMessage, disabled }: ComposerProps) {
       <div className="flex items-end gap-2">
         <button 
           onClick={() => fileInputRef.current?.click()}
-          className="p-2 text-gray-400 hover:text-white transition-colors"
+          className="p-2 transition-opacity hover:opacity-80"
+          style={{ color: 'var(--fg-secondary)' }}
           disabled={disabled}
         >
           <Paperclip size={20} />
@@ -96,7 +109,8 @@ export function Composer({ onSendMessage, disabled }: ComposerProps) {
             }
           }}
           placeholder="Mesajınızı yazın..."
-          className="flex-1 bg-transparent text-white outline-none resize-none max-h-32 py-2"
+          className="flex-1 bg-transparent outline-none resize-none max-h-32 py-2"
+          style={{ color: 'var(--fg-main)' }}
           rows={1}
           disabled={disabled}
         />
@@ -104,7 +118,11 @@ export function Composer({ onSendMessage, disabled }: ComposerProps) {
         <button 
           onClick={handleSubmit}
           disabled={disabled || (!text.trim() && attachments.length === 0)}
-          className="p-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:text-gray-400 text-white rounded-md transition-colors"
+          className="p-2 rounded-md transition-opacity hover:opacity-90 disabled:opacity-50"
+          style={{ 
+            backgroundColor: (disabled || (!text.trim() && attachments.length === 0)) ? 'var(--bg-surface-alt)' : 'var(--color-accent)',
+            color: (disabled || (!text.trim() && attachments.length === 0)) ? 'var(--fg-muted)' : 'white'
+          }}
         >
           <Send size={18} />
         </button>
