@@ -1,7 +1,7 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen, Mic } from 'lucide-react';
 import ChatArea from './components/chat/ChatArea';
-import ChatInput from './components/chat/ChatInput';
+import { Composer } from './components/chat/Composer';
 import ActionCenterModal from './components/chat/ActionCenterModal';
 import AuthModal from './components/auth/AuthModal';
 import Sidebar from './components/sidebar/Sidebar';
@@ -387,15 +387,12 @@ function AppContent() {
           workingDirectory={chat.activeProject?.path || ''}
           productMode={settings.productMode}
         />
-        <ChatInput
-          onSend={chat.sendMessage}
-          onStop={chat.stop}
-          loading={chat.loading}
-          blockedByActionCenter={chat.actionCenterInteractions.length > 0}
-          safeMode={chat.safeMode}
-          onSafeModeToggle={() => chat.setSafeMode(!chat.safeMode)}
-          isMobile={isMobile}
-          productMode={settings.productMode}
+        <Composer
+          onSendMessage={(text, attachments) => {
+            // Attachments will be sent alongside text when backend is fully connected
+            chat.sendMessage(text); 
+          }}
+          disabled={chat.loading || chat.actionCenterInteractions.length > 0}
         />
       </main>
 

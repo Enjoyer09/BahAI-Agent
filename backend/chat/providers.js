@@ -1,4 +1,5 @@
 const { OpenAI } = require('openai');
+const BaseProvider = require('../providers/BaseProvider');
 
 function createProviderRuntime({ providerCooldownMs }) {
   const runtime = new Map();
@@ -255,5 +256,6 @@ module.exports = {
   detectWireApi,
   isResponsesSchemaMismatchError,
   buildOpenAIClient,
-  buildProviderCandidates
+  buildProviderCandidates,
+  BaseProvider // Exporting LibreChat abstraction for external use
 };

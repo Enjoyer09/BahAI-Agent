@@ -3,7 +3,10 @@
 // ==========================================
 
 const path = require('path');
-const fs = require('fs/promises');
+const fs = require('fs');
+const attachmentPipeline = require('./chat/attachmentPipeline');
+const visionContext = require('./chat/visionContext');
+const fs_promises = require('fs/promises');
 const crypto = require('crypto');
 const mammoth = require('mammoth');
 const XLSX = require('xlsx');
@@ -1559,6 +1562,7 @@ module.exports = {
   // Attachment extraction
   readPdfFile, extractDocxText, extractSpreadsheetText,
   extractImageText, decodeDataUrl, extractAttachment,
+  attachmentPipeline, visionContext,
 
   // Message normalization
   normalizeMessagesForModel, generateToolsSystemPrompt,

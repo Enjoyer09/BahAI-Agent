@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { MessageSquare, Square } from 'lucide-react';
 import type { Message } from '../../lib/types';
-import ChatMessage from './ChatMessage';
+import { MessageBubble } from './MessageBubble';
 import { Spinner } from '../common/UI';
 
 interface Props {
@@ -139,11 +139,9 @@ export default function ChatArea({
           </div>
         )}
         {messages.map((msg, i) => (
-          <ChatMessage
+          <MessageBubble
             key={msg.id || i}
             message={msg}
-            workingDirectory={workingDirectory}
-            productMode={productMode}
           />
         ))}
 
