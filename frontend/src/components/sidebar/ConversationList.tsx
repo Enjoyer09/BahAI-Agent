@@ -5,7 +5,7 @@
  * Styling is completely tailored to bahAI's visual language.
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { MessageSquare, Trash2, Edit2 } from 'lucide-react';
 
 interface Conversation {

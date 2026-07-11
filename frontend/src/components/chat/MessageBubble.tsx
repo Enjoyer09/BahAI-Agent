@@ -4,7 +4,6 @@
  * Renders user/assistant messages with markdown, attachments, and action buttons.
  */
 
-import React from 'react';
 import { User, Bot, Edit2, RotateCcw } from 'lucide-react';
 
 interface Attachment {
@@ -15,7 +14,7 @@ interface Attachment {
 
 interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   attachments?: Attachment[];
 }
