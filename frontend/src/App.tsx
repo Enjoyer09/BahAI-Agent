@@ -389,8 +389,7 @@ function AppContent() {
         />
         <Composer
           onSendMessage={(text, attachments) => {
-            // Attachments will be sent alongside text when backend is fully connected
-            chat.sendMessage(text); 
+            chat.sendMessage(text, attachments); 
           }}
           disabled={chat.loading || chat.actionCenterInteractions.length > 0}
         />
