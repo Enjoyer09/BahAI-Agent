@@ -76,9 +76,19 @@ export function chooseAssistantContent(streamedRaw: string, finalRaw: string): s
       /^(\*\*Problem\*\*|\*\*Findings\*\*)/i.test(finalContent)
     )
   );
-  if (finalLooksTruncated) return streamedContent;
+  
+  const extraPart = streamedContent.slice(finalContent.length).trim();
+  const extraIsToolCall = extraPart.startsWith('```json') || extraPart.startsWith('{"name":') || extraPart.startsWith('{ "name":');
+
+  if (finalLooksTruncated) {
+    if (!extraIsToolCall) {
+      return streamedContent;
+    }
+  }
   if (streamedContent.length > finalContent.length && finalContent.length < 120) {
-    return streamedContent;
+    if (!extraIsToolCall) {
+      return streamedContent;
+    }
   }
   return finalContent;
 }

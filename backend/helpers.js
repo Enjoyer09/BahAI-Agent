@@ -1221,7 +1221,25 @@ function extractTextToolCalls(text, activeTools = []) {
         const parsed = JSON.parse(candidate);
         if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string' && parsed.arguments !== undefined && activeTools.some((t) => t.function.name === parsed.name)) {
           toolCalls.push({ name: parsed.name, arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments) });
-          removed.push([startIdx, endIndex]);
+          
+          let removeStart = startIdx;
+          let removeEnd = endIndex;
+          
+          // Check for ```json prefix
+          const prefix = text.substring(0, startIdx);
+          const blockPrefixMatch = /(?:```(?:json)?\s*)$/i.exec(prefix);
+          if (blockPrefixMatch) {
+            removeStart -= blockPrefixMatch[0].length;
+          }
+          
+          // Check for ``` suffix
+          const suffix = text.substring(endIndex);
+          const blockSuffixMatch = /^(?:\s*```)/.exec(suffix);
+          if (blockSuffixMatch) {
+            removeEnd += blockSuffixMatch[0].length;
+          }
+
+          removed.push([removeStart, removeEnd]);
           break;
         }
       } catch { /* not valid JSON */ }
