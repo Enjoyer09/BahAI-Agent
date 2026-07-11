@@ -57,7 +57,14 @@ export function MessageBubble({ message, onEdit, onRegenerate }: MessageBubblePr
           )}
 
           {/* Text Bubble */}
-          <div className={`p-3 rounded-lg ${isUser ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-100' : 'bg-gray-800 border border-gray-700 text-gray-200'}`}>
+          <div 
+            className="p-3 rounded-lg"
+            style={{
+              backgroundColor: isUser ? 'var(--bg-elevated)' : 'var(--bg-surface-alt)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--fg-main)'
+            }}
+          >
             {isUser ? (
               <div className="whitespace-pre-wrap break-words text-[14px] sm:text-[15px] leading-7">
                 {message.content}
