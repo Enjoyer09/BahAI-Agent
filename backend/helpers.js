@@ -1219,6 +1219,13 @@ function extractTextToolCalls(text, activeTools = []) {
       try {
         const parsed = JSON.parse(candidate);
         if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string' && parsed.arguments !== undefined && activeTools.some((t) => t.function.name === parsed.name)) {
+          // Ignore inline code blocks / examples wrapped in single backticks
+          const prefixCheck = text.substring(0, startIdx);
+          const suffixCheck = text.substring(endIndex);
+          if (/`(?:json)?$/i.test(prefixCheck.trim()) && /^`/.test(suffixCheck.trim())) {
+            i = endIndex;
+            continue;
+          }
           toolCalls.push({ name: parsed.name, arguments: typeof parsed.arguments === 'object' ? JSON.stringify(parsed.arguments) : String(parsed.arguments) });
           
           let removeStart = startIdx;
