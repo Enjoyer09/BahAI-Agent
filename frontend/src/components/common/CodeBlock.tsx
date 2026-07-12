@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, Check, ChevronDown, ChevronUp, Download } from 'lucide-react';
 
 
 interface CodeBlockProps {
@@ -43,6 +43,30 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
       setTimeout(() => setCopied(false), 2000);
     }
   }, [code]);
+
+  const handleDownload = useCallback(() => {
+    const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Determine extension
+    let ext = 'txt';
+    const lang = String(language || '').toLowerCase();
+    if (lang === 'python' || lang === 'py') ext = 'py';
+    else if (lang === 'javascript' || lang === 'js') ext = 'js';
+    else if (lang === 'typescript' || lang === 'ts') ext = 'ts';
+    else if (lang === 'html') ext = 'html';
+    else if (lang === 'css') ext = 'css';
+    else if (lang === 'json') ext = 'json';
+    else if (lang === 'bash' || lang === 'sh') ext = 'sh';
+    
+    link.download = `kod.${ext}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [code, language]);
 
   if (inline) {
     return (
@@ -93,6 +117,14 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
               {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
             </button>
           )}
+          <button
+            onClick={handleDownload}
+            className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
+            style={{ minHeight: '44px', minWidth: '44px' }}
+            title="Yüklə"
+          >
+            <Download size={16} />
+          </button>
           <button
             onClick={handleCopy}
             className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
