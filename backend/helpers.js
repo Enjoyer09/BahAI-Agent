@@ -441,7 +441,6 @@ function normalizeFinalAssistantReport(content = '', context = {}) {
       .replace(/\bdesktop app\b/gi, 'desktop tətbiqi')
       .replace(/\blocal app\b/gi, 'desktop tətbiqi')
       .replace(/\bterminal-da .*?icra edin\b/gi, 'bu addım web versiyada tələb olunmur')
-      .replace(/\s{2,}/g, ' ')
       .trim();
   }
   const hasPlannerMaterial = Boolean(
