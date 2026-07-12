@@ -20,10 +20,6 @@ const CodeEditor = lazy(() => import('./components/chat/CodeEditor'));
 const LivePreview = lazy(() => import('./components/chat/LivePreview'));
 const OpsPanel = lazy(() => import('./components/chat/OpsPanel'));
 const Terminal = lazy(() => import('./components/chat/Terminal'));
-const ElevenLabsHelpModal = lazy(() => import('./components/common/ElevenLabsHelpModal'));
-
-const ElevenLabsWidget = 'elevenlabs-convai' as any;
-
 // Lazy loading fallback
 function LazyFallback() {
   return (
@@ -40,8 +36,6 @@ const isElectron = typeof window !== 'undefined' && window.navigator.userAgent.i
 function AppContent() {
   const auth = useAuth();
   const settings = useSettings();
-  const [signedUrl, setSignedUrl] = useState<string | null>(null);
-  const [showElevenLabsHelp, setShowElevenLabsHelp] = useState(false);
   const themeCtx = useTheme();
   const [isChat, setIsChat] = useState(() => window.location.pathname === '/chat');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -59,23 +53,6 @@ function AppContent() {
 
   useEffect(() => { 
     trackAppOpen(); 
-    
-    // FUNC-FIX: use API_BASE_URL so /api/signed-url resolves correctly when
-    // the frontend is served from a different origin (Vite dev on :5173 vs
-    // backend on :3001). Previously the relative path returned the SPA HTML.
-    fetch(`${API_BASE_URL}/api/signed-url`)
-      .then(res => {
-        if (!res.ok) throw new Error("Key not configured");
-        return res.json();
-      })
-      .then(data => {
-        if (data.signedUrl) {
-          setSignedUrl(data.signedUrl);
-        }
-      })
-      .catch(err => {
-        console.log("ElevenLabs voice widget not loaded:", err.message);
-      });
   }, []);
 
   useEffect(() => {
@@ -539,33 +516,6 @@ function AppContent() {
       />
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} productMode={settings.productMode} />
       {ConfirmDialog}
-      <Suspense fallback={null}>
-        <ElevenLabsHelpModal isOpen={showElevenLabsHelp} onClose={() => setShowElevenLabsHelp(false)} />
-      </Suspense>
-
-      {/* ElevenLabs Real-Time Voice Widget / Setup Helper */}
-      {settings.productMode !== 'web_chat' && signedUrl ? (
-        <ElevenLabsWidget signed-url={signedUrl}></ElevenLabsWidget>
-      ) : settings.productMode !== 'web_chat' ? (
-        <button
-          onClick={() => setShowElevenLabsHelp(true)}
-          className="hidden sm:flex fixed bottom-6 right-6 w-12 h-12 rounded-full items-center justify-center transition-all duration-300 z-40 group shadow-lg cursor-pointer hover:scale-110 active:scale-95"
-          style={{
-            background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            boxShadow: '0 4px 20px rgba(168, 85, 247, 0.4)',
-          }}
-          title="Səsli Dialoq (ChatGPT-like Speech-to-Speech) Rejimi"
-        >
-          {/* Wave ripple pulse effect */}
-          <div className="absolute inset-0 rounded-full animate-ping opacity-25" style={{ background: '#a855f7', animationDuration: '3s' }} />
-          <Mic size={20} className="text-white relative z-10 animate-pulse" />
-          
-          <div className="absolute right-full mr-3 bg-neutral-900 text-white text-xs px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none shadow-md border border-neutral-800">
-            Səsli Dialoq Rejimi (ElevenLabs)
-          </div>
-        </button>
-      ) : null}
     </div>
   );
 }

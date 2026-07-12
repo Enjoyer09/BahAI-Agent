@@ -103,38 +103,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
 
     setIsPlaying(true);
 
-    try {
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ text: cleanText })
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        
-        audio.onended = () => {
-          setIsPlaying(false);
-          audioRef.current = null;
-        };
-        
-        audio.onerror = () => {
-          speakWithBrowser(cleanText);
-        };
-        
-        await audio.play();
-        return;
-      }
-    } catch (e) {
-      console.error("ElevenLabs request failed, falling back to browser TTS:", e);
-    }
-
-    // Fallback: Use browser Web Speech Synthesis
+    // Use browser Web Speech Synthesis directly
     speakWithBrowser(cleanText);
   }, [isPlaying, message.content, speakWithBrowser]);
 
@@ -356,7 +325,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
                   minWidth: '40px',
                   background: isPlaying ? 'var(--color-accent-muted)' : 'transparent'
                 }}
-                title={isPlaying ? "Səsi dayandır" : "Səsləndir (ElevenLabs / Səsli Dialoq)"}
+                title={isPlaying ? "Səsi dayandır" : "Səsləndir"}
                 aria-label="Speak message"
               >
                 {isPlaying ? <VolumeX size={14} className="animate-pulse" /> : <Volume2 size={14} />}
