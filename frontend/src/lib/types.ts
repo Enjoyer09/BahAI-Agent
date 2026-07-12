@@ -127,6 +127,7 @@ export interface Settings {
   guiBrowserPath: string;
   guiBrowserCdpUrl: string;
   guiAutoStartBrowser: boolean;
+  aiMode: 'smart' | 'manual';
 
   // Appearance & Layout (LibreChat style)
   language: string;

@@ -288,9 +288,14 @@ export async function handleSendMessage(
       ];
     }
 
+    const isSmartMode = settings.aiMode === 'smart';
+    const effectiveBaseUrl = isSmartMode ? 'https://omniroute-bahai-smart-production.up.railway.app/v1' : settings.baseUrl;
+    const effectiveApiKey = isSmartMode ? 'dummy-key' : settings.apiKey;
+    const effectiveModel = isSmartMode ? 'auto/coding' : settings.model;
+
     await apiSendChatMessage(
       finalPreparedMessages,
-      settings.apiKey, settings.baseUrl, settings.model,
+      effectiveApiKey, effectiveBaseUrl, effectiveModel,
       activeProject?.path || settings.projectDir,
       {
         safeMode,

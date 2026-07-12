@@ -61,6 +61,7 @@ export function useSettings() {
   const [guiBrowserPath, setGuiBrowserPath] = useState(() => loadSetting('guiBrowserPath', DEFAULT_SETTINGS.guiBrowserPath));
   const [guiBrowserCdpUrl, setGuiBrowserCdpUrl] = useState(() => loadSetting('guiBrowserCdpUrl', DEFAULT_SETTINGS.guiBrowserCdpUrl));
   const [guiAutoStartBrowser, setGuiAutoStartBrowser] = useState(() => loadBoolSetting('guiAutoStartBrowser', false));
+  const [aiMode, setAiMode] = useState<'smart' | 'manual'>(() => loadSetting('aiMode', DEFAULT_SETTINGS.aiMode) as 'smart' | 'manual');
 
   // Appearance & Layout Settings
   const [language, setLanguage] = useState(() => loadSetting('language', 'en'));
@@ -145,6 +146,7 @@ export function useSettings() {
   useEffect(() => { localStorage.setItem('guiBrowserPath', guiBrowserPath); }, [guiBrowserPath]);
   useEffect(() => { localStorage.setItem('guiBrowserCdpUrl', guiBrowserCdpUrl); }, [guiBrowserCdpUrl]);
   useEffect(() => { localStorage.setItem('guiAutoStartBrowser', String(guiAutoStartBrowser)); }, [guiAutoStartBrowser]);
+  useEffect(() => { localStorage.setItem('aiMode', aiMode); }, [aiMode]);
   
   useEffect(() => { localStorage.setItem('language', language); }, [language]);
   useEffect(() => { localStorage.setItem('messageFontSize', messageFontSize); }, [messageFontSize]);
@@ -168,7 +170,7 @@ export function useSettings() {
 
   const settings: Settings = { 
     productMode, executionMode, apiKey, baseUrl, model, projectDir, performanceMode, orchestrationMode, workflow, 
-    customInstructions, guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser,
+    customInstructions, guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser, aiMode,
     language, messageFontSize, chatDirection, maximizeChatSpace, centerChatInput, scrollToEndButton,
     keepScreenAwake, enterToSend, enableMarkdown, showThinking, autoScroll
   };
@@ -189,6 +191,7 @@ export function useSettings() {
     guiBrowserPath, setGuiBrowserPath,
     guiBrowserCdpUrl, setGuiBrowserCdpUrl,
     guiAutoStartBrowser, setGuiAutoStartBrowser,
+    aiMode, setAiMode,
     language, setLanguage,
     messageFontSize, setMessageFontSize,
     chatDirection, setChatDirection,

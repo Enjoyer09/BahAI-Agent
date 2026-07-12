@@ -78,6 +78,7 @@ export default function SettingsModal({
     keepScreenAwake, setKeepScreenAwake, enterToSend, setEnterToSend,
     enableMarkdown, setEnableMarkdown, showThinking, setShowThinking,
     autoScroll, setAutoScroll,
+    aiMode, setAiMode,
   } = settingsCtx;
 
   const [browsers, setBrowsers] = useState<Array<any>>([]);
@@ -259,43 +260,70 @@ export default function SettingsModal({
   const renderAiTab = () => (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">Model & API</h3>
-        <div className="space-y-4">
-          {isDesktopProduct && (
+        <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">AI Rejimi (AI Mode)</h3>
+        
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <label 
+            className={`flex-1 flex flex-col p-3 rounded-lg border cursor-pointer transition-colors ${aiMode === 'smart' ? 'bg-[var(--bg-accent)] border-blue-500/50' : 'bg-[var(--bg-surface-elevated)] border-[var(--border)]'}`}
+            onClick={() => setAiMode('smart')}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <input type="radio" checked={aiMode === 'smart'} readOnly className="accent-blue-500" />
+              <span className="font-semibold text-sm">✨ BahAI Smart</span>
+            </div>
+            <span className="text-xs text-[var(--fg-secondary)] ml-5">Tamamilə pulsuz, avtomatik model seçimi və API tənzimləməsi.</span>
+          </label>
+
+          <label 
+            className={`flex-1 flex flex-col p-3 rounded-lg border cursor-pointer transition-colors ${aiMode === 'manual' ? 'bg-[var(--bg-accent)] border-blue-500/50' : 'bg-[var(--bg-surface-elevated)] border-[var(--border)]'}`}
+            onClick={() => setAiMode('manual')}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <input type="radio" checked={aiMode === 'manual'} readOnly className="accent-blue-500" />
+              <span className="font-semibold text-sm">⚙️ Manual (Pro)</span>
+            </div>
+            <span className="text-xs text-[var(--fg-secondary)] ml-5">Öz API açarlarınızı və lokal modellərinizi (Ollama) istifadə edin.</span>
+          </label>
+        </div>
+
+        {aiMode === 'manual' && (
+          <div className="space-y-4 bg-[var(--bg-surface-elevated)] p-4 rounded-lg border border-[var(--border)]">
+            {isDesktopProduct && (
+              <div>
+                <label style={labelStyle}><Zap size={14} /> Rejim (Execution Mode)</label>
+                <select style={inputStyle} value={executionMode} onChange={(e) => setExecutionMode(e.target.value as 'cloud' | 'local')}>
+                  <option value="cloud">☁️ Bulud (Cloud / API)</option>
+                  <option value="local">💻 Lokal (Ollama / LMStudio)</option>
+                </select>
+              </div>
+            )}
             <div>
-              <label style={labelStyle}><Zap size={14} /> Rejim (Execution Mode)</label>
-              <select style={inputStyle} value={executionMode} onChange={(e) => setExecutionMode(e.target.value as 'cloud' | 'local')}>
-                <option value="cloud">☁️ Bulud (Cloud / API)</option>
-                <option value="local">💻 Lokal (Ollama / LMStudio)</option>
+              <label style={labelStyle}><Globe size={14} /> Base URL</label>
+              <input style={inputStyle} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" />
+            </div>
+            <div>
+              <label style={labelStyle}><Key size={14} /> API Key</label>
+              <input style={inputStyle} type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." />
+            </div>
+            <div>
+              <label style={labelStyle}><Code2 size={14} /> Model</label>
+              <select style={inputStyle} value={model} onChange={(e) => setModel(e.target.value)}>
+                {MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>
+                ))}
+                {!MODELS.find(m => m.id === model) && <option value={model}>{model} (Custom)</option>}
               </select>
             </div>
-          )}
-          <div>
-            <label style={labelStyle}><Globe size={14} /> Base URL</label>
-            <input style={inputStyle} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" />
           </div>
+        )}
+        {isDesktopProduct && (
           <div>
-            <label style={labelStyle}><Key size={14} /> API Key</label>
-            <input style={inputStyle} type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." />
-          </div>
-          <div>
-            <label style={labelStyle}><Code2 size={14} /> Model</label>
-            <select style={inputStyle} value={model} onChange={(e) => setModel(e.target.value)}>
-              {MODELS.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>
-              ))}
-              {!MODELS.find(m => m.id === model) && <option value={model}>{model} (Custom)</option>}
+            <label style={labelStyle}><Workflow size={14} /> İş Axını Növü (Workflow Mode)</label>
+            <select style={inputStyle} value={workflow} onChange={(e) => setWorkflow(e.target.value)}>
+              {WORKFLOW_OPTIONS.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </div>
-          {isDesktopProduct && (
-            <div>
-              <label style={labelStyle}><Workflow size={14} /> İş Axını Növü (Workflow Mode)</label>
-              <select style={inputStyle} value={workflow} onChange={(e) => setWorkflow(e.target.value)}>
-                {WORKFLOW_OPTIONS.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       <hr className="border-[var(--border)]" />

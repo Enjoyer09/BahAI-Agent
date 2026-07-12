@@ -56,7 +56,8 @@ export const DEFAULT_SETTINGS = {
   guiBrowserPath: '',
   guiBrowserCdpUrl: 'http://127.0.0.1:9222',
   guiAutoStartBrowser: false,
-  customInstructions: ''
+  customInstructions: '',
+  aiMode: 'manual'
 };
 
 export const WORKFLOW_OPTIONS = [
