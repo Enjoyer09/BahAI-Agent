@@ -577,7 +577,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   //    abort the send to prevent messages going to wrong conversation.
   // 3. Use stateRef.current for other state reads to prevent stale closures.
   // ==========================================
-  const sendMessageFn = useCallback(async (input: string, attachments: any[] = []) => {
+  const sendMessageFn = useCallback(async (input: string, attachments: any[] = [], baseMessagesOverride?: Message[]) => {
     if (!input.trim() && attachments.length === 0) return;
 
     // RACE FIX: abort via stateRef to get latest controller
@@ -608,7 +608,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     const nextTitle = shouldAutoRenameConversation ? buildConversationTitleFromInput(input, settings.productMode) : activeConv?.title;
 
     // Add user message to conversation
-    const baseMessages = Array.isArray(activeConv?.messages) ? activeConv.messages : [];
+    const baseMessages = baseMessagesOverride || (Array.isArray(activeConv?.messages) ? activeConv.messages : []);
     const currentMsgs = [...baseMessages, userMsg];
     dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: currentMsgs });
     if (stateRef.current.serverBacked) {
@@ -658,6 +658,39 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   // ==========================================
   // Callbacks
   // ==========================================
+  
+  const editMessageFn = useCallback((id: string, newContent: string) => {
+    const convId = activeConvIdRef.current;
+    if (!convId) return;
+    const activeConv = conversationsRef.current.find(c => c.id === convId);
+    if (!activeConv) return;
+    const msgIndex = activeConv.messages.findIndex(m => m.id === id);
+    if (msgIndex === -1) return;
+    const slicedMessages = activeConv.messages.slice(0, msgIndex);
+    const msgToEdit = activeConv.messages[msgIndex];
+    sendMessageFn(newContent, msgToEdit.attachments || [], slicedMessages);
+  }, [sendMessageFn]);
+
+  const regenerateMessageFn = useCallback((id: string) => {
+    const convId = activeConvIdRef.current;
+    if (!convId) return;
+    const activeConv = conversationsRef.current.find(c => c.id === convId);
+    if (!activeConv) return;
+    const msgIndex = activeConv.messages.findIndex(m => m.id === id);
+    if (msgIndex <= 0) return; // Cannot regenerate if there's no previous user message
+    
+    // Find the last user message before this assistant message
+    let lastUserIndex = msgIndex - 1;
+    while (lastUserIndex >= 0 && activeConv.messages[lastUserIndex].role !== 'user') {
+      lastUserIndex--;
+    }
+    
+    if (lastUserIndex < 0) return;
+    
+    const userMsg = activeConv.messages[lastUserIndex];
+    const slicedMessages = activeConv.messages.slice(0, lastUserIndex);
+    sendMessageFn(userMsg.content, userMsg.attachments || [], slicedMessages);
+  }, [sendMessageFn]);
   const createConversation = useCallback((projectId: string, title: string = getDefaultConversationTitle(settings.productMode)) => {
     if (state.abortController) {
       state.abortController.abort();
@@ -875,6 +908,8 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     plannerArtifact: state.plannerArtifact,
     executionArtifacts: state.executionArtifacts,
     sendMessage: sendMessageFn,
+    editMessage: editMessageFn,
+    regenerateMessage: regenerateMessageFn,
     // RACE FIX: use stateRef for abort controller to always get latest
     stop: () => { stateRef.current.abortController?.abort(); dispatch({ type: 'SET_LOADING', loading: false }); },
     decideApproval,

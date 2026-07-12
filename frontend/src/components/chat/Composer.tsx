@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { Paperclip, Send, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { Paperclip, Send, X, FileText, Square } from 'lucide-react';
 
 interface Attachment {
   id: string;
@@ -16,10 +16,12 @@ interface Attachment {
 interface ComposerProps {
   onSendMessage: (text: string, attachments: File[]) => void;
   disabled?: boolean;
+  isGenerating?: boolean;
+  onStop?: () => void;
   settings?: any;
 }
 
-export function Composer({ onSendMessage, disabled, settings }: ComposerProps) {
+export function Composer({ onSendMessage, disabled, isGenerating, onStop, settings }: ComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -131,17 +133,29 @@ export function Composer({ onSendMessage, disabled, settings }: ComposerProps) {
           disabled={disabled}
         />
 
-        <button 
-          onClick={handleSubmit}
-          disabled={disabled || (!text.trim() && attachments.length === 0)}
-          className="p-2 rounded-md transition-opacity hover:opacity-90 disabled:opacity-50"
-          style={{ 
-            backgroundColor: (disabled || (!text.trim() && attachments.length === 0)) ? 'var(--bg-surface-alt)' : 'var(--color-accent)',
-            color: (disabled || (!text.trim() && attachments.length === 0)) ? 'var(--fg-muted)' : 'white'
-          }}
-        >
-          <Send size={18} />
-        </button>
+        {isGenerating ? (
+          <button 
+            onClick={onStop}
+            className="p-2 rounded-md transition-opacity hover:opacity-90"
+            style={{ backgroundColor: 'var(--color-danger)', color: 'white' }}
+            title="Yaradılmanı Dayandır (Stop Generation)"
+          >
+            <Square size={18} fill="currentColor" />
+          </button>
+        ) : (
+          <button 
+            onClick={handleSubmit}
+            disabled={disabled || (!text.trim() && attachments.length === 0)}
+            className="p-2 rounded-md transition-opacity hover:opacity-90 disabled:opacity-50"
+            style={{ 
+              backgroundColor: (disabled || (!text.trim() && attachments.length === 0)) ? 'var(--bg-surface-alt)' : 'var(--color-accent)',
+              color: (disabled || (!text.trim() && attachments.length === 0)) ? 'var(--fg-muted)' : 'white'
+            }}
+            title="Göndər (Send)"
+          >
+            <Send size={18} />
+          </button>
+        )}
       </div>
     </div>
   );

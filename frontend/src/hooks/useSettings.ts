@@ -56,6 +56,7 @@ export function useSettings() {
     return saved === 'true';
   });
   const [workflow, setWorkflow] = useState(() => loadSetting('workflow', DEFAULT_SETTINGS.workflow));
+  const [customInstructions, setCustomInstructions] = useState(() => loadSetting('customInstructions', DEFAULT_SETTINGS.customInstructions));
   const [guiBrowserMode, setGuiBrowserMode] = useState(() => loadSetting('guiBrowserMode', DEFAULT_SETTINGS.guiBrowserMode));
   const [guiBrowserPath, setGuiBrowserPath] = useState(() => loadSetting('guiBrowserPath', DEFAULT_SETTINGS.guiBrowserPath));
   const [guiBrowserCdpUrl, setGuiBrowserCdpUrl] = useState(() => loadSetting('guiBrowserCdpUrl', DEFAULT_SETTINGS.guiBrowserCdpUrl));
@@ -139,6 +140,7 @@ export function useSettings() {
   useEffect(() => { localStorage.setItem('performanceMode', String(performanceMode)); }, [performanceMode]);
   useEffect(() => { localStorage.setItem('orchestrationMode', String(productMode === 'web_chat' ? false : orchestrationMode)); }, [orchestrationMode, productMode]);
   useEffect(() => { localStorage.setItem('workflow', workflow); }, [workflow]);
+  useEffect(() => { localStorage.setItem('customInstructions', customInstructions); }, [customInstructions]);
   useEffect(() => { localStorage.setItem('guiBrowserMode', guiBrowserMode); }, [guiBrowserMode]);
   useEffect(() => { localStorage.setItem('guiBrowserPath', guiBrowserPath); }, [guiBrowserPath]);
   useEffect(() => { localStorage.setItem('guiBrowserCdpUrl', guiBrowserCdpUrl); }, [guiBrowserCdpUrl]);
@@ -166,7 +168,7 @@ export function useSettings() {
 
   const settings: Settings = { 
     productMode, executionMode, apiKey, baseUrl, model, projectDir, performanceMode, orchestrationMode, workflow, 
-    guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser,
+    customInstructions, guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser,
     language, messageFontSize, chatDirection, maximizeChatSpace, centerChatInput, scrollToEndButton,
     keepScreenAwake, enterToSend, enableMarkdown, showThinking, autoScroll
   };
@@ -182,6 +184,7 @@ export function useSettings() {
     performanceMode, setPerformanceMode,
     orchestrationMode, setOrchestrationMode,
     workflow, setWorkflow,
+    customInstructions, setCustomInstructions,
     guiBrowserMode, setGuiBrowserMode,
     guiBrowserPath, setGuiBrowserPath,
     guiBrowserCdpUrl, setGuiBrowserCdpUrl,

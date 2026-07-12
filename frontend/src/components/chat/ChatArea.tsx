@@ -15,6 +15,8 @@ interface Props {
   workingDirectory?: string;
   productMode?: 'web_chat' | 'desktop_code';
   settings?: any;
+  onEdit?: (id: string, newContent: string) => void;
+  onRegenerate?: (id: string) => void;
 }
 
 export default function ChatArea({
@@ -27,7 +29,9 @@ export default function ChatArea({
   loadingOlderMessages = false,
   workingDirectory,
   productMode = 'desktop_code',
-  settings
+  settings,
+  onEdit,
+  onRegenerate
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
@@ -147,8 +151,27 @@ export default function ChatArea({
             key={msg.id || i}
             message={msg}
             settings={settings}
+            onEdit={onEdit}
+            onRegenerate={onRegenerate}
           />
         ))}
+
+        {(() => {
+          const lastMsg = messages[messages.length - 1];
+          if (!loading && lastMsg && lastMsg.role === 'system' && lastMsg.content.includes('❌ Xəta')) {
+            return (
+              <div className="flex justify-center mt-2 mb-6">
+                <button 
+                  onClick={() => onRegenerate && onRegenerate(lastMsg.id)} 
+                  className="px-4 py-2 rounded-md bg-red-600/10 text-red-500 hover:bg-red-600/20 text-sm font-medium transition-colors border border-red-500/20"
+                >
+                  Təkrar Sına (Retry)
+                </button>
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         {loading && !messages.some((msg) => msg.role === 'assistant' && /Düşünürəm/i.test(msg.content || '')) && (
           <div className="flex items-start gap-3 sm:gap-4 animate-in">

@@ -389,6 +389,8 @@ function AppContent() {
           workingDirectory={chat.activeProject?.path || ''}
           productMode={settings.productMode}
           settings={settings}
+          onEdit={chat.editMessage}
+          onRegenerate={chat.regenerateMessage}
         />
         <div className={`shrink-0 w-full ${chat.messages.length === 0 && settings.centerChatInput ? 'max-w-3xl mx-auto mb-auto mt-0' : 'max-w-3xl mx-auto px-4 pb-4 pt-2'} ${settings.maximizeChatSpace ? '!max-w-full !px-8' : ''}`}>
           <Composer
@@ -396,6 +398,8 @@ function AppContent() {
               chat.sendMessage(text, attachments); 
             }}
             disabled={chat.loading || chat.actionCenterInteractions.length > 0}
+            isGenerating={chat.loading}
+            onStop={chat.stop}
             settings={settings}
           />
         </div>

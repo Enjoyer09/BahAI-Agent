@@ -120,6 +120,7 @@ export interface Settings {
   performanceMode: boolean;
   orchestrationMode: boolean;
   workflow: string;
+  customInstructions: string;
 
   // Browser Automation
   guiBrowserMode: string;

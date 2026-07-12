@@ -280,8 +280,16 @@ export async function handleSendMessage(
         }, ...preparedMessagesCore]
       : preparedMessagesCore;
 
+    let finalPreparedMessages = preparedMessages;
+    if (settings.customInstructions && settings.customInstructions.trim() !== '') {
+      finalPreparedMessages = [
+        { role: 'system' as const, content: `Custom Instructions:\n${settings.customInstructions}` },
+        ...preparedMessages
+      ];
+    }
+
     await apiSendChatMessage(
-      preparedMessages,
+      finalPreparedMessages,
       settings.apiKey, settings.baseUrl, settings.model,
       activeProject?.path || settings.projectDir,
       {

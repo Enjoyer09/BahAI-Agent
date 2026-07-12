@@ -68,6 +68,7 @@ export default function SettingsModal({
     productMode, executionMode, setExecutionMode,
     model, setModel, performanceMode, setPerformanceMode,
     orchestrationMode, setOrchestrationMode, workflow, setWorkflow,
+    customInstructions, setCustomInstructions,
     guiBrowserMode, setGuiBrowserMode, guiBrowserPath, setGuiBrowserPath,
     guiBrowserCdpUrl, setGuiBrowserCdpUrl, guiAutoStartBrowser, setGuiAutoStartBrowser,
     apiKey, setApiKey, baseUrl, setBaseUrl,
@@ -295,6 +296,19 @@ export default function SettingsModal({
             </div>
           )}
         </div>
+      </div>
+
+      <hr className="border-[var(--border)]" />
+
+      <div>
+        <label style={labelStyle}><FileText size={14} /> Sistem Təlimatları (Custom Instructions)</label>
+        <p style={descStyle} className="mb-2">Agentin necə cavab verməsini (qısa cavablar, konkret rol, vb.) tənzimləmək üçün təlimatlar yazın.</p>
+        <textarea 
+          style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} 
+          value={customInstructions} 
+          onChange={(e) => setCustomInstructions(e.target.value)}
+          placeholder="Məsələn: Sən köməkçi bir proqramçısan. Həmişə azərbaycan dilində, qısa və anlaşıqlı kod parçaları ilə cavab ver."
+        />
       </div>
 
       <hr className="border-[var(--border)]" />
