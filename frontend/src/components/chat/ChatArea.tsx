@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { MessageSquare, Square } from 'lucide-react';
+import { MessageSquare, Square, ArrowDownToLine } from 'lucide-react';
 import type { Message } from '../../lib/types';
 import { MessageBubble } from './MessageBubble';
 import { Spinner } from '../common/UI';
@@ -14,6 +14,7 @@ interface Props {
   loadingOlderMessages?: boolean;
   workingDirectory?: string;
   productMode?: 'web_chat' | 'desktop_code';
+  settings?: any;
 }
 
 export default function ChatArea({
@@ -25,16 +26,19 @@ export default function ChatArea({
   canLoadOlderMessages = false,
   loadingOlderMessages = false,
   workingDirectory,
-  productMode = 'desktop_code'
+  productMode = 'desktop_code',
+  settings
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
 
   useEffect(() => {
-    if (isAtBottom.current && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (settings?.autoScroll !== false) {
+      if (isAtBottom.current && scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
     }
-  }, [messages]);
+  }, [messages, settings?.autoScroll]);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
@@ -110,10 +114,10 @@ export default function ChatArea({
     <div
       ref={scrollRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto premium-scroll"
-      style={{ scrollBehavior: 'smooth' }}
+      className="flex-1 overflow-y-auto premium-scroll relative"
+      style={{ scrollBehavior: 'smooth', direction: settings?.chatDirection === 'rtl' ? 'rtl' : 'ltr' }}
     >
-      <div className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-7 space-y-4 sm:space-y-6">
+      <div className={`mx-auto px-3 sm:px-4 py-4 sm:py-7 space-y-4 sm:space-y-6 ${settings?.maximizeChatSpace ? 'w-full px-6' : 'max-w-3xl'}`}>
         <style>{`
           @keyframes bahai-wave {
             0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
@@ -142,6 +146,7 @@ export default function ChatArea({
           <MessageBubble
             key={msg.id || i}
             message={msg}
+            settings={settings}
           />
         ))}
 
@@ -203,6 +208,22 @@ export default function ChatArea({
           </div>
         )}
       </div>
+
+      {/* Scroll to End Button */}
+      {settings?.scrollToEndButton && (
+        <button
+          onClick={() => {
+            if (scrollRef.current) {
+              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+              isAtBottom.current = true;
+            }
+          }}
+          className="fixed bottom-[140px] right-8 p-2 rounded-full bg-[var(--bg-surface-elevated)] border border-[var(--border)] text-[var(--fg-secondary)] hover:text-[var(--fg-main)] shadow-lg hover:shadow-xl transition-all z-20"
+          title="Scroll to End"
+        >
+          <ArrowDownToLine size={20} />
+        </button>
+      )}
     </div>
   );
 }

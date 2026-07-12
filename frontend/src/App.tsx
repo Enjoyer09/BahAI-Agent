@@ -280,6 +280,7 @@ function AppContent() {
               </>
             )}
           </div>
+          </>
         )}
 
         {/* Mobile top bar */}
@@ -387,13 +388,17 @@ function AppContent() {
           loadingOlderMessages={Boolean(chat.loadingOlderMessages)}
           workingDirectory={chat.activeProject?.path || ''}
           productMode={settings.productMode}
+          settings={settings}
         />
-        <Composer
-          onSendMessage={(text, attachments) => {
-            chat.sendMessage(text, attachments); 
-          }}
-          disabled={chat.loading || chat.actionCenterInteractions.length > 0}
-        />
+        <div className={`shrink-0 w-full ${chat.messages.length === 0 && settings.centerChatInput ? 'max-w-3xl mx-auto mb-auto mt-0' : 'max-w-3xl mx-auto px-4 pb-4 pt-2'} ${settings.maximizeChatSpace ? '!max-w-full !px-8' : ''}`}>
+          <Composer
+            onSendMessage={(text, attachments) => {
+              chat.sendMessage(text, attachments); 
+            }}
+            disabled={chat.loading || chat.actionCenterInteractions.length > 0}
+            settings={settings}
+          />
+        </div>
       </main>
 
       {/* AUX PANELS — fixed overlay on mobile */}

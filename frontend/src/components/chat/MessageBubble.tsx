@@ -24,9 +24,10 @@ interface MessageBubbleProps {
   message: Message;
   onEdit?: (id: string, newContent: string) => void;
   onRegenerate?: (id: string) => void;
+  settings?: any;
 }
 
-export function MessageBubble({ message, onEdit, onRegenerate }: MessageBubbleProps) {
+export function MessageBubble({ message, onEdit, onRegenerate, settings }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
   return (
@@ -62,15 +63,20 @@ export function MessageBubble({ message, onEdit, onRegenerate }: MessageBubblePr
             style={{
               backgroundColor: isUser ? 'var(--bg-elevated)' : 'var(--bg-surface-alt)',
               border: '1px solid var(--border-subtle)',
-              color: 'var(--fg-main)'
+              color: 'var(--fg-main)',
+              fontSize: settings?.messageFontSize === 'small' ? '13px' : settings?.messageFontSize === 'large' ? '17px' : '15px'
             }}
           >
-            {isUser ? (
-              <div className="whitespace-pre-wrap break-words text-[14px] sm:text-[15px] leading-7">
+            {isUser && settings?.enableMarkdown !== true ? (
+              <div className="whitespace-pre-wrap break-words leading-7">
                 {message.content}
               </div>
             ) : (
-              <MarkdownRenderer content={message.content} />
+              <div className="leading-7">
+                <MarkdownRenderer 
+                  content={settings?.showThinking === false ? message.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim() : message.content} 
+                />
+              </div>
             )}
           </div>
 

@@ -16,9 +16,10 @@ interface Attachment {
 interface ComposerProps {
   onSendMessage: (text: string, attachments: File[]) => void;
   disabled?: boolean;
+  settings?: any;
 }
 
-export function Composer({ onSendMessage, disabled }: ComposerProps) {
+export function Composer({ onSendMessage, disabled, settings }: ComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,9 +104,24 @@ export function Composer({ onSendMessage, disabled }: ComposerProps) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSubmit();
+            const shouldEnterToSend = settings?.enterToSend !== false;
+            
+            if (e.key === 'Enter') {
+              if (shouldEnterToSend) {
+                if (!e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              } else {
+                // If Enter To Send is OFF, Enter just adds a newline. 
+                // Wait, if it just adds a newline, we don't preventDefault.
+                // But how do they send? They click the button. Or maybe Shift+Enter sends? 
+                // Usually if EnterToSend is off, Shift+Enter or Ctrl+Enter sends.
+                if (e.ctrlKey || e.metaKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }
             }
           }}
           placeholder="Mesajınızı yazın..."

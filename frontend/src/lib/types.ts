@@ -110,19 +110,39 @@ export interface Conversation {
 }
 
 export interface Settings {
+  // AI Provider & Modes
   productMode: 'web_chat' | 'desktop_code';
   executionMode: 'cloud' | 'local';
   apiKey: string;
   baseUrl: string;
   model: string;
   projectDir: string;
-  performanceMode: boolean; // Added for performance toggle
+  performanceMode: boolean;
   orchestrationMode: boolean;
   workflow: string;
+
+  // Browser Automation
   guiBrowserMode: string;
   guiBrowserPath: string;
   guiBrowserCdpUrl: string;
   guiAutoStartBrowser: boolean;
+
+  // Appearance & Layout (LibreChat style)
+  language: string;
+  messageFontSize: string;
+  chatDirection: 'ltr' | 'rtl';
+  maximizeChatSpace: boolean;
+  centerChatInput: boolean;
+  scrollToEndButton: boolean;
+
+  // Accessibility
+  keepScreenAwake: boolean;
+
+  // Chat preferences
+  enterToSend: boolean;
+  enableMarkdown: boolean;
+  showThinking: boolean;
+  autoScroll: boolean;
 }
 
 export interface ModelOption {

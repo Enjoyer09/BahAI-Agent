@@ -21,7 +21,7 @@ import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
 import type { Project, Conversation } from '../../lib/types';
 import { API_BASE_URL } from '../../lib/constants';
 import { connectGithub, disconnectGithub, getGithubStatus, listGithubRepos } from '../../lib/api';
-import SettingsPanel from './SettingsPanel';
+import SettingsModal from './SettingsModal';
 import AdminPanel from './AdminPanel';
 import { useToast, useConfirm } from '../common/Toast';
 import { Button } from '../common/UI';
@@ -765,68 +765,25 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
         </div>
       )}
 
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowSettings(false)}>
-          <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'var(--bg-overlay, rgba(0,0,0,0.5))' }} />
-          <div
-            className={`relative w-full ${isMobile ? 'max-w-none self-end rounded-t-2xl rounded-b-none p-4 max-h-[88vh]' : 'max-w-md rounded-2xl p-6 max-h-[85vh]'} animate-scale-in flex flex-col`}
-            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-5 shrink-0">
-              <h2 className="text-base font-semibold" style={{ color: 'var(--fg-main)' }}>
-                {isWebProduct ? 'BahAI Agenti RC1' : 'Parametrlər'}
-              </h2>
-              <button onClick={() => setShowSettings(false)} className="p-1 rounded-md" style={{ color: 'var(--fg-muted)' }}>
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto premium-scroll space-y-5">
-              <SettingsPanel settingsCtx={settingsCtx} />
-              {!isWebProduct && (
-              <div className="space-y-2">
-                <label className="text-xs font-medium" style={{ color: 'var(--fg-muted)' }}>GitHub</label>
-                {githubConnected ? (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs" style={{ color: 'var(--color-success)' }}>@{githubUsername}</span>
-                    <Button size="sm" variant="danger" onClick={async () => {
-                      try { await disconnectGithub(); setGithubConnected(false); setGithubUsername(null); }
-                      catch (e: any) { toast.error(e?.message); }
-                    }}>Ayır</Button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      value={githubToken}
-                      onChange={(e) => setGithubToken(e.target.value)}
-                      placeholder="ghp_..."
-                      className="flex-1 px-3 py-2 text-sm rounded-lg outline-none"
-                      style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-main)' }}
-                    />
-                    <Button size="sm" variant="primary" onClick={async () => {
-                      try {
-                        const status = await connectGithub(githubToken.trim());
-                        setGithubConnected(Boolean(status.connected));
-                        setGithubUsername(status.username);
-                        setGithubToken('');
-                        toast.success('GitHub bağlandı');
-                      } catch (e: any) { toast.error(e?.message); }
-                    }}>Bağla</Button>
-                  </div>
-                )}
-              </div>
-              )}
-            </div>
-
-            <div className="mt-4 pt-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
-              <Button variant="primary" className="w-full" onClick={() => setShowSettings(false)}>Bitdi</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SettingsModal 
+        isOpen={showSettings} 
+        onClose={() => setShowSettings(false)} 
+        settingsCtx={settingsCtx}
+        githubConnected={githubConnected}
+        githubUsername={githubUsername}
+        onConnectGithub={async (token: string) => {
+          try {
+            const status = await connectGithub(token.trim());
+            setGithubConnected(Boolean(status.connected));
+            setGithubUsername(status.username);
+            toast.success('GitHub bağlandı');
+          } catch (e: any) { toast.error(e?.message); throw e; }
+        }}
+        onDisconnectGithub={async () => {
+          try { await disconnectGithub(); setGithubConnected(false); setGithubUsername(null); }
+          catch (e: any) { toast.error(e?.message); throw e; }
+        }}
+      />
 
       <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} />
       {ConfirmDialog}

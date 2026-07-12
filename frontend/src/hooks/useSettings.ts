@@ -14,6 +14,16 @@ function loadSetting(key: string, fallback: string): string {
   }
 }
 
+function loadBoolSetting(key: string, fallback: boolean): boolean {
+  try {
+    const val = localStorage.getItem(key);
+    if (val === null) return fallback;
+    return val === 'true';
+  } catch {
+    return fallback;
+  }
+}
+
 export function useSettings() {
   const [productMode] = useState<'web_chat' | 'desktop_code'>(() => {
     try {
@@ -49,7 +59,24 @@ export function useSettings() {
   const [guiBrowserMode, setGuiBrowserMode] = useState(() => loadSetting('guiBrowserMode', DEFAULT_SETTINGS.guiBrowserMode));
   const [guiBrowserPath, setGuiBrowserPath] = useState(() => loadSetting('guiBrowserPath', DEFAULT_SETTINGS.guiBrowserPath));
   const [guiBrowserCdpUrl, setGuiBrowserCdpUrl] = useState(() => loadSetting('guiBrowserCdpUrl', DEFAULT_SETTINGS.guiBrowserCdpUrl));
-  const [guiAutoStartBrowser, setGuiAutoStartBrowser] = useState(() => localStorage.getItem('guiAutoStartBrowser') === 'true');
+  const [guiAutoStartBrowser, setGuiAutoStartBrowser] = useState(() => loadBoolSetting('guiAutoStartBrowser', false));
+
+  // Appearance & Layout Settings
+  const [language, setLanguage] = useState(() => loadSetting('language', 'en'));
+  const [messageFontSize, setMessageFontSize] = useState(() => loadSetting('messageFontSize', 'medium'));
+  const [chatDirection, setChatDirection] = useState<'ltr' | 'rtl'>(() => loadSetting('chatDirection', 'ltr') as 'ltr' | 'rtl');
+  const [maximizeChatSpace, setMaximizeChatSpace] = useState(() => loadBoolSetting('maximizeChatSpace', false));
+  const [centerChatInput, setCenterChatInput] = useState(() => loadBoolSetting('centerChatInput', true));
+  const [scrollToEndButton, setScrollToEndButton] = useState(() => loadBoolSetting('scrollToEndButton', true));
+
+  // Accessibility
+  const [keepScreenAwake, setKeepScreenAwake] = useState(() => loadBoolSetting('keepScreenAwake', false));
+
+  // Chat preferences
+  const [enterToSend, setEnterToSend] = useState(() => loadBoolSetting('enterToSend', true));
+  const [enableMarkdown, setEnableMarkdown] = useState(() => loadBoolSetting('enableMarkdown', true));
+  const [showThinking, setShowThinking] = useState(() => loadBoolSetting('showThinking', true));
+  const [autoScroll, setAutoScroll] = useState(() => loadBoolSetting('autoScroll', true));
 
   useEffect(() => {
     try {
@@ -116,6 +143,18 @@ export function useSettings() {
   useEffect(() => { localStorage.setItem('guiBrowserPath', guiBrowserPath); }, [guiBrowserPath]);
   useEffect(() => { localStorage.setItem('guiBrowserCdpUrl', guiBrowserCdpUrl); }, [guiBrowserCdpUrl]);
   useEffect(() => { localStorage.setItem('guiAutoStartBrowser', String(guiAutoStartBrowser)); }, [guiAutoStartBrowser]);
+  
+  useEffect(() => { localStorage.setItem('language', language); }, [language]);
+  useEffect(() => { localStorage.setItem('messageFontSize', messageFontSize); }, [messageFontSize]);
+  useEffect(() => { localStorage.setItem('chatDirection', chatDirection); }, [chatDirection]);
+  useEffect(() => { localStorage.setItem('maximizeChatSpace', String(maximizeChatSpace)); }, [maximizeChatSpace]);
+  useEffect(() => { localStorage.setItem('centerChatInput', String(centerChatInput)); }, [centerChatInput]);
+  useEffect(() => { localStorage.setItem('scrollToEndButton', String(scrollToEndButton)); }, [scrollToEndButton]);
+  useEffect(() => { localStorage.setItem('keepScreenAwake', String(keepScreenAwake)); }, [keepScreenAwake]);
+  useEffect(() => { localStorage.setItem('enterToSend', String(enterToSend)); }, [enterToSend]);
+  useEffect(() => { localStorage.setItem('enableMarkdown', String(enableMarkdown)); }, [enableMarkdown]);
+  useEffect(() => { localStorage.setItem('showThinking', String(showThinking)); }, [showThinking]);
+  useEffect(() => { localStorage.setItem('autoScroll', String(autoScroll)); }, [autoScroll]);
   useEffect(() => {
     document.documentElement.dataset.performanceMode = performanceMode ? 'on' : 'off';
     document.body.dataset.performanceMode = performanceMode ? 'on' : 'off';
@@ -125,7 +164,12 @@ export function useSettings() {
     };
   }, [performanceMode]);
 
-  const settings: Settings = { productMode, executionMode, apiKey, baseUrl, model, projectDir, performanceMode, orchestrationMode, workflow, guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser };
+  const settings: Settings = { 
+    productMode, executionMode, apiKey, baseUrl, model, projectDir, performanceMode, orchestrationMode, workflow, 
+    guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser,
+    language, messageFontSize, chatDirection, maximizeChatSpace, centerChatInput, scrollToEndButton,
+    keepScreenAwake, enterToSend, enableMarkdown, showThinking, autoScroll
+  };
 
   return {
     settings,
@@ -142,6 +186,17 @@ export function useSettings() {
     guiBrowserPath, setGuiBrowserPath,
     guiBrowserCdpUrl, setGuiBrowserCdpUrl,
     guiAutoStartBrowser, setGuiAutoStartBrowser,
+    language, setLanguage,
+    messageFontSize, setMessageFontSize,
+    chatDirection, setChatDirection,
+    maximizeChatSpace, setMaximizeChatSpace,
+    centerChatInput, setCenterChatInput,
+    scrollToEndButton, setScrollToEndButton,
+    keepScreenAwake, setKeepScreenAwake,
+    enterToSend, setEnterToSend,
+    enableMarkdown, setEnableMarkdown,
+    showThinking, setShowThinking,
+    autoScroll, setAutoScroll,
   };
 }
 
