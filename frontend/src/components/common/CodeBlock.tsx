@@ -1,50 +1,6 @@
-import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 
-const SyntaxHighlighter: any = lazy(async () => {
-  const [{ default: PrismLight }, js, ts, tsx, jsx, json, bash, python, markup, css, markdown, sql, yaml, diff] = await Promise.all([
-    import('react-syntax-highlighter/dist/esm/prism-light'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/javascript'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/typescript'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/tsx'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/jsx'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/json'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/bash'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/python'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/markup'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/css'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/markdown'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/sql'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/yaml'),
-    import('react-syntax-highlighter/dist/esm/languages/prism/diff'),
-  ]);
-
-  PrismLight.registerLanguage('javascript', js.default);
-  PrismLight.registerLanguage('js', js.default);
-  PrismLight.registerLanguage('typescript', ts.default);
-  PrismLight.registerLanguage('ts', ts.default);
-  PrismLight.registerLanguage('tsx', tsx.default);
-  PrismLight.registerLanguage('jsx', jsx.default);
-  PrismLight.registerLanguage('json', json.default);
-  PrismLight.registerLanguage('bash', bash.default);
-  PrismLight.registerLanguage('sh', bash.default);
-  PrismLight.registerLanguage('shell', bash.default);
-  PrismLight.registerLanguage('python', python.default);
-  PrismLight.registerLanguage('py', python.default);
-  PrismLight.registerLanguage('html', markup.default);
-  PrismLight.registerLanguage('xml', markup.default);
-  PrismLight.registerLanguage('markup', markup.default);
-  PrismLight.registerLanguage('css', css.default);
-  PrismLight.registerLanguage('markdown', markdown.default);
-  PrismLight.registerLanguage('md', markdown.default);
-  PrismLight.registerLanguage('sql', sql.default);
-  PrismLight.registerLanguage('yaml', yaml.default);
-  PrismLight.registerLanguage('yml', yaml.default);
-  PrismLight.registerLanguage('diff', diff.default);
-
-  return { default: PrismLight };
-});
-const oneDarkLoader = () => import('react-syntax-highlighter/dist/esm/styles/prism').then((mod) => mod.oneDark);
 
 interface CodeBlockProps {
   language?: string;
@@ -56,7 +12,6 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
   const [copied, setCopied] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [syntaxStyle, setSyntaxStyle] = useState<any>(null);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
@@ -65,17 +20,6 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
-
-  useEffect(() => {
-    if (inline) return;
-    let cancelled = false;
-    oneDarkLoader().then((style) => {
-      if (!cancelled) setSyntaxStyle(style);
-    }).catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [inline]);
 
   const code = children.replace(/\n$/, '');
   const lineCount = code.split('\n').length;
@@ -89,6 +33,8 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
     } catch {
       const textarea = document.createElement('textarea');
       textarea.value = code;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand('copy');
@@ -168,62 +114,20 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
           collapsed ? 'max-h-[120px] overflow-hidden' : ''
         }`}
       >
-        <Suspense
-          fallback={
-            <pre
-              className="overflow-x-auto"
-              style={{
-                margin: 0,
-                padding: isMobile ? '12px' : '16px',
-                background: 'transparent',
-                fontSize: isMobile ? '12px' : '13px',
-                lineHeight: '1.6',
-                color: '#e5e7eb',
-              }}
-            >
-              <code>{code}</code>
-            </pre>
-          }
+        <pre
+          className="overflow-x-auto premium-scroll"
+          style={{
+            margin: 0,
+            padding: isMobile ? '12px' : '16px',
+            background: '#000000',
+            color: '#ffffff',
+            fontSize: isMobile ? '12px' : '13px',
+            lineHeight: '1.6',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+          }}
         >
-          {syntaxStyle ? (
-            <SyntaxHighlighter
-              language={language || 'text'}
-              style={syntaxStyle}
-              showLineNumbers={!isMobile && lineCount > 3}
-              wrapLines={!isMobile}
-              customStyle={{
-                margin: 0,
-                padding: isMobile ? '12px' : '16px',
-                background: 'transparent',
-                fontSize: isMobile ? '12px' : '13px',
-                lineHeight: '1.6',
-                minWidth: 0,
-              }}
-              lineNumberStyle={{
-                minWidth: '2.5em',
-                paddingRight: '16px',
-                color: '#5c6370',
-                userSelect: 'none',
-              }}
-            >
-              {code}
-            </SyntaxHighlighter>
-          ) : (
-            <pre
-              className="overflow-x-auto"
-              style={{
-                margin: 0,
-                padding: isMobile ? '12px' : '16px',
-                background: 'transparent',
-                fontSize: isMobile ? '12px' : '13px',
-                lineHeight: '1.6',
-                color: '#e5e7eb',
-              }}
-            >
-              <code>{code}</code>
-            </pre>
-          )}
-        </Suspense>
+          <code>{code}</code>
+        </pre>
       </div>
 
       {/* Collapsed fade overlay */}

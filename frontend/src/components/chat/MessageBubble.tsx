@@ -58,7 +58,7 @@ export function MessageBubble({ message, onEdit, onRegenerate }: MessageBubblePr
 
           {/* Text Bubble */}
           <div 
-            className="p-3 rounded-lg"
+            className="p-3 rounded-lg max-w-full overflow-hidden"
             style={{
               backgroundColor: isUser ? 'var(--bg-elevated)' : 'var(--bg-surface-alt)',
               border: '1px solid var(--border-subtle)',
