@@ -45,6 +45,7 @@ function AppContent() {
   const [showOps, setShowOps] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(280);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   void setSelectedFile;
   const { ConfirmDialog } = useConfirm();
@@ -155,9 +156,9 @@ function AppContent() {
       {/* DESKTOP SIDEBAR */}
       {sidebarOpen && !isMobile && (
         <aside
-          className="flex flex-col shrink-0 overflow-hidden"
+          className="flex flex-col shrink-0 overflow-hidden relative"
           style={{
-            width: '280px',
+            width: `${sidebarWidth}px`,
             background: 'var(--bg-surface)',
             borderRight: '1px solid var(--border)',
           }}
@@ -168,6 +169,23 @@ function AppContent() {
             themeCtx={themeCtx}
             settingsCtx={settings}
             isMobile={false}
+          />
+          <div
+            className="w-1.5 cursor-col-resize hover:bg-indigo-500 transition-colors absolute right-0 top-0 bottom-0 z-50"
+            onMouseDown={(e) => {
+              const startX = e.clientX;
+              const startWidth = sidebarWidth;
+              const onMouseMove = (moveEvent: MouseEvent) => {
+                const newWidth = Math.max(200, Math.min(800, startWidth + (moveEvent.clientX - startX)));
+                setSidebarWidth(newWidth);
+              };
+              const onMouseUp = () => {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+              };
+              document.addEventListener('mousemove', onMouseMove);
+              document.addEventListener('mouseup', onMouseUp);
+            }}
           />
         </aside>
       )}
@@ -202,20 +220,26 @@ function AppContent() {
       <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative" style={{ paddingTop: isElectron ? '28px' : 0 }}>
         {/* Floating toolbar — desktop only */}
         {!isMobile && (
-          <div 
-            className="absolute top-2 right-2 z-10 flex items-center gap-1 safe-top"
-            style={{ WebkitAppRegion: 'no-drag' } as any}
-          >
+          <>
             {!sidebarOpen && (
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="p-2.5 rounded-lg transition-colors"
-                style={{ color: 'var(--fg-muted)', background: 'var(--bg-surface)' }}
-                title="Open sidebar (Ctrl+B)"
+              <div 
+                className="absolute top-2 left-2 z-10 flex items-center safe-top"
+                style={{ WebkitAppRegion: 'no-drag' } as any}
               >
-                <Menu size={18} />
-              </button>
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="p-2.5 rounded-lg transition-colors border border-gray-200 dark:border-gray-800 shadow-sm"
+                  style={{ color: 'var(--fg-muted)', background: 'var(--bg-surface)' }}
+                  title="Open sidebar (Ctrl+B)"
+                >
+                  <Menu size={18} />
+                </button>
+              </div>
             )}
+            <div 
+              className="absolute top-2 right-2 z-10 flex items-center gap-1 safe-top"
+              style={{ WebkitAppRegion: 'no-drag' } as any}
+            >
             {allowDesktopAuxPanels && autoPreview && (
               <button
                 onClick={() => setShowPreview(p => !p)}
