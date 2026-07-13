@@ -25,6 +25,12 @@ async function collectStreamOutput({
   let resolvedModel = null;
 
   for await (const chunk of stream) {
+    try {
+      require('fs').appendFileSync(
+        '/Users/macbookair/.gemini/antigravity/brain/5d09b5b8-2ce7-411f-82fb-2e7040188bdd/debug_stream.log',
+        `KEYS: ${JSON.stringify(Object.keys(chunk || {}))} | MODEL: ${chunk?.model} | JSON: ${JSON.stringify(chunk)}\n`
+      );
+    } catch (e) {}
     if (chunk && chunk.model && !resolvedModel) {
       resolvedModel = chunk.model;
       writeSse(res, { type: 'auto_route', chosenModel: resolvedModel, intent: 'smart' });
