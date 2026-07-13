@@ -127,9 +127,9 @@ function normalizeWeatherUnits(content: string): string {
   text = text.replace(/\b-?\d+\s*°F\b/gi, '');
   text = text.replace(/\(\s*(\d+(?:[.,]\d+)?)\s*mph\s*\)/gi, '');
   text = text.replace(/\b(\d+(?:[.,]\d+)?)\s*mph\b/gi, '');
-  text = text.replace(/\s{2,}/g, ' ');
+  text = text.replace(/[ \t]{2,}/g, ' ');
   text = text.replace(/\(\s*\)/g, '');
-  text = text.replace(/\s+([,.;!?])/g, '$1');
+  text = text.replace(/[ \t]+([,.;!?])/g, '$1');
   return text.trim();
 }
 
