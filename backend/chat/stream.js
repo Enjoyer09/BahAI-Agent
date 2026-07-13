@@ -22,8 +22,13 @@ async function collectStreamOutput({
   let finishReason = null;
   let sawAssistantDelta = false;
   let sawCompletedEvent = false;
+  let resolvedModel = null;
 
   for await (const chunk of stream) {
+    if (chunk && chunk.model && !resolvedModel) {
+      resolvedModel = chunk.model;
+      writeSse(res, { type: 'auto_route', chosenModel: resolvedModel, intent: 'smart' });
+    }
     if (wireApi === 'responses') {
       if (chunk.type === 'response.output_text.delta') {
         accumulatedContent += chunk.delta;
