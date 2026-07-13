@@ -24,13 +24,15 @@ async function collectStreamOutput({
   let sawCompletedEvent = false;
   let resolvedModel = null;
 
+  if (stream && stream.response && typeof stream.response.headers?.get === 'function') {
+    const omniModel = stream.response.headers.get('x-omniroute-model');
+    if (omniModel) {
+      resolvedModel = omniModel;
+      writeSse(res, { type: 'auto_route', chosenModel: resolvedModel, intent: 'smart' });
+    }
+  }
+
   for await (const chunk of stream) {
-    try {
-      require('fs').appendFileSync(
-        '/Users/macbookair/.gemini/antigravity/brain/5d09b5b8-2ce7-411f-82fb-2e7040188bdd/debug_stream.log',
-        `KEYS: ${JSON.stringify(Object.keys(chunk || {}))} | MODEL: ${chunk?.model} | JSON: ${JSON.stringify(chunk)}\n`
-      );
-    } catch (e) {}
     if (chunk && chunk.model && !resolvedModel) {
       resolvedModel = chunk.model;
       writeSse(res, { type: 'auto_route', chosenModel: resolvedModel, intent: 'smart' });

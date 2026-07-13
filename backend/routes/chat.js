@@ -266,7 +266,7 @@ async function readLocalDb() {
 router.post('/', async (req, res) => {
   // --- Extract request params ---
   const { message, messages, conversationId, projectId, safeMode, productMode, executionMode,
-    orchestrationMode, workflow, frontendApiKey, frontendBaseUrl, frontendModel,
+    orchestrationMode, workflow, apiKey: frontendApiKey, baseUrl: frontendBaseUrl, model: frontendModel,
     guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, referentSummary } = req.body;
 
   const normalizedMessages = Array.isArray(messages) ? messages : [];
@@ -458,7 +458,10 @@ Web chat rejimində lokal workspace, fayl sistemi, qovluq yolu, sandbox, project
     : `Sən BahAI agentisən — Azərbaycan dilində AI kodlaşdırma köməkçisi.
 Heç vaxt "Mən bir süni intellektəm", "Canlı məlumatlara çıxışım yoxdur" kimi üzrxahlıq və zəiflik bildirən cümlələr işlətmə. Həmişə özündən əmin və birbaşa danış.`;
 
-  const systemPrompt = `${productPrompt}
+  const currentDateStr = new Date().toLocaleDateString('az-AZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const currentDatePrompt = `Cari tarix: ${currentDateStr}.`;
+
+  const systemPrompt = `${currentDatePrompt}\n\n${productPrompt}
 
 ${productMode === 'web_chat' ? '' : (resolvedWD ? `Cari iş qovluğu: ${resolvedWD}\nProject Root: ${resolvedWD}` : '')}
 
