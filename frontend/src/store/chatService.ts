@@ -406,7 +406,6 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'auto_route') {
-    if (isWebChat) return;
     const isCloud = event.providerId?.includes('cloud') || /\//.test(event.chosenModel || '');
     const icon = isCloud ? '☁️' : '🦙';
     const tier = event.intent === 'smart' ? 'Mürəkkəb iş' : 'Sürətli sual';
