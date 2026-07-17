@@ -31,7 +31,7 @@ const { buildExecutionArtifact, buildExecutionArtifactContext, compactMessagesFo
 const { getToolDefinitions } = require('../tools/registry');
 const { getToolsForProfile, getToolsForRole } = require('../tools/profiles');
 const { buildProviderCandidates, normalizeProviderBaseUrl, detectWireApi, isResponsesSchemaMismatchError, buildOpenAIClient } = require('../chat/providers');
-const { writeSse, initSse, emitOrchestrationPrelude, emitTaskPlan, emitGovernanceState, emitProviderTelemetry } = require('../chat/sse');
+const { writeSse, initSse, emitOrchestrationPrelude, emitTaskPlan, emitGovernanceState, emitProviderTelemetry, finishSse } = require('../chat/sse');
 const { collectStreamOutput } = require('../chat/stream');
 const { executeToolCalls } = require('../chat/toolExecutor');
 const { openAiStreamWithFallback } = require('../chat/runner');
@@ -587,6 +587,7 @@ ${generateToolsSystemPrompt(TOOLS)}`;
           emitProviderTelemetry(res, safePayload);
         },
         buildFinalGateReceipt: ({ plannerArtifact, executionArtifacts }) => buildGateReceipt({ plannerArtifact, executionArtifacts })
+        ,finishSse
       }
     });
   } catch (err) {

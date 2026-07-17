@@ -321,6 +321,9 @@ async function runChatSession({
     }
     if (slotAcquired) releaseChatSlot(req.user?.id, conversationId);
     if (!res.writableEnded) {
+      if (typeof dependencies.finishSse === 'function') {
+        dependencies.finishSse(res);
+      }
       res.end();
     }
   }

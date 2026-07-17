@@ -2,6 +2,11 @@ function writeSse(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+function finishSse(res) {
+  if (!res || res.writableEnded) return;
+  res.write('data: [DONE]\n\n');
+}
+
 function initSse(res) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -51,5 +56,6 @@ module.exports = {
   emitOrchestrationPrelude,
   emitTaskPlan,
   emitGovernanceState,
-  emitProviderTelemetry
+  emitProviderTelemetry,
+  finishSse
 };

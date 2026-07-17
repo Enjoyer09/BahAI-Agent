@@ -191,6 +191,7 @@ export async function sendChatMessage(
   let sawAssistantOutput = false;
   let sawFinalAssistantMessage = false;
   let sawStreamingAssistantDelta = false;
+  let sawTerminalError = false;
 
   try {
     while (!done) {
@@ -221,6 +222,9 @@ export async function sendChatMessage(
             if (data?.type === 'assistant_message') {
               sawFinalAssistantMessage = true;
             }
+            if (data?.type === 'error') {
+              sawTerminalError = true;
+            }
             onEvent(data);
           } catch {
             // ignore
@@ -231,7 +235,7 @@ export async function sendChatMessage(
   } catch (err: any) {
     const message = String(err?.message || '');
     if (sawDoneMarker || sawAnyEvent || /network error|failed to fetch|load failed/i.test(message)) {
-      if (!sawDoneMarker && sawAnyEvent && !signal?.aborted && !sawFinalAssistantMessage) {
+      if (!sawDoneMarker && sawAnyEvent && !signal?.aborted && !sawFinalAssistantMessage && !sawTerminalError) {
         onEvent({
           type: 'error',
           message: sawAssistantOutput
@@ -262,13 +266,16 @@ export async function sendChatMessage(
       if (data?.type === 'assistant_message') {
         sawFinalAssistantMessage = true;
       }
+      if (data?.type === 'error') {
+        sawTerminalError = true;
+      }
       onEvent(data);
     } catch {
       // ignore
     }
   }
 
-  if (!sawDoneMarker && sawAnyEvent && !signal?.aborted && !sawFinalAssistantMessage) {
+  if (!sawDoneMarker && sawAnyEvent && !signal?.aborted && !sawFinalAssistantMessage && !sawTerminalError) {
     onEvent({
       type: 'error',
       message: sawAssistantOutput
