@@ -15,6 +15,11 @@ describe('web direct replies', () => {
     expect(reply).toContain('Sən necəsən');
   });
 
+  it('answers presence checks locally without calling a provider', async () => {
+    const reply = await getDirectWebChatReply('burdasan?', []);
+    expect(reply).toContain('Bəli, buradayam');
+  });
+
   it('returns current date reply for Azerbaijani date question', async () => {
     const reply = await getDirectWebChatReply('Bugün ayın neçəsidir?', []);
     expect(reply).toMatch(/^Bu gün /);

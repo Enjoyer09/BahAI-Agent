@@ -77,9 +77,19 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
       .format(now)
       .split('-')
   ].join('-');
-  const isGreeting = /^(h[əe]rs*vaxt(ı|in)?n?s+xeyir(s+olsun)?|salam|salamlar|hello|hi)([,.!…\s]+(nec[əe]s[əe]n|necesen|n[əe] var n[əe] yox))?[?.!…]*$/i.test(text);
+  const normalizedGreeting = text
+    .toLocaleLowerCase('az-AZ')
+    .replace(/[.,!?…:;]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const isGreeting =
+    /^(hervaxtin|hər vaxtın|hərvaxtın) xeyr( olsun)?( necesen| necəsən)?$/.test(normalizedGreeting)
+    || /^(salam|salamlar|hello|hi)( necesen| necəsən| nə var nə yox)?$/.test(normalizedGreeting);
   if (isGreeting) {
     return 'Hər vaxtın xeyir! Mən yaxşıyam, sağ ol. Sən necəsən?';
+  }
+  if (/^(burdasan|buradasan|ordasan|oradasan|are you there)$/.test(normalizedGreeting)) {
+    return 'Bəli, buradayam. Sualını yaza bilərsən.';
   }
   const asksDate = /\b(bugün|bugun|bu gün|today)\b/i.test(text) && /\b(ayın neçəsidir|ayin necesidir|tarix|date|günlerden ne gündür|hansi gundur)\b/i.test(text);
   if (asksDate) {
@@ -436,6 +446,7 @@ router.post('/', async (req, res) => {
       type: 'assistant_message',
       message: { role: 'assistant', content: directWebReply }
     });
+    finishSse(res);
     return res.end();
   }
 
@@ -590,8 +601,8 @@ ${generateToolsSystemPrompt(TOOLS)}`;
           };
           emitProviderTelemetry(res, safePayload);
         },
-        buildFinalGateReceipt: ({ plannerArtifact, executionArtifacts }) => buildGateReceipt({ plannerArtifact, executionArtifacts })
-        ,finishSse
+        buildFinalGateReceipt: ({ plannerArtifact, executionArtifacts }) => buildGateReceipt({ plannerArtifact, executionArtifacts }),
+        finishSse
       }
     });
   } catch (err) {
