@@ -57,6 +57,14 @@ function mockSSEResponse(events: SSEEvent[]): Response {
   });
 }
 
+function mockSSEWithoutDone(events: SSEEvent[]): Response {
+  const body = events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('');
+  return new Response(body, {
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream' },
+  });
+}
+
 describe('API Client', () => {
   beforeEach(() => {
     mockFetch.mockReset();
@@ -360,6 +368,20 @@ describe('API Client', () => {
       const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
       expect(body.referentSummary.previousUser).toBe('HP 250 G10');
       expect(body.referentSummary.previousAssistant).toContain('Tam spesifikasiya');
+    });
+
+    it('does not append a fake partial-response error after a terminal SSE error', async () => {
+      mockFetch.mockResolvedValueOnce(mockSSEWithoutDone([
+        { type: 'orchestration_state', runId: 'r1', workflow: 'solo', mode: 'solo', agents: ['agent1'] } as any,
+        { type: 'error', message: 'API xətası: 400 content-blocked' } as any,
+      ]));
+      const onEvent = vi.fn();
+      await sendChatMessage(
+        [{ role: 'user', content: 'salam' }],
+        'key', 'url', 'model', '/wd', { safeMode: false }, onEvent,
+      );
+      expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: expect.stringContaining('content-blocked') }));
+      expect(onEvent).toHaveBeenCalledTimes(2);
     });
   });
 });

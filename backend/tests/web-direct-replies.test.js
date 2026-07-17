@@ -9,6 +9,12 @@ describe('web direct replies', () => {
     vi.restoreAllMocks();
   });
 
+  it('answers Azerbaijani greeting locally without calling a provider', async () => {
+    const reply = await getDirectWebChatReply('hervaxtin xeyr olsun... necesen?', []);
+    expect(reply).toContain('Hər vaxtın xeyir');
+    expect(reply).toContain('Sən necəsən');
+  });
+
   it('returns current date reply for Azerbaijani date question', async () => {
     const reply = await getDirectWebChatReply('Bugün ayın neçəsidir?', []);
     expect(reply).toMatch(/^Bu gün /);

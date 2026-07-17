@@ -77,6 +77,10 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
       .format(now)
       .split('-')
   ].join('-');
+  const isGreeting = /^(h[əe]rs*vaxt(ı|in)?n?s+xeyir(s+olsun)?|salam|salamlar|hello|hi)([,.!…\s]+(nec[əe]s[əe]n|necesen|n[əe] var n[əe] yox))?[?.!…]*$/i.test(text);
+  if (isGreeting) {
+    return 'Hər vaxtın xeyir! Mən yaxşıyam, sağ ol. Sən necəsən?';
+  }
   const asksDate = /\b(bugün|bugun|bu gün|today)\b/i.test(text) && /\b(ayın neçəsidir|ayin necesidir|tarix|date|günlerden ne gündür|hansi gundur)\b/i.test(text);
   if (asksDate) {
     return `Bu gün ${prettyDate}-dir.`;

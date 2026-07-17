@@ -3,7 +3,7 @@ function isRetryableProviderError(error, isResponsesSchemaMismatchError) {
   const msg = String(error?.message || '').toLowerCase();
   if (status === 401) return true;
   if (status === 408 || status === 409 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
-  if (status === 400 && (msg.includes('provider returned error') || msg.includes('temporarily unavailable'))) return true;
+  if (status === 400 && (msg.includes('provider returned error') || msg.includes('temporarily unavailable') || msg.includes('content-blocked'))) return true;
   if (isResponsesSchemaMismatchError(error)) return true;
   if (!status && (msg.includes('network') || msg.includes('timeout') || msg.includes('fetch failed') || msg.includes('econnrefused') || msg.includes('econnreset'))) return true;
   return false;
