@@ -330,12 +330,15 @@ router.post('/', async (req, res) => {
     looksLikeOllamaModel
   }));
 
-  if (providerCandidates.length === 0) {
+  // If we are in a fast-path that doesn't actually need an AI model, we can bypass the missing provider check.
+  const isGuiFastPath = isGuiLoginCheckpointRequest(latestUserText) || isGuiObserveSelfTestRequest(latestUserText) || isGuiOpenAndAwaitRequest(latestUserText);
+
+  if (providerCandidates.length === 0 && !isGuiFastPath) {
     return res.status(503).json({ error: 'Heç bir AI provider konfiqurasiya edilməyib. Ayarlardan API açarı və model seçin.' });
   }
 
-  let activeProvider = providerCandidates[0];
-  let client = buildOpenAIClient(activeProvider);
+  let activeProvider = providerCandidates[0] || {};
+  let client = activeProvider.model ? buildOpenAIClient(activeProvider) : null;
   let effectiveModel = activeProvider.model;
   const effectiveModelRef = { current: effectiveModel };
   const activeProviderRef = { current: activeProvider };
