@@ -69,11 +69,14 @@ describe('GUI request classifiers', () => {
 
 describe('buildGuiBrowserOpenArgs', () => {
   it('builds cdp mode args with default cdp url', () => {
+    // In tests run on linux, CDP is disabled unless we mock it or pass installed browsers.
+    // We can add a dummy installed browser to pass the policy check.
     const args = buildGuiBrowserOpenArgs({
       url: 'https://www.wix.com',
       sessionId: 'gui-wix-live',
       guiBrowserMode: 'cdp',
-      defaultCdpUrl: 'http://127.0.0.1:9222'
+      defaultCdpUrl: 'http://127.0.0.1:9222',
+      installedBrowsers: [{ installed: true, supportsCdp: true }]
     });
 
     expect(args.cdpUrl).toBe('http://127.0.0.1:9222');

@@ -18,15 +18,15 @@
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
     "mammoth": "^1.12.0",
-    "openai": "^6.37.0",
+    "openai": "^6.48.0",
     "pdf-parse": "^2.4.5",
-    "playwright": "^1.54.2",
     "pg": "^8.20.0",
+    "playwright": "^1.61.1",
     "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "supertest": "^7.2.2",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.10"
   }
 }

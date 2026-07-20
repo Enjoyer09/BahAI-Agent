@@ -28,6 +28,11 @@ router.post('/', async (req, res) => {
     const { name, path: projectPath, repoUrl } = req.body;
     if (!name || !projectPath) return res.status(400).json({ error: 'name və path tələb olunur' });
 
+    const { resolveWorkingDirectory } = require('../helpers');
+    const resolvedWD = resolveWorkingDirectory(projectPath, req.user);
+    const fs = require('fs');
+    fs.mkdirSync(resolvedWD, { recursive: true });
+
     if (!db.hasDatabase()) {
       const localProjectId = `local_${Date.now()}`;
       const localConversationId = `local_conv_${Date.now()}`;

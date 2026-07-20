@@ -19,6 +19,11 @@ interface Props {
 }
 
 export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code' }: Props) {
+  // Focus trap refs
+  const modalRef = useRef<HTMLDivElement>(null);
+  const firstFocusableRef = useRef<HTMLButtonElement>(null);
+  const lastFocusableRef = useRef<HTMLButtonElement>(null);
+
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +82,9 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
           if (data.refreshToken) localStorage.setItem('refresh_token', data.refreshToken);
           window.location.reload();
         }
-      } catch {}
+      } catch {
+        // ignore JSON parse errors during polling
+      }
     }, 700);
     return () => window.clearInterval(poll);
   }, []);
@@ -109,13 +116,6 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
     const top = window.screenY + (window.outerHeight - height) / 2;
     window.open(url, 'google-oauth', `width=${width},height=${height},left=${left},top=${top}`);
   };
-
-  if (!isOpen) return null;
-
-  // Focus trap refs
-  const modalRef = useRef<HTMLDivElement>(null);
-  const firstFocusableRef = useRef<HTMLButtonElement>(null);
-  const lastFocusableRef = useRef<HTMLButtonElement>(null);
 
   // Focus trap keyboard handler
   useEffect(() => {
@@ -161,6 +161,8 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
   const handleOverlayClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) onClose();
   }, [onClose]);
+
+  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
