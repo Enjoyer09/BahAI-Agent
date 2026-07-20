@@ -62,8 +62,6 @@ function formatMetaLine({ runId, phaseRole, conversationId, expiresAt }: { runId
 }
 
 export default function ActionCenterModal({ interactions, history = [], onResolveCheckpoint, onApprove }: Props) {
-  if (interactions.length === 0) return null;
-
   // Focus trap
   const modalRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -99,6 +97,8 @@ export default function ActionCenterModal({ interactions, history = [], onResolv
     modal.addEventListener('keydown', handleKeyDown);
     return () => modal.removeEventListener('keydown', handleKeyDown);
   }, [interactions.length]);
+
+  if (interactions.length === 0) return null;
 
   const grouped = interactions.reduce<Record<string, ActionCenterInteraction[]>>((acc, item) => {
     const runKey = item.checkpoint?.runId || item.approval?.runId || 'no-run';

@@ -218,7 +218,7 @@ export async function handleSendMessage(
   };
 
   // Initial state for the message flow
-  let currentMsgs = [...messages, userMsg];
+  const currentMsgs = [...messages, userMsg];
   const convId = activeConvId;
   const streamBufferRef = { current: '' };
 
