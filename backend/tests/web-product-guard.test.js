@@ -20,4 +20,15 @@ describe('web product guard', () => {
     expect(result).toContain('open electron');
     expect(result).toContain('bahai://auth/callback');
   });
+
+  it('verifies getToolsForProfile returns correct read-only tools for web-chat', () => {
+    const { getToolsForProfile } = require('../tools/profiles');
+    const tools = getToolsForProfile('web-chat');
+    const toolNames = tools.map(t => t.function.name);
+    
+    expect(toolNames).toContain('read_file');
+    expect(toolNames).toContain('web_search');
+    expect(toolNames).not.toContain('write_file');
+    expect(toolNames).not.toContain('run_terminal_command');
+  });
 });

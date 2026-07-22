@@ -19,6 +19,10 @@ router.get('/files', async (req, res) => {
       return res.status(403).json({ error: 'Path outside workspace' });
     }
 
+    try {
+      await fs.mkdir(targetPath, { recursive: true });
+    } catch (_) {}
+
     const entries = await fs.readdir(targetPath, { withFileTypes: true });
     const files = entries.map(entry => ({
       name: entry.name,

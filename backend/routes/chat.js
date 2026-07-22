@@ -434,7 +434,9 @@ router.post('/', async (req, res) => {
   }
 
   // --- Main Chat Processing ---
-  const TOOLS = getToolDefinitions();
+  const TOOLS = productMode === 'web_chat'
+    ? getToolsForProfile('web-chat')
+    : getToolDefinitions();
   const db = require('../db');
   const historyMessageCount = normalizedMessages.filter((item) => item && (item.role === 'user' || item.role === 'assistant') && String(item.content || '').trim()).length;
   const safeReferentSummary = productMode === 'web_chat' && historyMessageCount >= 2 ? (referentSummary || null) : null;
