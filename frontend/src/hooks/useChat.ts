@@ -601,11 +601,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     const ensured = await ensureConversationForSend();
     const convId = ensured.convId;
 
-    // RACE FIX: stale guard — if the active conversation changed
-    // while we were creating the project/conversation, abort the send.
+    // Set active conversation ID explicitly to ensured.convId so state stays in sync
     if (convId !== activeConvIdRef.current) {
-      console.warn('[useChat] sendMessage aborted: conversation changed during async setup');
-      return;
+      activeConvIdRef.current = convId;
+      dispatch({ type: 'SET_ACTIVE_CONV_ID', id: convId });
     }
 
     const activeConv = conversationsRef.current.find(c => c.id === convId) || null;
