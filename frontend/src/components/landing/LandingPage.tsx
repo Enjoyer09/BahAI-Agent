@@ -191,7 +191,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#34d399' }} />
               <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#34d399' }} />
             </span>
-            🌱 PRE-BETA VERSİYA — YENİLİKLƏR BAHAR KİMİ TUMURCUQLANIR
+            PRE-BETA VERSİYA AKTİVDİR
           </div>
         </AnimateIn>
 
@@ -219,11 +219,11 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
 
         <AnimateIn delay={0.2}>
           <p className="text-slate-300 text-center max-w-2xl text-base md:text-xl mb-6 leading-relaxed">
-            BahAI — Azərbaycan dilində ən rəvan, canlı və ağıllı AI köməkçiniz. Şəhərin neon işıqlarından və təbiətin təravətindən ruhlanaraq yeni nəsil süni intellekt təcrübəsini təqdim edirik.
+            BahAI — Azərbaycan dilində ən rəvan, canlı və ağıllı AI köməkçiniz. Şəhərin neon işıqlarından və baharın təravətindən ruhlanaraq yeni nəsil süni intellekt təcrübəsini təqdim edirik.
           </p>
 
           <div 
-            className="mx-auto max-w-lg p-4 rounded-2xl mb-10 text-center text-xs md:text-sm text-slate-300"
+            className="mx-auto max-w-lg p-4 rounded-2xl mb-8 text-center text-xs md:text-sm text-slate-300"
             style={{
               background: 'rgba(255, 255, 255, 0.03)',
               border: '1px solid rgba(52, 211, 153, 0.25)',
@@ -231,12 +231,53 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               boxShadow: '0 10px 30px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.1)'
             }}
           >
-            ✨ <strong>Pre-Beta Xəbərdarlığı:</strong> Hazırda BahAI-nin pre-beta sınaqlarındayıq. Sistem hər gün daha da çiçəklənir və təkmilləşir. Müvəqqəti olaraq fayl yükləmələri (attachments) passivdir, lakin canlı axtarış və məntiq qatımız 100% aktivdir! 🚀
+            ✨ <strong>Pre-Beta Xəbərdarlığı:</strong> Hazırda BahAI-nin pre-beta sınaqlarındayıq. Müvəqqəti olaraq fayl yükləmələri (attachments) passivdir, lakin canlı axtarış və məntiq qatımız 100% aktivdir! 🚀
+          </div>
+        </AnimateIn>
+
+        {/* Photo-inspired Visual Card Section */}
+        <AnimateIn delay={0.25}>
+          <div className="relative max-w-3xl w-full mx-auto my-6 p-1 rounded-3xl overflow-hidden"
+               style={{
+                 background: 'linear-gradient(135deg, rgba(16,185,129,0.4) 0%, rgba(168,85,247,0.2) 50%, rgba(16,185,129,0.1) 100%)',
+                 boxShadow: '0 20px 50px rgba(0,0,0,0.5), 0 0 30px rgba(16,185,129,0.25)'
+               }}>
+            <div className="relative rounded-[22px] p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden"
+                 style={{ background: '#0c0e12' }}>
+              <div className="flex-1 space-y-3 text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md text-[11px] font-mono tracking-wider uppercase text-emerald-400"
+                     style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
+                  <Sparkles size={12} /> Emerald City Neon Vibe
+                </div>
+                <h3 className="text-xl md:text-2xl font-bold text-slate-100">
+                  Gecə Şəhərinin Neon İşıqları və Təbiətin Təravəti
+                </h3>
+                <p className="text-xs md:text-sm text-slate-400 leading-relaxed">
+                  Estetikamızı yaşıl neon tonları, tünd gecə atmosferi və təbii bahar canlılığı ilə bəzədik. Həm sürətli çat, həm də gələcəyin proqramlaşdırma təcrübəsi bir arada.
+                </p>
+              </div>
+
+              {/* Visual Avatar Card Mock */}
+              <div className="relative shrink-0 w-36 h-48 md:w-44 md:h-56 rounded-2xl overflow-hidden border border-emerald-500/30 flex flex-col justify-end p-4 shadow-2xl"
+                   style={{
+                     background: 'linear-gradient(180deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.85) 100%)',
+                     boxShadow: '0 0 25px rgba(16,185,129,0.3)'
+                   }}>
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-400/20 via-transparent to-black/60 pointer-events-none" />
+                <div className="relative z-10 space-y-1">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/90 flex items-center justify-center shadow-lg border border-emerald-300/40">
+                    <Sparkles size={16} className="text-white" />
+                  </div>
+                  <div className="text-sm font-bold text-white tracking-wide">BahAI Core</div>
+                  <div className="text-[10px] text-emerald-200 font-mono">Live Web Assistant</div>
+                </div>
+              </div>
+            </div>
           </div>
         </AnimateIn>
 
         <AnimateIn delay={0.3}>
-          <div className="flex flex-col sm:flex-row items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
             <button
               onClick={onGetStarted}
               className="group flex items-center gap-3 px-8 py-4 rounded-xl text-base font-bold transition-all active:scale-[0.97] shadow-xl cursor-pointer"
@@ -263,16 +304,30 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       {/* Stats Bar */}
       <section className="border-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
         <div className="max-w-5xl mx-auto grid grid-cols-3 divide-x" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-          {stats.map((s, i) => (
-            <div key={i} className="py-8 md:py-12 text-center" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-              <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1" style={{ color: '#f0f0f0' }}>
-                {s.value}
-              </div>
-              <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-zinc-500">
-                {s.label}
-              </div>
+          <div className="py-8 md:py-12 text-center" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 text-emerald-400">
+              Canlı
             </div>
-          ))}
+            <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-zinc-500">
+              CHAT-FIRST WEB
+            </div>
+          </div>
+          <div className="py-8 md:py-12 text-center" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 text-amber-400">
+              In Dev
+            </div>
+            <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-zinc-500">
+              DESKTOP CODE AGENT
+            </div>
+          </div>
+          <div className="py-8 md:py-12 text-center" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 text-purple-400">
+              Pre-Beta
+            </div>
+            <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-zinc-500">
+              FAZA
+            </div>
+          </div>
         </div>
       </section>
 
