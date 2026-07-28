@@ -1,4 +1,4 @@
-import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Bot, Volume2, VolumeX } from 'lucide-react';
+import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Bot, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { useState, useCallback, useRef, lazy, Suspense } from 'react';
 import ToolCallCard from './ToolCallCard';
 import type { Message } from '../../lib/types';
@@ -165,16 +165,19 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
           className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
           style={{
             background: isBot
-              ? 'linear-gradient(180deg, rgba(16,163,127,0.96), rgba(16,163,127,0.78))'
-              : 'linear-gradient(180deg, rgba(148,163,184,0.9), rgba(100,116,139,0.82))',
-            boxShadow: isBot ? '0 10px 24px rgba(16,163,127,0.18)' : '0 10px 24px rgba(100,116,139,0.14)',
+              ? 'linear-gradient(135deg, #10b981 0%, #059669 60%, #047857 100%)'
+              : 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+            boxShadow: isBot
+              ? '0 0 16px rgba(16, 185, 129, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.3)'
+              : '0 0 14px rgba(139, 92, 246, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
+            border: isBot ? '1px solid rgba(52, 211, 153, 0.5)' : '1px solid rgba(167, 139, 250, 0.4)',
           }}
         >
           {isBot ? (
             hasRunningTools ? (
               <Loader2 size={14} className="animate-spin text-white" />
             ) : (
-              <Bot size={14} className="text-white" />
+              <Sparkles size={14} className="text-white drop-shadow-[0_0_4px_rgba(255,255,255,0.8)]" />
             )
           ) : (
             <User size={14} className="text-white" />

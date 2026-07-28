@@ -211,23 +211,6 @@ export default function ChatArea({
                   ))}
                 </div>
               </div>
-              {onStop && (
-                <button
-                  onClick={onStop}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                  style={{
-                    color: '#ef4444',
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid rgba(239, 68, 68, 0.2)',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
-                  aria-label="Stop generating"
-                >
-                  <Square size={12} fill="currentColor" />
-                  Dayandır
-                </button>
-              )}
             </div>
           </div>
         )}
