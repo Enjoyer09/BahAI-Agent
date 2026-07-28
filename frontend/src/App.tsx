@@ -547,7 +547,18 @@ function AppContent() {
         onResolveCheckpoint={chat.resolveHumanCheckpoint}
         onApprove={chat.decideApproval}
       />
-      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} productMode={settings.productMode} />
+      <AuthModal 
+        isOpen={authModalOpen} 
+        onClose={() => {
+          setAuthModalOpen(false);
+          // If user closes modal without logging in, redirect to landing page
+          if (!auth.user && isChat) {
+            window.history.pushState({}, '', '/');
+            setIsChat(false);
+          }
+        }} 
+        productMode={settings.productMode} 
+      />
       {ConfirmDialog}
     </div>
   );
