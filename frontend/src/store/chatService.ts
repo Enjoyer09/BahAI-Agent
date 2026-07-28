@@ -289,9 +289,9 @@ export async function handleSendMessage(
     }
 
     const isSmartMode = settings.aiMode === 'smart';
-    const effectiveBaseUrl = isSmartMode ? 'https://omniroute-bahai-smart-production.up.railway.app/v1' : settings.baseUrl;
-    const effectiveApiKey = isSmartMode ? 'dummy-key' : settings.apiKey;
-    const effectiveModel = isSmartMode ? 'auto/coding' : settings.model;
+    const effectiveBaseUrl = (isSmartMode && settings.baseUrl.includes('omniroute')) ? settings.baseUrl : settings.baseUrl;
+    const effectiveApiKey = settings.apiKey;
+    const effectiveModel = isSmartMode ? 'auto' : settings.model;
 
     await apiSendChatMessage(
       finalPreparedMessages,
