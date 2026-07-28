@@ -133,7 +133,7 @@ function buildProviderCandidates({
     const effectiveKey = (requestedBase && frontendApiKey) ? frontendApiKey : defaultKey;
     const fastModel = env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel;
     const smartModel = env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || fastModel;
-    const visionModel = env.WEB_CHAT_VISION_MODEL || smartModel;
+    const visionModel = env.WEB_CHAT_VISION_MODEL || 'meta-llama/llama-3.2-11b-vision-instruct:free' || smartModel;
     const codeModel = env.WEB_CHAT_CODE_MODEL || smartModel;
     const primaryTask = hasImageAttachment ? 'vision' : webTaskType;
     const orderedModels = primaryTask === 'vision'

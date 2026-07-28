@@ -1045,7 +1045,12 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
     let name = message.name;
 
     const imageAttachments = Array.isArray(message.attachments)
-      ? message.attachments.filter((attachment) => attachment?.type === 'image' && typeof attachment?.url === 'string' && attachment.url.startsWith('data:image/'))
+      ? message.attachments.filter((attachment) => {
+          const mimeType = String(attachment?.mimeType || attachment?.type || '');
+          const hasImageUrl = typeof attachment?.url === 'string' && attachment.url.startsWith('data:image/');
+          const isImageType = attachment?.type === 'image' || /^image\//i.test(mimeType);
+          return isImageType && hasImageUrl;
+        })
       : [];
 
     if (message.attachments?.length) {
