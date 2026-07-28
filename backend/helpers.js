@@ -1034,7 +1034,7 @@ async function extractAttachment(attachment) {
 
 async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = []) {
   const normalized = [];
-  const isLocalOrFlakyModel = isLocalMode() || !modelName || /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(modelName);
+  const isLocalOrFlakyModel = isLocalMode() || !modelName || /ollama|local/i.test(modelName);
 
   for (const message of messages) {
     if (!message) continue;
