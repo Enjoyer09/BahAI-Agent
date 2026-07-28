@@ -244,7 +244,10 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
             {/* Content */}
             {(() => {
               // Strip raw JSON tool execution blocks from visible text if they leak into content
-              let displayContent = (message.content || '').replace(/```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"[\s\S]*?\}\s*```/g, '').trim();
+              let displayContent = (message.content || '')
+                .replace(/```(?:json)?\s*\{[\s\S]*?"name"\s*:[\s\S]*?\}\s*```/gi, '')
+                .replace(/```json\s*\{[\s\S]*?\}\s*```/gi, '')
+                .trim();
               if (!displayContent && message.tool_calls && message.tool_calls.length > 0) return null;
               return (
                 <div className="prose prose-sm max-w-none min-w-0" style={{ color: 'var(--fg-main)' }}>
