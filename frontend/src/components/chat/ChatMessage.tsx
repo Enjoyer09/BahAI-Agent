@@ -132,7 +132,6 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
     toast.info('Yenidən yazma üçün yeni mesaj göndərin');
   }, [message.id, toast]);
 
-
   if (message.role === 'tool') return null;
   // the Auto router's choice. Render as a small inline pill so it doesn't
   // dominate the conversation.

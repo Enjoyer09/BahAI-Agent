@@ -46,6 +46,10 @@ function emitGovernanceState(res, payload = {}) {
   writeSse(res, { type: 'governance_state', ...payload });
 }
 
+function emitProviderTelemetry(res, payload = {}) {
+  writeSse(res, { type: 'provider_telemetry', ...payload });
+}
+
 function emitTokenUsage(res, payload = {}) {
   const promptTokens = payload.promptTokens || 0;
   const completionTokens = payload.completionTokens || 0;
