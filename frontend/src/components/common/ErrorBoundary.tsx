@@ -47,16 +47,13 @@ export class ErrorBoundary extends Component<Props, State> {
             </p>
             <button
               onClick={() => {
-                if (this.state.error?.message?.includes('300') || this.state.error?.message?.includes('hook')) {
-                  window.location.reload();
-                } else {
-                  this.setState({ hasError: false, error: null });
-                }
+                // Minified React error #300 or hook mismatch requires page reload to clean state
+                window.location.reload();
               }}
-              className="px-3 py-1.5 rounded text-xs font-medium"
+              className="px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all active:scale-95 cursor-pointer"
               style={{ background: 'var(--color-accent)', color: 'white' }}
             >
-              Yenidən cəhd et
+              Yenidən yükələ (Reload)
             </button>
           </div>
         </div>

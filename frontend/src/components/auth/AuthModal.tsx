@@ -98,8 +98,9 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
 
   const handleGoogleSignIn = () => {
     if (!googleClientId) return;
-    // Open Google OAuth in a popup window (works in Electron)
-    const redirectUri = `${API_BASE_URL}/api/auth/google-callback`;
+    // Build redirectUri dynamically from current window origin so it matches current host
+    const origin = typeof window !== 'undefined' ? window.location.origin : API_BASE_URL;
+    const redirectUri = `${origin}/api/auth/google-callback`;
     const scope = 'openid email profile';
     const state = encodeURIComponent(JSON.stringify({ productMode }));
     const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&prompt=select_account&state=${state}`;
@@ -284,27 +285,6 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-3">
-          {isLogin && (
-            <button
-              type="button"
-              onClick={() => {
-                setEmail('demo@bahai.local');
-                setPassword('demo123');
-                setError(null);
-              }}
-              data-testid="auth-demo-fill"
-              aria-label="Demo girişini doldur"
-              className="w-full py-2.5 rounded-lg text-sm font-medium transition-all"
-              style={{
-                background: 'var(--bg-hover)',
-                border: '1px solid var(--border)',
-                color: 'var(--fg-main)',
-                minHeight: '44px',
-              }}
-            >
-              {isWebProduct ? 'Demo cloud girişini doldur' : 'Demo desktop girişini doldur'}
-            </button>
-          )}
           {!isLogin && (
             <div className="relative">
               <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--fg-muted)' }} />

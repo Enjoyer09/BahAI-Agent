@@ -15,8 +15,8 @@ interface Props {
 }
 
 export default function ChatInput({ onSend, onStop, loading, blockedByActionCenter, safeMode, onSafeModeToggle, isMobile, productMode = 'desktop_code' }: Props) {
-  let toast: any = null;
-  try { toast = useToast()?.toast; } catch { /* ToastProvider missing fallback */ }
+  const toastCtx = useToast();
+  const toast = toastCtx?.toast;
 
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);

@@ -2,7 +2,9 @@
 // Telemetry — Anonymous usage stats (opt-in)
 // ==========================================
 
-const TELEMETRY_URL = 'https://bahai-agent-production.up.railway.app/api/telemetry';
+const TELEMETRY_URL = typeof window !== 'undefined'
+  ? `${window.location.origin}/api/telemetry`
+  : 'https://www.bahai.biz.az/api/telemetry';
 const APP_VERSION = '1.0.0';
 
 // Generate a stable anonymous device ID (no personal info)
