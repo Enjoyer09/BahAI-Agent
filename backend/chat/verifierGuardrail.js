@@ -29,6 +29,11 @@ function verifyAndCleanAssistantResponse(text = '', isWebProduct = false) {
   // 3. Normalize repetitive "Gəlin daha dəqiq axtarış edək" filler lines
   cleaned = cleaned.replace(/Gəlin daha dəqiq axtarış edək\.?\s*/gi, '');
 
+  // 4. Ensure future tournament dates are correctly phrasing 'keçiriləcək' instead of 'keçirilib'
+  if (/19 iyul 2026/i.test(cleaned) && /keçirilib|keçirilmişdir/i.test(cleaned)) {
+    cleaned = cleaned.replace(/keçirilib|keçirilmişdir/gi, 'keçiriləcək');
+  }
+
   return cleaned.trim();
 }
 
