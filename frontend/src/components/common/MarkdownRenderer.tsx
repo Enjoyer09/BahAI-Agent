@@ -8,6 +8,7 @@ interface MarkdownRendererProps {
 }
 
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
+  const safeContent = typeof content === 'string' ? content : '';
   const components: Partial<Components> = {
     code({ className, children }) {
       const match = /language-(\w+)/.exec(className || '');
@@ -88,7 +89,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
 
   return (
     <div className="markdown-content text-[14px] sm:text-[15px] leading-7">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{safeContent}</ReactMarkdown>
     </div>
   );
 }

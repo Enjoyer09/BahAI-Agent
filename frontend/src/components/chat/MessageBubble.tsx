@@ -69,12 +69,12 @@ export function MessageBubble({ message, onEdit, onRegenerate, settings }: Messa
           >
             {isUser && settings?.enableMarkdown !== true ? (
               <div className="whitespace-pre-wrap break-words leading-7">
-                {message.content}
+                {message?.content || ''}
               </div>
             ) : (
               <div className="leading-7">
                 <MarkdownRenderer 
-                  content={settings?.showThinking === false ? message.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim() : message.content} 
+                  content={settings?.showThinking === false ? (message?.content || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim() : (message?.content || '')} 
                 />
               </div>
             )}
