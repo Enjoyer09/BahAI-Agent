@@ -173,130 +173,92 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       <section className="relative min-h-screen flex flex-col items-center justify-center px-5 md:px-10 pt-16 overflow-hidden">
         <GridDots />
 
-        {/* Ambient emerald & neon glow */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[750px] h-[750px] rounded-full pointer-events-none"
-             style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.14) 0%, rgba(139,92,246,0.06) 50%, transparent 75%)' }} />
+        {/* Glow ambient background */}
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[500px] rounded-full pointer-events-none"
+             style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, rgba(139,92,246,0.04) 60%, transparent 80%)' }} />
 
+        {/* Minimal Pre-Beta pill */}
         <AnimateIn delay={0}>
-          <div
-            className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full text-xs font-semibold tracking-wide mb-8"
-            style={{
-              background: 'rgba(16,185,129,0.08)',
-              border: '1px solid rgba(52,211,153,0.3)',
-              color: '#34d399',
-              boxShadow: '0 0 20px rgba(16,185,129,0.2)',
-            }}
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#34d399' }} />
-              <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#34d399' }} />
-            </span>
-            PRE-BETA VERSİYA AKTİVDİR
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium tracking-wide mb-8 border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Pre-Beta Versiya
           </div>
         </AnimateIn>
 
+        {/* Main Headline */}
         <AnimateIn delay={0.1}>
-          <h1
-            className="text-4xl sm:text-6xl md:text-7xl font-extrabold text-center max-w-4xl leading-[1.08] tracking-tight mb-6"
-            style={{ color: '#f8fafc' }}
-          >
-            Süni İntellektdə
+          <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold text-center max-w-4xl leading-[1.1] tracking-tight mb-6 text-slate-100">
+            Azərbaycan dilində
             <br />
-            <span
-              className="font-black"
-              style={{
-                background: 'linear-gradient(135deg, #10b981 0%, #34d399 40%, #a855f7 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-                filter: 'drop-shadow(0 0 30px rgba(16,185,129,0.3))'
-              }}
-            >
-              Bahardan ilhamlanaraq yaratdıq 🌿
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-purple-400">
+              Ağıllı Süni İntellekt Köməkçiniz
             </span>
           </h1>
         </AnimateIn>
 
+        {/* Description */}
         <AnimateIn delay={0.2}>
-          <p className="text-slate-300 text-center max-w-2xl text-base md:text-xl mb-6 leading-relaxed">
-            BahAI — Azərbaycan dilində ən rəvan, canlı və ağıllı AI köməkçiniz. Şəhərin neon işıqlarından və baharın təravətindən ruhlanaraq yeni nəsil süni intellekt təcrübəsini təqdim edirik.
+          <p className="text-slate-400 text-center max-w-xl text-base sm:text-lg mb-8 leading-relaxed">
+            Sual verin, canlı internet axtarışı aparın və ya mürəkkəb məntiq suallarını həll edin. BahAI — sadə, sürətli və azərbaycan dilinə tam uyğunlaşdırılmış AI platformasıdır.
           </p>
+        </AnimateIn>
 
-          <div 
-            className="mx-auto max-w-lg p-4 rounded-2xl mb-8 text-center text-xs md:text-sm text-slate-300"
-            style={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(52, 211, 153, 0.25)',
-              backdropFilter: 'blur(16px)',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.1)'
-            }}
-          >
-            ✨ <strong>Pre-Beta Xəbərdarlığı:</strong> Hazırda BahAI-nin pre-beta sınaqlarındayıq. Müvəqqəti olaraq fayl yükləmələri (attachments) passivdir, lakin canlı axtarış və məntiq qatımız 100% aktivdir! 🚀
+        {/* Action Button */}
+        <AnimateIn delay={0.25}>
+          <div className="flex items-center gap-4 mb-12">
+            <button
+              onClick={onGetStarted}
+              className="group flex items-center gap-3 px-8 py-3.5 rounded-xl text-sm font-semibold transition-all active:scale-95 shadow-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer shadow-emerald-500/25"
+            >
+              <Sparkles size={16} />
+              İndi Sınayın
+              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+            </button>
           </div>
         </AnimateIn>
 
-        {/* Photo-inspired Visual Card Section */}
-        <AnimateIn delay={0.25}>
-          <div className="relative max-w-3xl w-full mx-auto my-6 p-1 rounded-3xl overflow-hidden"
-               style={{
-                 background: 'linear-gradient(135deg, rgba(16,185,129,0.4) 0%, rgba(168,85,247,0.2) 50%, rgba(16,185,129,0.1) 100%)',
-                 boxShadow: '0 20px 50px rgba(0,0,0,0.5), 0 0 30px rgba(16,185,129,0.25)'
-               }}>
-            <div className="relative rounded-[22px] p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden"
-                 style={{ background: '#0c0e12' }}>
-              <div className="flex-1 space-y-3 text-left">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md text-[11px] font-mono tracking-wider uppercase text-emerald-400"
-                     style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
-                  <Sparkles size={12} /> Emerald City Neon Vibe
-                </div>
-                <h3 className="text-xl md:text-2xl font-bold text-slate-100">
-                  Gecə Şəhərinin Neon İşıqları və Təbiətin Təravəti
-                </h3>
-                <p className="text-xs md:text-sm text-slate-400 leading-relaxed">
-                  Estetikamızı yaşıl neon tonları, tünd gecə atmosferi və təbii bahar canlılığı ilə bəzədik. Həm sürətli çat, həm də gələcəyin proqramlaşdırma təcrübəsi bir arada.
-                </p>
+        {/* Clean Live Chat Interface Preview Card */}
+        <AnimateIn delay={0.3}>
+          <div className="w-full max-w-3xl rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 shadow-2xl backdrop-blur-xl text-left font-sans space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                <div className="w-3 h-3 rounded-full bg-amber-500/80" />
+                <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+                <span className="text-xs text-slate-400 ml-2 font-mono">bahAI Web Session</span>
               </div>
+              <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">BahAI Smart • Online</span>
+            </div>
 
-              {/* Visual Avatar Card Mock */}
-              <div className="relative shrink-0 w-36 h-48 md:w-44 md:h-56 rounded-2xl overflow-hidden border border-emerald-500/30 flex flex-col justify-end p-4 shadow-2xl"
-                   style={{
-                     background: 'linear-gradient(180deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.85) 100%)',
-                     boxShadow: '0 0 25px rgba(16,185,129,0.3)'
-                   }}>
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-400/20 via-transparent to-black/60 pointer-events-none" />
-                <div className="relative z-10 space-y-1">
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/90 flex items-center justify-center shadow-lg border border-emerald-300/40">
-                    <Sparkles size={16} className="text-white" />
-                  </div>
-                  <div className="text-sm font-bold text-white tracking-wide">BahAI Core</div>
-                  <div className="text-[10px] text-emerald-200 font-mono">Live Web Assistant</div>
+            {/* User message */}
+            <div className="flex items-start gap-3 justify-end">
+              <div className="bg-emerald-600/20 border border-emerald-500/30 rounded-2xl rounded-tr-sm px-4 py-2.5 text-xs sm:text-sm text-slate-200 max-w-[85%]">
+                2026-cı il idman xəbərlərini və ya Bakı havanı canlı axtara bilərsən?
+              </div>
+            </div>
+
+            {/* AI message */}
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/30">
+                <Sparkles size={14} className="text-slate-950" />
+              </div>
+              <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl rounded-tl-sm px-4 py-3 text-xs sm:text-sm text-slate-300 space-y-2 max-w-[90%]">
+                <p>Bəli! Dərhal canlı <code className="bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded font-mono text-[11px]">Tavily AI Search</code> alətini işlədib ən dəqiq faktiki nəticəni təqdim edirəm.</p>
+                <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-700/40 flex items-center gap-1.5">
+                  <CheckCircle2 size={12} className="text-emerald-400" />
+                  <span>Daxili monoloqsuz, birbaşa cavab qatı aktivdir.</span>
                 </div>
               </div>
             </div>
           </div>
         </AnimateIn>
 
-        <AnimateIn delay={0.3}>
-          <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
-            <button
-              onClick={onGetStarted}
-              className="group flex items-center gap-3 px-8 py-4 rounded-xl text-base font-bold transition-all active:scale-[0.97] shadow-xl cursor-pointer"
-              style={{
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: 'white',
-                boxShadow: '0 0 35px rgba(16,185,129,0.45)',
-                border: '1px solid rgba(52,211,153,0.5)',
-              }}
-            >
-              <Sparkles size={18} className="animate-pulse" />
-              Söhbətə Başla
-              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-            </button>
-          </div>
-        </AnimateIn>
-
+        {/* Pre-Beta Note */}
+        <div className="mt-8 text-center text-xs text-slate-500 max-w-md">
+          ℹ️ Pre-Beta sınaq dövründəyik. Fayl yükləmələri müvəqqəti passivdir; mətn və canlı axtarış funksionallığı 100% aktivdir.
+        </div>
         {/* Scroll indicator */}
-        <div className="absolute bottom-8 animate-bounce" style={{ opacity: 0.3 }}>
+        <div className="absolute bottom-4 animate-bounce" style={{ opacity: 0.3 }}>
           <ChevronDown size={24} />
         </div>
       </section>
