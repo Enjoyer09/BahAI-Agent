@@ -106,21 +106,26 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
 
   const pushFiles = useCallback((files: FileList | null) => {
     if (!files) return;
-    const ALLOWED_EXTENSIONS = ['.txt', '.json', '.csv', '.md', '.yaml', '.yml', '.xml', '.log', '.env', '.js', '.ts', '.jsx', '.tsx', '.py', '.html', '.css', '.har', '.svg', '.sh', '.toml', '.ini', '.cfg', '.conf', '.sql', '.graphql', '.prisma', '.dockerfile', '.gitignore'];
+    const ALLOWED_EXTENSIONS = [
+      '.txt', '.json', '.csv', '.md', '.yaml', '.yml', '.xml', '.log', '.env',
+      '.js', '.ts', '.jsx', '.tsx', '.py', '.html', '.css', '.har', '.svg', '.sh',
+      '.toml', '.ini', '.cfg', '.conf', '.sql', '.graphql', '.prisma', '.dockerfile', '.gitignore',
+      '.docx', '.doc', '.xlsx', '.xls', '.pdf'
+    ];
     
     Array.from(files).forEach(file => {
       const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-      const isText = file.type.startsWith('text/') || file.type.includes('json') || file.type.includes('xml');
+      const isText = file.type.startsWith('text/') || file.type.includes('json') || file.type.includes('xml') || file.type.includes('officedocument') || file.type.includes('spreadsheet') || file.type.includes('pdf');
       const isImage = file.type.startsWith('image/');
       
       if (!ALLOWED_EXTENSIONS.includes(ext) && !isText && !isImage) {
-        alert(`"${file.name}" dəstəklənmir. Mətn faylları və şəkillər qəbul edilir.`);
+        alert(`"${file.name}" dəstəklənmir. Mətn, PDF, Word, Excel faylları və şəkillər qəbul edilir.`);
         return;
       }
       
-      const maxBytes = isImage ? 5 * 1024 * 1024 : 500 * 1024;
+      const maxBytes = 10 * 1024 * 1024; // 10MB limit for all documents
       if (file.size > maxBytes) {
-        alert(`"${file.name}" çox böyükdür (${(file.size / 1024).toFixed(0)}KB). Maksimum ${isImage ? '5MB' : '500KB'}.`);
+        alert(`"${file.name}" çox böyükdür (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maksimum 10MB.`);
         return;
       }
       const reader = new FileReader();
