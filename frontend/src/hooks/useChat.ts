@@ -246,9 +246,20 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         const loadedMessages = Array.isArray(loadedPage?.messages) ? loadedPage.messages : [];
         const latestConversation = conversationsRef.current.find((conv) => conv.id === active.id);
         const localMessages = Array.isArray(latestConversation?.messages) ? latestConversation.messages : [];
-        const mergedMessages = loadedMessages.length === 0 && localMessages.length > 0
+        
+        let mergedMessages = loadedMessages.length === 0 && localMessages.length > 0
           ? localMessages
           : loadedMessages;
+
+        // If local messages have user or streaming messages created after/during fetch, merge them
+        if (loadedMessages.length > 0 && localMessages.length > 0) {
+          const loadedIds = new Set(loadedMessages.map(m => m.id));
+          const localOnlyMessages = localMessages.filter(m => !loadedIds.has(m.id));
+          if (localOnlyMessages.length > 0) {
+            mergedMessages = [...loadedMessages, ...localOnlyMessages];
+          }
+        }
+
         dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: active.id, messages: mergedMessages });
         dispatch({
           type: 'UPDATE_CONVERSATION',
