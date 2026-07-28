@@ -231,36 +231,11 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
       return `Bu model üçün qərar verməkdən əvvəl 3 şeyə baxmaq yaxşı olar: zəmanət kimdədir, RAM/SSD konfiqurasiyası nədir, bir də ekran tipi və batareya səviyyəsi. İstəsən bunu sənin model üzrə bir-bir dəqiqləşdirim.`;
     }
   }
-  const clarifiesWorldCupAfterDisambiguation =
-    /hansı turniri nəzərdə tutduğunuzu bir sətirdə dəqiqləşdirin/i.test(previousAssistantText) &&
-    /\bfifa\b/i.test(text) &&
-    /\b(dünya kuboku|dunya kuboku|dünya çempionatı|dunya cempionati|world cup)\b/i.test(text);
-  if (clarifiesWorldCupAfterDisambiguation && yyyyMmDd === '2026-07-08') {
-    return 'Bu gün, 8 iyul 2026 üçün FIFA Dünya Kubokunda oyun görünmür. Növbəti oyun günü 9 iyul 2026-dır. İstəsən növbəti oyunu da deyim.';
-  }
-  if (isShortFollowup && /növbəti oyunu da deyim/i.test(previousAssistantText)) {
-    return 'Növbəti oyun 9 iyul 2026 tarixindədir. İstəsən həmin günün cütlərini də qısa şəkildə sadalayım.';
-  }
-  if (isShortFollowup && /həmin günün cütlərini də qısa şəkildə sadalayım/i.test(previousAssistantText)) {
-    return '9 iyul 2026 oyun günü quarter-final mərhələsinə düşür. Dəqiq cütlər əvvəlki mərhələnin nəticələrinə görə formalaşır; istəsən rəsmi cədvəl üzərindən həmin an üçün aktual cütləri ayrıca yoxlayım.';
-  }
   const asksWhenWorldCupIs =
     ((lower.includes('world cup 2026') || lower.includes('fifa world cup 2026') || lower.includes('fifa dunya cempionati 2026') || lower.includes('fifa dünya çempionatı 2026'))
       && (lower.includes('ne vaxt') || lower.includes('nə vaxt') || lower.includes('vaxtdir') || lower.includes('tarix')));
   if (asksWhenWorldCupIs) {
     return 'FIFA Dünya Çempionatı 2026 rəsmi cədvələ görə 11 iyun 2026-da başlayır və 19 iyul 2026-da bitir.';
-  }
-  const asksFifaWorldCup = /\bfifa\b/i.test(text) && /\b(dünya çempionatı|dunya cempionati|world cup)\b/i.test(text);
-  if (asksFifaWorldCup && yyyyMmDd === '2026-07-08') {
-    const asksWhoPlaysToday = /\b(kim(lər)?|hansı komandalar|hansi komandalar|who plays|which teams)\b/i.test(text);
-    if (asksWhoPlaysToday) {
-      return 'Bu gün, 8 iyul 2026 üçün FIFA Dünya Çempionatında oyun görünmür. Növbəti oyun günü 9 iyul 2026-dır.';
-    }
-    return 'Bu gün, 8 iyul 2026 üçün FIFA Dünya Çempionatında oyun görünmür. Rəsmi 2026 cədvəlində növbəti oyun 9 iyul 2026 mərhələsinə düşür. İstəsən növbəti oyunu da deyim.';
-  }
-  const isSportsScheduleQuery = /\b(dünya çempionatı|world championship|oyunlar|games|fixture|schedule|match|matç)\b/i.test(lower);
-  if (isSportsScheduleQuery) {
-    return 'Hansı turniri nəzərdə tutduğunuzu bir sətirdə dəqiqləşdirin: məsələn FIFA Dünya Kuboku, Klublararası Dünya Kuboku və ya başqa çempionat. Sonra mən birbaşa cədvəli deyim.';
   }
   return '';
 }

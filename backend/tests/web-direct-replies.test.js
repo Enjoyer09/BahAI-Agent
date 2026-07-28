@@ -39,10 +39,9 @@ describe('web direct replies', () => {
     expect(reply).toContain('43%');
   });
 
-  it('asks for clarification for generic world championship queries outside canned date branch', async () => {
+  it('passes generic world championship queries to LLM and search', async () => {
     const reply = await getDirectWebChatReply('Bugün FIFA Dünya Çempionatında hansı oyunlar var?', []);
-    expect(reply).toContain('Hansı turniri nəzərdə tutduğunuzu');
-    expect(reply).toContain('FIFA Dünya Kuboku');
+    expect(reply).toBe('');
   });
 
   it('resolves deqiqleshdir follow-up against the previous assistant offer', async () => {
