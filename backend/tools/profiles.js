@@ -43,6 +43,9 @@ const BUILDER_TOOLS = Array.from(new Set([
   'gui_step',
   'git_branch',
   'git_commit',
+  'git_auto_commit',
+  'create_checkpoint',
+  'rewind_checkpoint',
   'git_push'
 ]));
 

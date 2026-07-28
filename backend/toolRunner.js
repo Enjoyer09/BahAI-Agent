@@ -178,6 +178,82 @@ async function handleToolCall(toolCall, workingDirectory, user) {
         } catch (e) { return `Git commit error: ${e.message}`; }
       }
 
+      case "git_auto_commit": {
+        try {
+          // 1. Stage requested or all workspace files
+          if (args.files && args.files.length > 0) {
+            await execFileAsync('git', ['add', ...args.files], { cwd: workingDirectory, timeout: 5000 });
+          } else {
+            await execFileAsync('git', ['add', '-A'], { cwd: workingDirectory, timeout: 5000 });
+          }
+
+          // 2. Fetch staged diff and status
+          const { stdout: diffOutput } = await execFileAsync('git', ['diff', '--cached'], { cwd: workingDirectory, timeout: 10000 });
+          const { stdout: statusOutput } = await execFileAsync('git', ['status', '--short'], { cwd: workingDirectory, timeout: 5000 });
+
+          if (!diffOutput && !statusOutput) {
+            return "No changes found to commit.";
+          }
+
+          // 3. Analyze diff to determine conventional commit scope and prefix
+          const lines = diffOutput.split('\n');
+          const fileLines = statusOutput.split('\n').filter(Boolean);
+          const changedFiles = fileLines.map(l => l.trim().split(/\s+/).pop());
+
+          let prefix = 'feat';
+          if (changedFiles.some(f => /\.(test|spec)\.[jt]sx?$/i.test(f) || f.includes('tests/'))) {
+            prefix = 'test';
+          } else if (changedFiles.some(f => /readme|docs|\.md$/i.test(f))) {
+            prefix = 'docs';
+          } else if (changedFiles.some(f => /package\.json|vite\.config|tsconfig/i.test(f))) {
+            prefix = 'chore';
+          } else if (diffOutput.includes('fix') || diffOutput.includes('bug') || diffOutput.includes('error')) {
+            prefix = 'fix';
+          } else if (changedFiles.some(f => /\.css|\.scss|\.less$/i.test(f))) {
+            prefix = 'style';
+          }
+
+          const primaryFile = changedFiles[0] ? path.basename(changedFiles[0]).split('.')[0] : 'scope';
+          const userContext = args.context ? `: ${args.context}` : '';
+          const autoMessage = `${prefix}(${primaryFile}): auto-commit changes in ${changedFiles.length} file(s)${userContext}`;
+
+          const { stdout: commitOutput } = await execFileAsync('git', ['commit', '-m', autoMessage], { cwd: workingDirectory, timeout: 5000 });
+          return commitOutput || `✅ Auto-committed with message: "${autoMessage}"`;
+        } catch (e) {
+          return `Git auto-commit error: ${e.message}`;
+        }
+      }
+
+      case "create_checkpoint": {
+        try {
+          const label = String(args.label || 'manual_checkpoint').replace(/[^\w-]/g, '_');
+          const stashMessage = `bahai_checkpoint_${Date.now()}_${label}`;
+          await execFileAsync('git', ['add', '-A'], { cwd: workingDirectory, timeout: 5000 });
+          const { stdout } = await execFileAsync('git', ['stash', 'push', '-m', stashMessage, '--include-untracked'], { cwd: workingDirectory, timeout: 10000 });
+          // Restore workspace files so the user continues working, but state is safe in stash
+          await execFileAsync('git', ['stash', 'apply', 'stash@{0}'], { cwd: workingDirectory, timeout: 10000 }).catch(() => {});
+          return `📸 Checkpoint snapshot yaradıldı: "${label}" (${stashMessage})`;
+        } catch (e) {
+          return `Checkpoint yaratma xətası: ${e.message}`;
+        }
+      }
+
+      case "rewind_checkpoint": {
+        try {
+          // Hard reset workspace to latest clean commit or apply latest stash
+          await execFileAsync('git', ['reset', '--hard'], { cwd: workingDirectory, timeout: 5000 });
+          await execFileAsync('git', ['clean', '-fd'], { cwd: workingDirectory, timeout: 5000 });
+          const { stdout: stashList } = await execFileAsync('git', ['stash', 'list'], { cwd: workingDirectory, timeout: 5000 });
+          if (stashList && stashList.includes('bahai_checkpoint_')) {
+            await execFileAsync('git', ['stash', 'apply', 'stash@{0}'], { cwd: workingDirectory, timeout: 10000 });
+            return "⏪ İş sahəsi sonuncu saxlanılmış Checkpoint vəziyyətinə bərpa olundu.";
+          }
+          return "⏪ İş sahəsi sonuncu təmiz Git vəziyyətinə sıfırlandı.";
+        } catch (e) {
+          return `Checkpoint bərpa xətası: ${e.message}`;
+        }
+      }
+
       case "analyze_codebase": {
         const analyzePath = args.path ? path.resolve(workingDirectory, args.path) : workingDirectory;
         if (!isPathSafe(analyzePath, workingDirectory, user)) return "Error: Path outside workspace";

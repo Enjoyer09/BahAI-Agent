@@ -271,6 +271,29 @@ async function runChatSession({
           conversationId,
           runId: dependencies.runId || null
         });
+
+        // ── Mərhələ 3: Agent-as-a-Judge (Self-Correction Loop) ──
+        const executedMutatingTools = msg.tool_calls.map(tc => tc.function?.name || tc.name);
+        const didMutateCode = executedMutatingTools.some(t => ['write_file', 'file_edit', 'multi_file_edit'].includes(t));
+        if (didMutateCode && step < orchestration.maxSteps) {
+          try {
+            const { buildValidationPlan, formatValidationReport } = require('../helpers');
+            const validationPlan = await buildValidationPlan(resolvedWD);
+            if (validationPlan.length > 0) {
+              const { handleToolCall } = require('../toolRunner');
+              const validationResult = await handleToolCall({
+                function: { name: 'run_tests', arguments: JSON.stringify({ stopOnFailure: true, maxSteps: 1 }) }
+              }, resolvedWD, reqUser);
+
+              if (typeof validationResult === 'string' && (validationResult.includes('❌') || validationResult.includes('FAIL') || validationResult.includes('error'))) {
+                currentMessages.push({
+                  role: 'system',
+                  content: `⚠️ [Agent-as-a-Judge Autocorrect]: Kod dəyişikliyindən sonra avtomatik test/lint uğursuz oldu:\n${validationResult.slice(0, 1500)}\n\nXahiş olunur xətanı təhlil et və \`file_edit\` və ya \`write_file\` ilə koddakı problemi dərhal avtomatik düzəlt.`
+                });
+              }
+            }
+          } catch { /* skip judge if test runner is not present */ }
+        }
       } else {
         const latestArtifacts = runManager.getExecutionArtifacts();
         const latestArtifact = latestArtifacts[latestArtifacts.length - 1];

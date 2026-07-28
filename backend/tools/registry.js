@@ -225,6 +225,49 @@ const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'git_auto_commit',
+      description: 'Analyzes unstaged and staged git changes, generates an automated conventional commit message (feat, fix, docs, refactor, style, test), stages modified files, and commits them automatically.',
+      parameters: {
+        type: 'object',
+        properties: {
+          files: { type: 'array', items: { type: 'string' }, description: 'Optional list of specific files to commit. If omitted or empty, stages all modified workspace files.' },
+          context: { type: 'string', description: 'Optional user intent or context description to help generate a more accurate commit message.' }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_checkpoint',
+      description: 'Creates a workspace state snapshot/checkpoint before executing risky file edits or terminal commands. Allows rolling back if something breaks.',
+      parameters: {
+        type: 'object',
+        properties: {
+          label: { type: 'string', description: 'Description/label for this checkpoint (e.g., "before refactoring auth")' }
+        },
+        required: ['label']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'rewind_checkpoint',
+      description: 'Rewinds/restores the workspace state to a previously created checkpoint or stash snapshot.',
+      parameters: {
+        type: 'object',
+        properties: {
+          checkpointId: { type: 'string', description: 'Optional checkpoint label or stash ID to rewind to. Omit to restore the latest checkpoint.' }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'analyze_codebase',
       description: 'Analyzes the codebase structure and provides a summary (file count, languages, dependencies).',
       parameters: {

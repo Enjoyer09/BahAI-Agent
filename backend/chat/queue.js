@@ -72,6 +72,8 @@ function createChatRuntime({
   function drainChatQueue() {
     let progressed = true;
     while (progressed && chatQueue.length > 0) {
+      // Priority sorting: User (0) > Scheduled (1) > Background (2)
+      chatQueue.sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
       progressed = false;
       for (let i = 0; i < chatQueue.length; i += 1) {
         const item = chatQueue[i];
@@ -100,7 +102,7 @@ function createChatRuntime({
     drainChatQueue();
   }
 
-  async function acquireChatSlotQueued(userId, conversationId, req) {
+  async function acquireChatSlotQueued(userId, conversationId, req, priority = 0) {
     cleanupStaleSlots();
     if (acquireChatSlot(userId, conversationId)) return true;
 

@@ -583,12 +583,27 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
                     </div>
                   )}
                   {item.meta?.diffPreview ? (
-                    <pre
-                      className="text-[10px] font-mono rounded p-2 mb-2 overflow-auto max-h-24"
-                      style={{ background: 'var(--bg-hover)', color: 'var(--fg-muted)' }}
+                    <div
+                      className="text-[10px] font-mono rounded p-2 mb-2 overflow-auto max-h-36 border border-[var(--border-subtle)]"
+                      style={{ background: '#0d0d0d' }}
                     >
-                      {item.meta.diffPreview}
-                    </pre>
+                      {item.meta.diffPreview.split('\n').map((line, lIdx) => {
+                        const isAdd = line.startsWith('+');
+                        const isSub = line.startsWith('-');
+                        return (
+                          <div
+                            key={lIdx}
+                            style={{
+                              color: isAdd ? '#4ade80' : isSub ? '#f87171' : 'var(--fg-muted)',
+                              background: isAdd ? 'rgba(74, 222, 128, 0.08)' : isSub ? 'rgba(248, 113, 113, 0.08)' : 'transparent',
+                              padding: '1px 4px',
+                            }}
+                          >
+                            {line}
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <pre
                       className="text-[10px] font-mono rounded p-2 mb-2 overflow-auto max-h-24"
