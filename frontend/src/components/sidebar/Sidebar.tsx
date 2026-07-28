@@ -315,31 +315,47 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
   return (
     <>
       <div className="flex flex-col h-full overflow-hidden">
-        {/* Top: New chat + Close */}
-        <div className="px-3 pb-2 shrink-0 flex items-center justify-between" style={{ paddingTop: isMobile ? '18px' : '50px' }}>
-          <button
-            onClick={handleNewChat}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-            style={{
-              color: 'var(--fg-main)',
-              background: 'transparent',
-              border: '1px solid var(--border)',
-              minHeight: '44px',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            <SquarePen size={18} />
-            {isWebProduct ? 'Yeni chat' : 'Yeni söhbət'}
-          </button>
-          <button
-            onClick={onToggle}
-            className="p-2.5 rounded-lg transition-colors"
-            style={{ color: 'var(--fg-muted)', minHeight: '44px', minWidth: '44px' }}
-            aria-label="Close sidebar"
-          >
-            <PanelLeftClose size={18} />
-          </button>
+        {/* Top: Brand Logo + New chat + Close */}
+        <div className="px-3 pb-2 shrink-0 flex items-center justify-between gap-2" style={{ paddingTop: isMobile ? '18px' : '20px' }}>
+          <div className="flex items-center gap-2.5">
+            <div className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.35)]">
+              <img 
+                src="/assets/bahar_avatar.jpg" 
+                alt="Bahar Avatar" 
+                className="w-full h-full object-cover object-center"
+              />
+            </div>
+            <span className="font-extrabold text-base tracking-wide" style={{ color: 'var(--fg-main)' }}>
+              BAH<span style={{ color: '#10b981' }}>AI</span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleNewChat}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              style={{
+                color: 'var(--fg-main)',
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                minHeight: '36px',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              title="Yeni söhbət"
+            >
+              <SquarePen size={15} />
+              {isWebProduct ? 'Yeni chat' : 'Yeni söhbət'}
+            </button>
+            <button
+              onClick={onToggle}
+              className="p-1.5 rounded-lg transition-colors"
+              style={{ color: 'var(--fg-muted)', minHeight: '36px', minWidth: '36px' }}
+              aria-label="Close sidebar"
+            >
+              <PanelLeftClose size={18} />
+            </button>
+          </div>
         </div>
 
         {isMobile && (
