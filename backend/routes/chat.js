@@ -263,10 +263,17 @@ router.post('/', async (req, res) => {
     .reverse()
     .find((item) => item && item.role === 'user' && typeof item.content === 'string');
   const latestUserText = String(message || lastUserMessage?.content || '').trim();
-  const requestAttachment = req.body.attachment || lastUserMessage?.attachments?.[0];
-  const hasAttachment = Boolean(requestAttachment);
+  const requestAttachments = Array.isArray(req.body.attachments) && req.body.attachments.length > 0
+    ? req.body.attachments
+    : req.body.attachment
+      ? [req.body.attachment]
+      : Array.isArray(lastUserMessage?.attachments)
+        ? lastUserMessage.attachments
+        : [];
+  const requestAttachment = requestAttachments[0] || null;
+  const hasAttachment = requestAttachments.length > 0;
   const hasAttachmentInRequest = hasAttachment && !latestUserText;
-  const hasImageAttachment = Boolean(requestAttachment && /^image\//i.test(String(requestAttachment.mimetype || requestAttachment.type || '')));
+  const hasImageAttachment = requestAttachments.some(att => /^image\//i.test(String(att.mimetype || att.type || '')));
 
   if (!latestUserText && !hasAttachmentInRequest) {
     return res.status(400).json({ error: 'Mesaj tələb olunur' });
@@ -508,12 +515,11 @@ ${generateToolsSystemPrompt(TOOLS)}`;
       content: 'Visual referent ipucu: istifadəçi bu thread-də daha əvvəl attachment və ya şəkil göndərib. Cari follow-up böyük ehtimalla həmin sənədə aiddir. Attachment-i itmiş sayma, yenidən upload/fayl yolu istəmə və "sənədi görmürəm" fallback-ına qaçma.'
     }] : []),
     ...historyMessages,
-    { role: 'user', content: latestUserText },
-    ...(requestAttachment ? [{
+    {
       role: 'user',
-      content: '[İstifadəçi attachment göndərdi]',
-      attachments: [requestAttachment]
-    }] : [])
+      content: latestUserText || '[İstifadəçi fayl/attachment göndərdi]',
+      attachments: requestAttachments
+    }
   ];
 
   // Setup the chat session
