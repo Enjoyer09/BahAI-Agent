@@ -317,6 +317,13 @@ async function runChatSession({
         const latestArtifact = latestArtifacts[latestArtifacts.length - 1];
         const canAdvancePhase = !orchestration.enabled || latestArtifact?.quality === 'useful' || activeRole === 'Planner';
 
+        if (productMode === 'web_chat' && (!msg.content || msg.content.trim() === '')) {
+          const { buildFallbackWebPlan } = require('./webPlanner');
+          const fallbackText = buildFallbackWebPlan(latestUserText, 'empty_tool_response');
+          writeSse(res, { type: 'assistant_delta', content: fallbackText });
+          currentMessages.push({ role: 'assistant', content: fallbackText });
+        }
+
         if (orchestration.enabled && runManager.canAdvance() && canAdvancePhase) {
           const finishedRole = phaseContext.activePhase?.role || 'Solo Agent';
           const nextPhase = runManager.advance();
