@@ -242,11 +242,18 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
             )}
 
             {/* Content */}
-            <div className="prose prose-sm max-w-none min-w-0" style={{ color: 'var(--fg-main)' }}>
-              <Suspense fallback={<div className="text-sm leading-relaxed" style={{ color: 'var(--fg-main)' }}>{message.content || ''}</div>}>
-                <MarkdownRenderer content={message.content || ''} />
-              </Suspense>
-            </div>
+            {(() => {
+              // Strip raw JSON tool execution blocks from visible text if they leak into content
+              let displayContent = (message.content || '').replace(/```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"[\s\S]*?\}\s*```/g, '').trim();
+              if (!displayContent && message.tool_calls && message.tool_calls.length > 0) return null;
+              return (
+                <div className="prose prose-sm max-w-none min-w-0" style={{ color: 'var(--fg-main)' }}>
+                  <Suspense fallback={<div className="text-sm leading-relaxed" style={{ color: 'var(--fg-main)' }}>{displayContent}</div>}>
+                    <MarkdownRenderer content={displayContent} />
+                  </Suspense>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Tool calls */}

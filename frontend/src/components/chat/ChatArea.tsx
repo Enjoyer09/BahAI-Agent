@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import { MessageSquare, Square, ArrowDownToLine } from 'lucide-react';
 import type { Message } from '../../lib/types';
 import ChatMessage from './ChatMessage';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import { Spinner } from '../common/UI';
 
 interface Props {
@@ -147,12 +148,13 @@ export default function ChatArea({
           </div>
         )}
         {messages.map((msg, i) => (
-          <ChatMessage
-            key={msg.id || i}
-            message={msg}
-            workingDirectory={workingDirectory}
-            productMode={productMode}
-          />
+          <ErrorBoundary key={msg.id || i} fallback={<div className="p-2 text-xs text-[var(--fg-muted)]">Mesaj göstərilərkən xəta yarandı</div>}>
+            <ChatMessage
+              message={msg}
+              workingDirectory={workingDirectory}
+              productMode={productMode}
+            />
+          </ErrorBoundary>
         ))}
 
         {(() => {

@@ -46,7 +46,13 @@ export class ErrorBoundary extends Component<Props, State> {
               {this.state.error?.message || 'Naməlum xəta'}
             </p>
             <button
-              onClick={() => this.setState({ hasError: false, error: null })}
+              onClick={() => {
+                if (this.state.error?.message?.includes('300') || this.state.error?.message?.includes('hook')) {
+                  window.location.reload();
+                } else {
+                  this.setState({ hasError: false, error: null });
+                }
+              }}
               className="px-3 py-1.5 rounded text-xs font-medium"
               style={{ background: 'var(--color-accent)', color: 'white' }}
             >
