@@ -152,7 +152,9 @@ async function collectStreamOutput({
 
   accumulatedContent = flattenResponseJsonText(accumulatedContent || '');
   const { cleanWebAssistantResponse } = require('./webRagCleaner');
+  const { verifyAndCleanAssistantResponse } = require('./verifierGuardrail');
   accumulatedContent = cleanWebAssistantResponse(accumulatedContent, productMode === 'web_chat');
+  accumulatedContent = verifyAndCleanAssistantResponse(accumulatedContent, productMode === 'web_chat');
 
   if (!normalizedToolCalls.length && accumulatedContent.trim()) {
     accumulatedContent = normalizeFinalAssistantReport(accumulatedContent, {

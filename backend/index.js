@@ -5,6 +5,7 @@
 // Utility functions are in backend/helpers.js
 // Tool execution is in backend/toolRunner.js
 
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 
 process.on('unhandledRejection', (reason, promise) => {

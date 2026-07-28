@@ -345,10 +345,35 @@ async function handleToolCall(toolCall, workingDirectory, user) {
           } catch { /* weather fallback failed; continue to normal search */ }
         }
 
+        const tavilyKey = process.env.TAVILY_API_KEY || '';
         const googKey = process.env.GOOGLE_API_KEY || '';
         const googCx = process.env.GOOGLE_CSE_ID || '';
 
-        // 1) Google Custom Search (best quality, requires API key)
+        // 0) Tavily AI Search API (Top priority for LLM optimized facts)
+        if (tavilyKey) {
+          try {
+            const tRes = await fetch('https://api.tavily.com/search', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ api_key: tavilyKey, query, search_depth: 'basic', include_answer: true, max_results: 5 }),
+              timeout: 10000
+            });
+            if (tRes.ok) {
+              const tData = await tRes.json();
+              if (tData.answer) {
+                return `🟢 [Tavily AI Direct Answer]: ${tData.answer}\n\nKey Sources:\n` +
+                  (tData.results || []).slice(0, 3).map(r => `• [${r.title}](${r.url}): ${r.content.slice(0, 180)}`).join('\n');
+              }
+              if (tData.results && tData.results.length > 0) {
+                return tData.results.map(r => `• ${r.title} (${r.url}): ${r.content.slice(0, 220)}`).join('\n');
+              }
+            }
+          } catch (tErr) {
+            console.error('⚠️ Tavily Search API error:', tErr);
+          }
+        }
+
+        // 1) Google Custom Search (requires API key)
         if (googKey && googCx) {
           try {
             const gUrl = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(googKey)}&cx=${encodeURIComponent(googCx)}&q=${encodeURIComponent(query)}&hl=az`;
