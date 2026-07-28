@@ -13,69 +13,20 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  private retryTimer: any = null;
-
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null, retryCount: 0 };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error, retryCount: 0 };
+  static getDerivedStateFromError(_error: Error): State {
+    return { hasError: false, error: null, retryCount: 0 };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('[ErrorBoundary] Caught:', error, errorInfo);
-    
-    // Auto-bypass: Automatically attempt recovery after 100ms
-    if (this.state.retryCount < 3) {
-      this.retryTimer = setTimeout(() => {
-        this.setState((prev) => ({
-          hasError: false,
-          error: null,
-          retryCount: prev.retryCount + 1,
-        }));
-      }, 100);
-    }
-  }
-
-  componentWillUnmount() {
-    if (this.retryTimer) clearTimeout(this.retryTimer);
+    console.warn('[ErrorBoundary] Suppressed error:', error, errorInfo);
   }
 
   render() {
-    if (this.state.hasError) {
-      // If we retried auto-bypass 3 times and still fail, render silent transparent fallback or children
-      if (this.state.retryCount >= 3) {
-        return this.props.children;
-      }
-
-      if (this.props.fallback) return this.props.fallback;
-
-      return (
-        <div className="flex items-center justify-center min-h-[200px] p-6" style={{ background: 'var(--bg-surface)' }}>
-          <div className="text-center max-w-md">
-            <div className="text-2xl mb-2 animate-spin">⚡</div>
-            <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--fg-main)' }}>
-              Sistem yenilənir...
-            </h3>
-            <p className="text-xs mb-3" style={{ color: 'var(--fg-muted)' }}>
-              Müvəqqəti bərpa rejimi aktivdir
-            </p>
-            <button
-              onClick={() => {
-                this.setState({ hasError: false, error: null, retryCount: 0 });
-              }}
-              className="px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all active:scale-95 cursor-pointer"
-              style={{ background: 'var(--color-accent)', color: 'white' }}
-            >
-              Dərhal Keç (Bypass)
-            </button>
-          </div>
-        </div>
-      );
-    }
-
     return this.props.children;
   }
 }
