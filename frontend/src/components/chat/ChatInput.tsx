@@ -104,42 +104,9 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
     }
   }, [text, attachments, loading, blockedByActionCenter, onSend]);
 
-  const pushFiles = useCallback((files: FileList | null) => {
-    if (!files) return;
-    const ALLOWED_EXTENSIONS = [
-      '.txt', '.json', '.csv', '.md', '.yaml', '.yml', '.xml', '.log', '.env',
-      '.js', '.ts', '.jsx', '.tsx', '.py', '.html', '.css', '.har', '.svg', '.sh',
-      '.toml', '.ini', '.cfg', '.conf', '.sql', '.graphql', '.prisma', '.dockerfile', '.gitignore',
-      '.docx', '.doc', '.xlsx', '.xls', '.pdf'
-    ];
-    
-    Array.from(files).forEach(file => {
-      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-      const isText = file.type.startsWith('text/') || file.type.includes('json') || file.type.includes('xml') || file.type.includes('officedocument') || file.type.includes('spreadsheet') || file.type.includes('pdf');
-      const isImage = file.type.startsWith('image/');
-      
-      if (!ALLOWED_EXTENSIONS.includes(ext) && !isText && !isImage) {
-        alert(`"${file.name}" dəstəklənmir. Mətn, PDF, Word, Excel faylları və şəkillər qəbul edilir.`);
-        return;
-      }
-      
-      const maxBytes = 10 * 1024 * 1024; // 10MB limit for all documents
-      if (file.size > maxBytes) {
-        alert(`"${file.name}" çox böyükdür (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maksimum 10MB.`);
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setAttachments(prev => [...prev, {
-          id: crypto.randomUUID(),
-          name: file.name,
-          type: isImage ? 'image' : 'file',
-          mimeType: file.type || 'text/plain',
-          url: ev.target?.result as string
-        }]);
-      };
-      reader.readAsDataURL(file);
-    });
+  const pushFiles = useCallback((_files: FileList | null) => {
+    // Attachments currently disabled
+    return;
   }, []);
 
   const removeAttachment = useCallback((idx: number) => {
@@ -217,32 +184,24 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
           onDrop={handleDrop}
           onDragOver={handleDragOver}
         >
-          {/* Attach button — left */}
+          {/* Attach button — disabled */}
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="rounded-full transition-colors shrink-0 flex items-center justify-center tahoe-button"
+            type="button"
+            onClick={() => alert("Fayl yükləmə funksiyası müvəqqəti olaraq söndürülüb.")}
+            className="rounded-full transition-colors shrink-0 flex items-center justify-center opacity-40 cursor-not-allowed"
             style={{
               color: 'var(--fg-muted)',
               width: isMobile ? '38px' : '44px',
               height: isMobile ? '38px' : '44px',
-              background: 'linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04))',
-              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.05)',
             }}
-            title="Fayl əlavə et"
-            aria-label="Attach file"
-            tabIndex={0}
+            title="Fayl yükləmə müvəqqəti saxlanılıb"
+            aria-label="Attach file disabled"
+            disabled
           >
             <Plus size={isMobile ? 17 : 20} />
           </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={(e) => { pushFiles(e.target.files); e.target.value = ''; }}
-            multiple
-            accept="image/*,.txt,.json,.csv,.md,.yaml,.yml,.xml,.log,.env,.js,.ts,.jsx,.tsx,.py,.html,.css,.har,.svg,.sh,.toml,.ini,.cfg,.sql,.graphql"
-            className="hidden"
-            aria-hidden="true"
-          />
 
           {/* Textarea */}
           <textarea
