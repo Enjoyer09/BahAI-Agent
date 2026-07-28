@@ -139,14 +139,15 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         }}
       >
         <div className="flex items-center gap-2.5">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: 'var(--color-accent)' }}
-          >
-            <Bot size={18} className="text-white" />
+          <div className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.35)]">
+            <img 
+              src="/assets/bahar_avatar.jpg" 
+              alt="Bahar Avatar" 
+              className="w-full h-full object-cover object-center"
+            />
           </div>
-          <span className="text-base font-bold tracking-tight uppercase">
-            bah<span style={{ color: 'var(--color-accent)' }}>AI</span>
+          <span className="text-base font-extrabold tracking-wide uppercase text-slate-100">
+            BAH<span style={{ color: '#10b981' }}>AI</span>
           </span>
         </div>
 
