@@ -56,6 +56,8 @@ function isGuiContinuationRequest(text = '') {
   const value = String(text || '').toLowerCase();
   if (extractUrlFromGuiRequest(value)) return false;
   if (isGuiLoginResumeRequest(value) || isGuiLoginCheckpointRequest(value) || isGuiObserveSelfTestRequest(value)) return false;
+  // Don't trigger for file/document comparison or attachment analysis requests
+  if (/\b(fayl|sənəd|sened|cədvəl|cedvel|müqayisə|müqayise|muqayise|attachment|excel|xlsx|csv|docx|pdf|siyah)\b/i.test(value)) return false;
   return /\b(axtar|search|tap|filter|filtr|qiymət|qiymet|sort|sırala|sirala|click|klik|bax|observe|goster|göstər|ara)\b/i.test(value);
 }
 
