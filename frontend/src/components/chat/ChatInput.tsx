@@ -207,7 +207,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             title="Pre-Beta: Fayl yükləmə müvəqqəti passivdir"
             aria-label="Attach file pre-beta"
           >
-            <Plus size={isMobile ? 17 : 20} />
+            <Paperclip size={isMobile ? 17 : 20} />
           </button>
 
           {/* Textarea */}
