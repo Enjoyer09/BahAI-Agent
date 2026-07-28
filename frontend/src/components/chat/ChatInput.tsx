@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Square, Paperclip, X, Plus, Mic, MicOff, Shield, ShieldOff } from 'lucide-react';
+import { useToast } from '../common/Toast';
 import type { Attachment } from '../../lib/types';
 
 interface Props {
@@ -14,6 +15,9 @@ interface Props {
 }
 
 export default function ChatInput({ onSend, onStop, loading, blockedByActionCenter, safeMode, onSafeModeToggle, isMobile, productMode = 'desktop_code' }: Props) {
+  let toast: any = null;
+  try { toast = useToast()?.toast; } catch { /* ToastProvider missing fallback */ }
+
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isListening, setIsListening] = useState(false);
@@ -184,21 +188,24 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
           onDrop={handleDrop}
           onDragOver={handleDragOver}
         >
-          {/* Attach button — disabled */}
+          {/* Attach button — Pre-Beta Grayed Out */}
           <button
             type="button"
-            onClick={() => alert("Fayl yükləmə funksiyası müvəqqəti olaraq söndürülüb.")}
-            className="rounded-full transition-colors shrink-0 flex items-center justify-center opacity-40 cursor-not-allowed"
+            onClick={() => {
+              toast?.("Hələ ki Pre-Beta versiya olduğuna görə fayl yükləmələri (attachments) aktiv edilməyib. Komandamız sizin rahatlığınız üçün aktiv şəkildə çalışır! 🚀", "info", 5000);
+            }}
+            className="rounded-full transition-all shrink-0 flex items-center justify-center cursor-pointer hover:opacity-75 active:scale-95"
             style={{
               color: 'var(--fg-muted)',
               width: isMobile ? '38px' : '44px',
               height: isMobile ? '38px' : '44px',
               background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              opacity: 0.4,
+              filter: 'grayscale(100%)',
             }}
-            title="Fayl yükləmə müvəqqəti saxlanılıb"
-            aria-label="Attach file disabled"
-            disabled
+            title="Pre-Beta: Fayl yükləmə müvəqqəti passivdir"
+            aria-label="Attach file pre-beta"
           >
             <Plus size={isMobile ? 17 : 20} />
           </button>
