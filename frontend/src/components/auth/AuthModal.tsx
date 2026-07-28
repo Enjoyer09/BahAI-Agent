@@ -210,8 +210,15 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
       >
         {/* Close button */}
         <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-md transition-colors"
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof onClose === 'function') {
+              onClose();
+            }
+          }}
+          className="absolute top-4 right-4 p-2 rounded-md transition-colors cursor-pointer hover:bg-white/10"
           style={{ color: 'var(--fg-muted)', minHeight: '44px', minWidth: '44px' }}
           aria-label="Bağla"
           tabIndex={0}
