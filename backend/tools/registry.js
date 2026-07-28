@@ -817,7 +817,9 @@ const TOOL_DEFINITIONS = [
 ];
 
 function getToolDefinitions() {
-  return TOOL_DEFINITIONS.map((tool) => ({ ...tool, function: { ...tool.function } }));
+  const { mcpGateway } = require('../chat/mcpGateway');
+  const baseTools = TOOL_DEFINITIONS.map((tool) => ({ ...tool, function: { ...tool.function } }));
+  return [...baseTools, ...mcpGateway.getTools()];
 }
 
 function getToolNames() {

@@ -46,8 +46,20 @@ function emitGovernanceState(res, payload = {}) {
   writeSse(res, { type: 'governance_state', ...payload });
 }
 
-function emitProviderTelemetry(res, payload = {}) {
-  writeSse(res, { type: 'provider_telemetry', ...payload });
+function emitTokenUsage(res, payload = {}) {
+  const promptTokens = payload.promptTokens || 0;
+  const completionTokens = payload.completionTokens || 0;
+  const totalTokens = promptTokens + completionTokens;
+  // Estimated cost based on standard model rates ($0.0015/1k prompt, $0.002/1k output)
+  const estimatedCostUSD = ((promptTokens * 0.0000015) + (completionTokens * 0.000002)).toFixed(6);
+  writeSse(res, {
+    type: 'token_usage',
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    estimatedCostUSD,
+    model: payload.model || 'auto'
+  });
 }
 
 module.exports = {
@@ -57,5 +69,6 @@ module.exports = {
   emitTaskPlan,
   emitGovernanceState,
   emitProviderTelemetry,
+  emitTokenUsage,
   finishSse
 };

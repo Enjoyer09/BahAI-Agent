@@ -184,6 +184,43 @@ export default function OpsPanel({ safeMode, onToggleSafeMode, pendingApprovals,
           </div>
         )}
 
+        {(projectMemory?.tokenUsage as any) && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Activity size={13} style={{ color: 'var(--fg-muted)' }} />
+              <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--fg-muted)' }}>
+                Token & Cost Tracker
+              </span>
+            </div>
+            <div className="rounded-lg p-3 space-y-1.5" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center justify-between text-xs">
+                <span style={{ color: 'var(--fg-secondary)' }}>Model:</span>
+                <span className="font-mono font-medium" style={{ color: 'var(--fg-main)' }}>
+                  {(projectMemory.tokenUsage as any).model || 'auto'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span style={{ color: 'var(--fg-secondary)' }}>Tokens (Prompt / Out):</span>
+                <span className="font-mono" style={{ color: 'var(--fg-main)' }}>
+                  {(projectMemory.tokenUsage as any).promptTokens} / {(projectMemory.tokenUsage as any).completionTokens}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span style={{ color: 'var(--fg-secondary)' }}>Total Tokens:</span>
+                <span className="font-mono font-semibold" style={{ color: 'var(--color-accent)' }}>
+                  {(projectMemory.tokenUsage as any).totalTokens}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs border-t border-[var(--border-subtle)] pt-1.5 mt-1.5">
+                <span style={{ color: 'var(--fg-secondary)' }}>Təxmini xərc (USD):</span>
+                <span className="font-mono font-semibold" style={{ color: 'var(--color-success)' }}>
+                  ${(projectMemory.tokenUsage as any).estimatedCostUSD}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {providerTelemetry.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 mb-2">

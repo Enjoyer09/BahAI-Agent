@@ -161,6 +161,10 @@ async function collectStreamOutput({
     });
   }
 
+  const promptTokens = Math.ceil((step + 1) * 350);
+  const completionTokens = Math.ceil((accumulatedContent.length + JSON.stringify(normalizedToolCalls).length) / 4);
+  writeSse(res, { type: 'token_usage', promptTokens, completionTokens, model: resolvedModel || 'auto' });
+
   return {
     finishReason,
     sawAssistantDelta,

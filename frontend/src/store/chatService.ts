@@ -432,6 +432,23 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
     return;
   }
 
+  if (event.type === 'token_usage') {
+    if (!activeProject?.id) return;
+    const mergedMemory = {
+      ...projectMemory,
+      tokenUsage: {
+        promptTokens: event.promptTokens,
+        completionTokens: event.completionTokens,
+        totalTokens: event.totalTokens,
+        estimatedCostUSD: event.estimatedCostUSD,
+        model: event.model
+      }
+    };
+    sink.mergeProjectMemory(mergedMemory);
+    if (serverBacked) saveProjectMemory(activeProject.id, mergedMemory).catch(console.error);
+    return;
+  }
+
   if (event.type === 'debug') {
     if (isWebChat) return;
     if (event.info?.plannerArtifact) {

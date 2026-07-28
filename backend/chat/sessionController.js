@@ -40,6 +40,8 @@ async function runChatSession({
   let disconnectReason = '';
   const phaseRecoveryAttempts = new Map();
   const toolResultCache = new Map();
+  const { createGuardrails } = require('./guardrails');
+  const guardrails = createGuardrails({ maxToolCallsPerSession: 25, maxDuplicateToolThreshold: 4, maxMutationsPerFile: 6 });
 
   const markClientDisconnected = (reason = 'client_disconnect') => {
     clientDisconnected = true;
@@ -245,8 +247,23 @@ async function runChatSession({
       }
 
       if (msg.tool_calls && msg.tool_calls.length > 0) {
-        currentMessages = await executeToolCalls({
-          toolCalls: msg.tool_calls,
+        // Validate each tool call against Safety Guardrails
+        const safeToolCalls = [];
+        for (const tc of msg.tool_calls) {
+          const toolName = tc.function?.name || tc.name;
+          let args = {};
+          try { args = JSON.parse(tc.function?.arguments || tc.args || '{}'); } catch {}
+          const check = guardrails.validateToolCall(toolName, args);
+          if (!check.allowed) {
+            writeSse(res, { type: 'error', message: check.reason });
+            break;
+          }
+          safeToolCalls.push(tc);
+        }
+
+        if (safeToolCalls.length > 0) {
+          currentMessages = await executeToolCalls({
+            toolCalls: safeToolCalls,
           clientDisconnected: () => clientDisconnected,
           phaseTools: phaseContext.phaseTools,
           activeRole,
@@ -293,6 +310,7 @@ async function runChatSession({
               }
             }
           } catch { /* skip judge if test runner is not present */ }
+        }
         }
       } else {
         const latestArtifacts = runManager.getExecutionArtifacts();
