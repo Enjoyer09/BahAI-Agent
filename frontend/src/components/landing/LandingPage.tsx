@@ -177,21 +177,26 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[500px] rounded-full pointer-events-none"
              style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, rgba(139,92,246,0.04) 60%, transparent 80%)' }} />
 
-        {/* Minimal Pre-Beta pill */}
+        {/* Minimal Pre-Beta & 100% Azerbaijan product pill */}
         <AnimateIn delay={0}>
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium tracking-wide mb-8 border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            Pre-Beta Versiya
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium tracking-wide border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              Pre-Beta Versiya
+            </div>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide border border-amber-500/30 bg-amber-500/10 text-amber-300">
+              🇦🇿 BahAI 100% Azərbaycan məhsuludur
+            </div>
           </div>
         </AnimateIn>
 
         {/* Main Headline */}
         <AnimateIn delay={0.1}>
           <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold text-center max-w-4xl leading-[1.1] tracking-tight mb-6 text-slate-100">
-            Azərbaycan dilində
+            Süni İntellektdə
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-purple-400">
-              Ağıllı Süni İntellekt Köməkçiniz
+              Bahardan ilhamlanaraq yaratdıq 🌿
             </span>
           </h1>
         </AnimateIn>
@@ -199,7 +204,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         {/* Description */}
         <AnimateIn delay={0.2}>
           <p className="text-slate-400 text-center max-w-xl text-base sm:text-lg mb-8 leading-relaxed">
-            Sual verin, canlı internet axtarışı aparın və ya mürəkkəb məntiq suallarını həll edin. BahAI — sadə, sürətli və azərbaycan dilinə tam uyğunlaşdırılmış AI platformasıdır.
+            Sual verin, canlı internet axtarışı aparın və ya mürəkkəb məntiq suallarını həll edin. BahAI — sadə, sürətli və 100% azərbaycan dilinə uyğunlaşdırılmış AI platformasıdır.
           </p>
         </AnimateIn>
 
