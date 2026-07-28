@@ -29,9 +29,9 @@ function verifyAndCleanAssistantResponse(text = '', isWebProduct = false) {
   // 3. Normalize repetitive "Gəlin daha dəqiq axtarış edək" filler lines
   cleaned = cleaned.replace(/Gəlin daha dəqiq axtarış edək\.?\s*/gi, '');
 
-  // 4. Ensure future tournament dates are correctly phrasing 'keçiriləcək' instead of 'keçirilib'
-  if (/19 iyul 2026/i.test(cleaned) && /keçirilib|keçirilmişdir/i.test(cleaned)) {
-    cleaned = cleaned.replace(/keçirilib|keçirilmişdir/gi, 'keçiriləcək');
+  // 4. Correctly phrase past 2026 tournament dates (opening match June 11, final July 19) in past tense since current date is 28 July 2026
+  if (/11 iyun 2026|19 iyul 2026/i.test(cleaned) && /keçiriləcək|keçirilməyib/i.test(cleaned)) {
+    cleaned = cleaned.replace(/hələ keçirilməyib|keçiriləcək/gi, 'keçirilib başa çatmışdır (11 iyun - 19 iyul 2026)');
   }
 
   return cleaned.trim();

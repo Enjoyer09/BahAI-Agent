@@ -243,10 +243,12 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
 
             {/* Content */}
             {(() => {
-              // Strip raw JSON tool execution blocks from visible text if they leak into content
               let displayContent = (message.content || '')
-                .replace(/```(?:json)?\s*\{[\s\S]*?"name"\s*:[\s\S]*?\}\s*```/gi, '')
-                .replace(/```json\s*\{[\s\S]*?\}\s*```/gi, '')
+                .replace(/```(?:json)?[\s\S]*?```/gi, (match) => {
+                  if (/name|arguments|query|web_search|browser_open/i.test(match)) return '';
+                  return match;
+                })
+                .replace(/\{\s*"name"\s*:[\s\S]*?\}/gi, '')
                 .trim();
               if (!displayContent && message.tool_calls && message.tool_calls.length > 0) return null;
               return (
