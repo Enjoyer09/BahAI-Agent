@@ -87,10 +87,18 @@ export function Composer({ onSendMessage, disabled, isGenerating, onStop, settin
       {/* Input Area */}
       <div className="flex items-end gap-2">
         <button 
-          onClick={() => fileInputRef.current?.click()}
-          className="p-2 transition-opacity hover:opacity-80"
-          style={{ color: 'var(--fg-secondary)' }}
-          disabled={disabled}
+          type="button"
+          onClick={() => {
+            if (typeof window !== 'undefined' && (window as any).__BAHAI_TOAST) {
+              (window as any).__BAHAI_TOAST("Hələ ki Pre-Beta versiya olduğuna görə fayl yükləmələri (attachments) aktiv edilməyib. Komandamız sizin rahatlığınız üçün aktiv şəkildə çalışır! 🚀", "info", 5000);
+            } else {
+              alert("Hələ ki Pre-Beta versiya olduğuna görə fayl yükləmələri (attachments) aktiv edilməyib. Komandamız sizin rahatlığınız üçün aktiv şəkildə çalışır! 🚀");
+            }
+          }}
+          className="p-2 transition-all opacity-40 cursor-pointer hover:opacity-75 active:scale-95"
+          style={{ color: 'var(--fg-muted)', filter: 'grayscale(100%)' }}
+          title="Pre-Beta: Fayl yükləmə müvəqqəti passivdir"
+          aria-label="Attach file pre-beta"
         >
           <Paperclip size={20} />
         </button>

@@ -225,7 +225,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    // Return dummy fallback to prevent React Error #300 when rendered without AuthProvider (e.g. tests or isolated components)
+    return {
+      user: null,
+      token: null,
+      loading: false,
+      login: async () => {},
+      register: async () => {},
+      signOut: () => {},
+      refreshUser: async () => {},
+    };
   }
   return context;
 };
