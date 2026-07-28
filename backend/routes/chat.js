@@ -128,35 +128,56 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
     sumgayitda: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
   };
   const isWeatherQuery = /\b(hava|weather|temperatur|temperature|dərəcə|derece)\b/i.test(text);
+  const isTomorrowQuery = /\b(sabah|sabahkı|sabahki|tomorrow)\b/i.test(text);
   const weatherCityMatch = text.match(/\b(baku|bakı|baki|bakida|bakıda|gence|gəncə|ganja|gencede|gəncədə|sumqayit|sumqayıt|sumgayit|sumqayitda|sumqayıtda|sumgayitda)\b/i);
+
   if (isWeatherQuery && weatherCityMatch) {
     const cityKey = weatherCityMatch[1].toLowerCase();
     const cityMeta = weatherCityMap[cityKey];
     if (cityMeta) {
-      try {
-        const wttrUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=%C|%t|%w|%h`;
-        const wttrRes = await fetch(wttrUrl, { timeout: 10000, headers: { 'User-Agent': 'BahAI/1.0' } });
-        if (wttrRes.ok) {
-          const raw = (await wttrRes.text()).trim();
-          const [conditionRaw = '', tempRaw = '', windRaw = '', humidityRaw = ''] = raw.split('|');
-          const condition = String(conditionRaw).replace(/\s+/g, ' ').trim();
-          const tempC = formatTemperatureCelsius(String(tempRaw).replace(/\+/g, '').replace(/\s+/g, '').trim());
-          const wind = String(windRaw).replace(/\s+/g, ' ').trim();
-          const humidity = String(humidityRaw).replace(/\s+/g, '').trim();
-          const windMetric = wind
-            .replace(/mph/gi, 'km/saat')
-            .replace(/(\d+(?:\.\d+)?)\s*km\/h/gi, '$1 km/saat');
-          const pieces = [];
-          if (condition) pieces.push(`${cityMeta.label} hazırda ${condition.toLowerCase()} müşahidə olunur.`);
-          if (tempC) pieces.push(`Temperatur təxminən ${tempC.replace(/°?[FC]/gi, '')}°C-dir.`);
-          if (windMetric) pieces.push(`Külək ${windMetric} təşkil edir.`);
-          if (humidity) pieces.push(`Rütubət ${humidity.replace('%', '')}%-dir.`);
-          return pieces.join(' ');
+      if (isTomorrowQuery) {
+        try {
+          // Fetch tomorrow's forecast format (%C|%t|%w|%h for day 2) from wttr.in/Baku?format=j1
+          const forecastUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=j1`;
+          const fRes = await fetch(forecastUrl, { timeout: 10000, headers: { 'User-Agent': 'BahAI/1.0' } });
+          if (fRes.ok) {
+            const data = await fRes.json();
+            const tomorrowData = data?.weather?.[1];
+            if (tomorrowData) {
+              const maxC = tomorrowData.maxtempC || '';
+              const minC = tomorrowData.mintempC || '';
+              const desc = tomorrowData.hourly?.[4]?.weatherDesc?.[0]?.value || tomorrowData.hourly?.[0]?.weatherDesc?.[0]?.value || 'açıq';
+              return `Sabah ${cityMeta.label} havanın ${desc.toLowerCase()} olacağı gözlənilir. Temperatur minimum ${minC}°C, maksimum ${maxC}°C ətrafında olacaq.`;
+            }
+          }
+        } catch {
+          // Fallthrough to model web_search if wttr.in fails
         }
-      } catch {
-        return `${cityMeta.label} hava məlumatını hazırda birbaşa götürə bilmədim. Bir neçə dəqiqə sonra yenidən yoxlayaq.`;
+      } else {
+        try {
+          const wttrUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=%C|%t|%w|%h`;
+          const wttrRes = await fetch(wttrUrl, { timeout: 10000, headers: { 'User-Agent': 'BahAI/1.0' } });
+          if (wttrRes.ok) {
+            const raw = (await wttrRes.text()).trim();
+            const [conditionRaw = '', tempRaw = '', windRaw = '', humidityRaw = ''] = raw.split('|');
+            const condition = String(conditionRaw).replace(/\s+/g, ' ').trim();
+            const tempC = formatTemperatureCelsius(String(tempRaw).replace(/\+/g, '').replace(/\s+/g, '').trim());
+            const wind = String(windRaw).replace(/\s+/g, ' ').trim();
+            const humidity = String(humidityRaw).replace(/\s+/g, '').trim();
+            const windMetric = wind
+              .replace(/mph/gi, 'km/saat')
+              .replace(/(\d+(?:\.\d+)?)\s*km\/h/gi, '$1 km/saat');
+            const pieces = [];
+            if (condition) pieces.push(`${cityMeta.label} hazırda ${condition.toLowerCase()} müşahidə olunur.`);
+            if (tempC) pieces.push(`Temperatur təxminən ${tempC.replace(/°?[FC]/gi, '')}°C-dir.`);
+            if (windMetric) pieces.push(`Külək ${windMetric} təşkil edir.`);
+            if (humidity) pieces.push(`Rütubət ${humidity.replace('%', '')}%-dir.`);
+            return pieces.join(' ');
+          }
+        } catch {
+          return `${cityMeta.label} hava məlumatını hazırda birbaşa götürə bilmədim. Bir neçə dəqiqə sonra yenidən yoxlayaq.`;
+        }
       }
-      return `${cityMeta.label} hava məlumatını hazırda birbaşa götürə bilmədim. Bir neçə dəqiqə sonra yenidən yoxlayaq.`;
     }
   }
   const previousAssistant = [...(Array.isArray(messages) ? messages : [])]
