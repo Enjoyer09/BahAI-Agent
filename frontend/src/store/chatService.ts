@@ -253,7 +253,7 @@ export async function handleSendMessage(
         role: m.role,
         content: String(m.content || '').slice(0, 8000),
         attachments: m.attachments?.map((at: any) => {
-          const hasText = at.extractedText && at.extractedText.trim();
+          const isImage = at.type === 'image' || /^image\//i.test(at.mimeType || '');
           return {
             id: at.id,
             name: at.name,
@@ -261,7 +261,7 @@ export async function handleSendMessage(
             mimeType: at.mimeType,
             extractedText: at.extractedText || '',
             extractionError: at.extractionError,
-            url: (!hasText && idx === historySlice.length - 1 && m.role === 'user') ? (at.url || '') : '',
+            url: at.url || '',
           };
         }),
         tool_calls: trimmedToolCalls,
