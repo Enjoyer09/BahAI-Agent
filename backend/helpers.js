@@ -1204,6 +1204,31 @@ function extractTextToolCalls(text, activeTools = []) {
     } catch { /* ignore */ }
   }
 
+  // Parse bracket tuple syntax like ["web_search", "query"] or ["web_search", { "query": "..." }]
+  const arrayToolRegex = /\[\s*"([a-z0-9_]+)"\s*,\s*("[\s\S]*?"|\{[\s\S]*?\})\s*\]/gi;
+  let arrMatch;
+  while ((arrMatch = arrayToolRegex.exec(text)) !== null) {
+    const name = arrMatch[1];
+    const rawArg = arrMatch[2];
+    if (activeTools.some((t) => t.function.name === name)) {
+      let parsedArgs = {};
+      try {
+        if (rawArg.startsWith('{')) {
+          parsedArgs = JSON.parse(rawArg);
+        } else {
+          // It's a string query (e.g. "Azerbaijan AI business ideas 2025")
+          const cleanStr = JSON.parse(rawArg);
+          parsedArgs = { query: cleanStr, url: cleanStr, path: cleanStr };
+        }
+      } catch {
+        parsedArgs = { query: rawArg.replace(/^"|"$/g, '') };
+      }
+      toolCalls.push({ name, arguments: JSON.stringify(parsedArgs) });
+      removed.push([arrMatch.index, arrMatch.index + arrMatch[0].length]);
+      break;
+    }
+  }
+
   if (toolCalls.length === 0) {
     let i = 0;
     while (i < text.length) {
