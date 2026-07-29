@@ -365,54 +365,54 @@ export default function SettingsModal({
   );
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center animate-fade-in px-4">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center animate-fade-in p-0 sm:px-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       
-      <div className="relative flex flex-col md:flex-row w-full max-w-4xl h-[85vh] bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl shadow-2xl overflow-hidden animate-slide-up">
+      <div className="relative flex flex-col md:flex-row w-full max-w-4xl h-[92dvh] sm:h-[85vh] bg-[var(--bg-surface)] border-t sm:border border-[var(--border)] rounded-t-2xl sm:rounded-xl shadow-2xl overflow-hidden animate-slide-up">
         
-        {/* Left Sidebar for Tabs */}
+        {/* Left Sidebar / Mobile Top Nav for Tabs */}
         <div className="w-full md:w-64 bg-[var(--bg-hover)] border-b md:border-b-0 md:border-r border-[var(--border)] flex flex-col shrink-0">
-          <div className="p-4 md:p-6 pb-2 md:pb-6 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-[var(--fg-main)]">Tənzimləmələr</h2>
-            <button onClick={onClose} className="md:hidden p-2 rounded-full hover:bg-[var(--bg-active)] text-[var(--fg-muted)] transition-colors">
+          <div className="p-3 sm:p-5 flex items-center justify-between">
+            <h2 className="text-lg sm:text-xl font-bold text-[var(--fg-main)]">Tənzimləmələr</h2>
+            <button onClick={onClose} className="p-2 rounded-full hover:bg-[var(--bg-active)] text-[var(--fg-muted)] transition-colors active:scale-95">
               <X size={20} />
             </button>
           </div>
           
-          <div className="flex md:flex-col overflow-x-auto md:overflow-x-hidden p-2 md:p-4 gap-1 flex-1">
+          <div className="flex md:flex-col overflow-x-auto md:overflow-x-hidden px-3 py-2 md:p-4 gap-1.5 flex-1 no-scrollbar">
             <button
               onClick={() => setActiveTab('general')}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors text-left whitespace-nowrap ${activeTab === 'general' ? 'bg-indigo-500/10 text-indigo-500' : 'text-[var(--fg-muted)] hover:bg-[var(--bg-active)] hover:text-[var(--fg-main)]'}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-colors text-left whitespace-nowrap shrink-0 md:shrink ${activeTab === 'general' ? 'bg-indigo-500/15 text-indigo-400 font-semibold' : 'text-[var(--fg-muted)] hover:bg-[var(--bg-active)] hover:text-[var(--fg-main)]'}`}
             >
-              <LayoutTemplate size={18} />
-              Ümumi (General)
+              <LayoutTemplate size={16} />
+              Ümumi
             </button>
             <button
               onClick={() => setActiveTab('chat')}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors text-left whitespace-nowrap ${activeTab === 'chat' ? 'bg-indigo-500/10 text-indigo-500' : 'text-[var(--fg-muted)] hover:bg-[var(--bg-active)] hover:text-[var(--fg-main)]'}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-colors text-left whitespace-nowrap shrink-0 md:shrink ${activeTab === 'chat' ? 'bg-indigo-500/15 text-indigo-400 font-semibold' : 'text-[var(--fg-muted)] hover:bg-[var(--bg-active)] hover:text-[var(--fg-main)]'}`}
             >
-              <Type size={18} />
-              Söhbət (Chat)
+              <Type size={16} />
+              Söhbət
             </button>
             <button
               onClick={() => setActiveTab('ai')}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors text-left whitespace-nowrap ${activeTab === 'ai' ? 'bg-indigo-500/10 text-indigo-500' : 'text-[var(--fg-muted)] hover:bg-[var(--bg-active)] hover:text-[var(--fg-main)]'}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-colors text-left whitespace-nowrap shrink-0 md:shrink ${activeTab === 'ai' ? 'bg-indigo-500/15 text-indigo-400 font-semibold' : 'text-[var(--fg-muted)] hover:bg-[var(--bg-active)] hover:text-[var(--fg-main)]'}`}
             >
-              <Brain size={18} />
-              Süni İntellekt (AI Provider)
+              <Brain size={16} />
+              Süni İntellekt
             </button>
           </div>
         </div>
 
-        {/* Right Content Area */}
+        {/* Content Area */}
         <div className="flex-1 flex flex-col min-h-0 relative">
           <div className="hidden md:flex absolute top-4 right-4 z-10">
-            <button onClick={onClose} className="p-2.5 rounded-full hover:bg-[var(--bg-hover)] bg-[var(--bg-surface)] text-[var(--fg-muted)] hover:text-[var(--fg-main)] transition-all border border-[var(--border)] shadow-sm">
-              <X size={20} />
+            <button onClick={onClose} className="p-2 rounded-full hover:bg-[var(--bg-hover)] bg-[var(--bg-surface)] text-[var(--fg-muted)] hover:text-[var(--fg-main)] transition-all border border-[var(--border)] shadow-sm">
+              <X size={18} />
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 custom-scrollbar">
             {activeTab === 'general' && renderGeneralTab()}
             {activeTab === 'chat' && renderChatTab()}
             {activeTab === 'ai' && renderAiTab()}

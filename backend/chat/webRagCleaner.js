@@ -20,7 +20,9 @@ function cleanWebAssistantResponse(text = '', isWebProduct = false) {
     /Axtarış sisteminin səhv istiqamətlənməsi səbəbindən.*?\n\n/gi,
     /İndi birbaşa bir neçə bankın rəsmi səhifəsini açıb.*?\n\n/gi,
     /Əvvəlcə [^.]+-ın depozit səhifəsini açıram:?\s*/gi,
-    /^(?:Ən son AI trendlərini araşdırım:|İndi əsas biznes ideyalarını araşdırıram\.|Axtarışa başlayıram\.)\s*/gim
+    /^(?:Ən son AI trendlərini araşdırım:|İndi əsas biznes ideyalarını araşdırıram\.|Axtarışa başlayıram\.)\s*/gim,
+    /(?:Axtarış aparıram\.?|Axtarışa başlayıram\.?|Mən sizin sualınızı aldım\.?|İndi ən son və aktual biznes ideyalarını tapmaq üçün axtarış aparıram\.?)+/gim,
+    /^Axtarış aparı[\s\S]*?(?:axtarış aparıram\.?|\n|$)/gim
   ];
 
   for (const pattern of monologuePatterns) {
