@@ -285,42 +285,45 @@ function AppContent() {
 
         {/* Mobile top bar */}
         {isMobile && (
-          <div className="flex items-center justify-between px-3 py-2 shrink-0 safe-top gap-2"
+          <div className="flex items-center justify-between px-3.5 py-2.5 shrink-0 safe-top gap-2"
                style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-2.5 rounded-lg transition-colors"
+              className="p-2 rounded-lg transition-colors active:scale-95"
               style={{ color: 'var(--fg-main)' }}
               aria-label="Open menu"
             >
-              <Menu size={20} />
+              <Menu size={22} />
             </button>
-            <div className="min-w-0 flex-1 text-center px-1">
-              <div className="text-sm font-medium truncate" style={{ color: 'var(--fg-main)' }}>
-                {isWebProduct ? 'BahAI Cloud' : (chat.activeProject?.name || 'bahAI')}
+
+            <div className="flex items-center gap-2 min-w-0 px-1">
+              <div className="relative w-7 h-7 rounded-full overflow-hidden shrink-0 border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+                <img 
+                  src="/assets/bahar_avatar.jpg" 
+                  alt="Bahar Avatar" 
+                  className="w-full h-full object-cover object-center"
+                />
               </div>
-              <div className="text-[11px] truncate" style={{ color: 'var(--fg-muted)' }}>
-                {isWebProduct ? 'Chat' : `${settings.executionMode === 'local' ? 'Local' : 'Cloud'} Desktop`}
+              <div className="min-w-0 text-left">
+                <div className="text-sm font-extrabold tracking-wide truncate" style={{ color: 'var(--fg-main)' }}>
+                  BAH<span style={{ color: '#10b981' }}>AI</span>
+                </div>
+                <div className="text-[10px] font-medium text-emerald-400 truncate">
+                  ✨ Bahar Smart
+                </div>
               </div>
             </div>
-            <div className="flex items-center shrink-0">
-              {allowDesktopAuxPanels && (
-                <button
-                  onClick={() => setShowOps(true)}
-                  className="p-2.5 rounded-lg transition-colors"
-                  style={{ color: showOps ? 'var(--color-accent)' : 'var(--fg-main)' }}
-                  aria-label="Open ops"
-                >
-                  <Settings size={18} />
-                </button>
-              )}
-                <button
-                  onClick={() => {
+
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => {
                   if (chat.activeProject) chat.createConversation(chat.activeProject.id);
+                  else if (chat.projects && chat.projects.length > 0) chat.createConversation(chat.projects[0].id);
                 }}
-                className="p-2.5 rounded-lg transition-colors"
+                className="p-2 rounded-lg transition-colors active:scale-95"
                 style={{ color: 'var(--fg-main)' }}
                 aria-label="New chat"
+                title="Yeni chat"
               >
                 <SquarePen size={20} />
               </button>
