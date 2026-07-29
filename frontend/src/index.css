@@ -542,6 +542,49 @@ button, a, [role="button"] {
   .mobile-visible-only {
     display: block !important;
   }
+
+  /* Gemini-style mobile message spacing */
+  .gemini-messages {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    gap: 1.25rem;
+  }
+
+  /* Gemini mobile prompt chips - horizontal scroll */
+  .gemini-prompt-chips {
+    display: flex !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.5rem;
+    padding-bottom: 0.5rem;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .gemini-prompt-chips::-webkit-scrollbar {
+    display: none;
+  }
+  .gemini-prompt-chips > button {
+    flex-shrink: 0;
+    white-space: nowrap;
+    border-radius: 9999px;
+    padding: 0.5rem 1rem;
+    font-size: 0.8125rem;
+  }
+
+  /* Gemini mobile action buttons row */
+  .gemini-actions {
+    gap: 0.125rem !important;
+  }
+  .gemini-actions button {
+    padding: 0.375rem !important;
+    min-height: 32px !important;
+    min-width: 32px !important;
+  }
+
+  /* Hide message disclaimer on mobile */
+  .mobile-disclaimer {
+    display: none;
+  }
 }
 
 @media (min-width: 769px) {
@@ -550,6 +593,12 @@ button, a, [role="button"] {
   }
   .mobile-visible-only {
     display: none !important;
+  }
+  /* Desktop prompt chips stay as grid */
+  .gemini-prompt-chips {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
   }
 }
 
@@ -621,4 +670,20 @@ button, a, [role="button"] {
   .safe-top {
     padding-top: max(0px, env(safe-area-inset-top));
   }
+}
+
+/* Gemini-style user message bubble */
+.gemini-user-bubble {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 163, 127, 0.08));
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  border-radius: 1.25rem 1.25rem 0.375rem 1.25rem;
+}
+
+/* Gemini-style assistant message (clean, no bubble) */
+.gemini-assistant-text {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
 }

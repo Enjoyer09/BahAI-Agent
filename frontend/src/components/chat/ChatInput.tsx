@@ -151,7 +151,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
   const canSend = (text.trim() || attachments.length > 0) && !loading && !blockedByActionCenter;
 
   return (
-    <div className={isMobile ? 'px-2 pb-2 pt-1 safe-bottom mobile-chat-input-wrap' : 'px-4 pb-4 pt-2'}>
+    <div className={isMobile ? 'px-3 pb-1 pt-1 safe-bottom mobile-chat-input-wrap' : 'px-4 pb-4 pt-2'}>
       <div className="max-w-3xl mx-auto">
         {!isMobile && onSafeModeToggle && productMode !== 'web_chat' && (
           <div className="flex justify-center items-center gap-2 mb-2">
@@ -173,12 +173,11 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
 
         {/* Input container — Gemini pill shape */}
         <div
-          className={`relative flex items-center transition-all ${isMobile ? 'rounded-full px-3 py-1.5 shadow-xl border border-emerald-500/20 bg-[var(--bg-surface-elevated)]' : 'rounded-3xl p-3 tahoe-glass'}`}
+          className={`relative flex items-center transition-all ${isMobile ? 'rounded-full px-3 py-1.5 shadow-lg border border-emerald-500/15 bg-[var(--bg-surface-elevated)]' : 'rounded-3xl p-3 tahoe-glass'}`}
           style={{
             background: !isMobile ? (productMode === 'web_chat'
               ? 'linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.05))'
               : 'var(--glass-surface)') : undefined,
-            boxShadow: isMobile ? '0 10px 32px rgba(0,0,0,0.25)' : undefined
           }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
@@ -192,8 +191,8 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             className="rounded-full transition-all shrink-0 flex items-center justify-center cursor-pointer hover:opacity-75 active:scale-95"
             style={{
               color: 'var(--fg-muted)',
-              width: isMobile ? '34px' : '44px',
-              height: isMobile ? '34px' : '44px',
+              width: isMobile ? '30px' : '44px',
+              height: isMobile ? '30px' : '44px',
               background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.06)',
               opacity: 0.45,
@@ -201,7 +200,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             title="Pre-Beta: Fayl yükləmə müvəqqəti passivdir"
             aria-label="Attach file pre-beta"
           >
-            <Paperclip size={isMobile ? 16 : 20} />
+            {isMobile ? <Plus size={16} /> : <Paperclip size={20} />}
           </button>
 
           {/* Textarea */}
@@ -214,7 +213,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
             }}
             placeholder={blockedByActionCenter ? 'Əvvəl Action Center-də login və ya təsdiq addımını tamamlayın...' : (productMode === 'web_chat' ? 'Mesajınızı yazın...' : 'bahAI-ya yazın...')}
-            className="flex-1 bg-transparent border-none outline-none resize-none min-h-[24px] leading-relaxed px-1.5"
+            className={`flex-1 bg-transparent border-none outline-none resize-none leading-relaxed px-1.5 ${isMobile ? 'min-h-[20px]' : 'min-h-[24px]'}`}
             style={{
               color: 'var(--fg-main)',
               fontSize: isMobile ? '16px' : '15px',
@@ -272,8 +271,8 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                 style={{
                   background: 'rgba(239, 68, 68, 0.1)',
                   color: '#ef4444',
-                  width: isMobile ? '38px' : '40px',
-                  height: isMobile ? '38px' : '40px',
+                  width: isMobile ? '32px' : '40px',
+                  height: isMobile ? '32px' : '40px',
                   border: '1px solid rgba(239, 68, 68, 0.18)',
                 }}
                 aria-label="Stop generation"
@@ -293,8 +292,8 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                     : 'linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04))',
                   color: canSend ? 'white' : 'var(--fg-muted)',
                   cursor: canSend ? 'pointer' : 'default',
-                  width: isMobile ? '38px' : '40px',
-                  height: isMobile ? '38px' : '40px',
+                  width: isMobile ? '32px' : '40px',
+                  height: isMobile ? '32px' : '40px',
                   border: canSend ? '1px solid rgba(16, 163, 127, 0.65)' : '1px solid rgba(255,255,255,0.08)',
                 }}
                 aria-label="Send message"
@@ -339,13 +338,15 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
         )}
 
         {/* Disclaimer */}
-        <div className={isMobile ? 'text-center mt-1 px-2 pb-0' : 'text-center mt-2'}>
-          <span className="text-xs" style={{ color: 'var(--fg-muted)' }} role="note">
-            {productMode === 'web_chat'
-              ? 'Cavabları kritik qərardan əvvəl qısa yoxlamaq faydalıdır.'
-              : 'bahAI səhv edə bilər. Vacib məlumatları yoxlayın.'}
-          </span>
-        </div>
+        {!isMobile && (
+          <div className="text-center mt-2">
+            <span className="text-xs" style={{ color: 'var(--fg-muted)' }} role="note">
+              {productMode === 'web_chat'
+                ? 'Cavabları kritik qərardan əvvəl qısa yoxlamaq faydalıdır.'
+                : 'bahAI səhv edə bilər. Vacib məlumatları yoxlayın.'}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

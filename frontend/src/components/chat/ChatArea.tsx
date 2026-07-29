@@ -54,7 +54,7 @@ export default function ChatArea({
   if (messages.length === 0 && !loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pb-16 sm:pb-28">
-        <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden mb-5 sm:mb-6 border-2 border-emerald-500/50 shadow-[0_0_24px_rgba(16,185,129,0.35)] animate-pulse">
+        <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden mb-5 sm:mb-6 border-2 border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
           <img 
             src="/assets/bahar_avatar.jpg" 
             alt="Bahar Avatar" 
@@ -71,7 +71,7 @@ export default function ChatArea({
             : 'Repo ilə işləyin, audit etdirin və yeni funksiyalar qurun.'}
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 max-w-2xl w-full">
+        <div className="flex overflow-x-auto sm:grid sm:grid-cols-2 gap-2 sm:gap-3 max-w-2xl w-full no-scrollbar pb-2">
           {(productMode === 'web_chat'
             ? [
                 { label: 'Yazını yaxşılaşdır', prompt: 'Bu mətni daha aydın, peşəkar və axıcı formada yenidən yaz' },
@@ -88,7 +88,7 @@ export default function ChatArea({
             <button
               key={item.label}
               onClick={() => onSend(item.prompt)}
-              className="px-4 py-3.5 rounded-2xl text-sm transition-all text-left"
+              className="px-4 py-2.5 sm:py-3.5 rounded-full sm:rounded-2xl text-sm transition-all text-left whitespace-nowrap sm:whitespace-normal shrink-0"
               style={{
                 border: '1px solid var(--border)',
                 color: 'var(--fg-secondary)',
@@ -120,7 +120,7 @@ export default function ChatArea({
       className="flex-1 overflow-y-auto premium-scroll relative"
       style={{ scrollBehavior: 'smooth', direction: settings?.chatDirection === 'rtl' ? 'rtl' : 'ltr' }}
     >
-      <div className={`mx-auto px-3 sm:px-4 py-4 sm:py-7 space-y-4 sm:space-y-6 ${settings?.maximizeChatSpace ? 'w-full px-6' : 'max-w-3xl'}`}>
+      <div className={`mx-auto px-2 sm:px-4 py-3 sm:py-7 space-y-5 sm:space-y-6 ${settings?.maximizeChatSpace ? 'w-full px-6' : 'max-w-3xl'}`}>
         <style>{`
           @keyframes bahai-wave {
             0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }

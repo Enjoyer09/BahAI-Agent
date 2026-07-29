@@ -34,6 +34,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
   const [copied, setCopied] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
   
   const isBot = message.role === 'assistant';
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -160,7 +161,8 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
 
   return (
     <div className="group animate-in" style={{ animationDelay: '50ms' }}>
-      <div className="flex items-start gap-2.5 sm:gap-4">
+      <div className={`flex items-start ${isMobile ? (isBot ? 'pl-2' : 'justify-end') : 'gap-2.5 sm:gap-4'}`}>
+        {!isMobile && (
         <div
           className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
           style={{
@@ -183,8 +185,9 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
             <User size={14} className="text-white" />
           )}
         </div>
+        )}
 
-        <div className="flex-1 min-w-0">
+        <div className={`flex-1 min-w-0 ${isMobile && !isBot ? 'max-w-[85%]' : ''}`}>
           {/* Running indicator */}
           {isBot && hasRunningTools && (
             <div
@@ -201,15 +204,22 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
           )}
 
           <div
-            className="leading-relaxed break-words rounded-[22px] px-4 py-3 sm:px-4.5 sm:py-3.5"
-            style={isBot ? {
+            className={`leading-relaxed break-words ${isMobile && !isBot ? 'rounded-2xl px-4 py-2.5' : 'rounded-[22px] px-4 py-3 sm:px-4.5 sm:py-3.5'} ${isMobile && isBot ? 'pl-2' : ''}`}
+            style={isBot ? (isMobile ? {
+              background: 'transparent',
+              border: 'none',
+              boxShadow: 'none'
+            } : {
               background: 'var(--bg-surface-elevated, rgba(255,255,255,0.03))',
               border: '1px solid var(--border-subtle)',
               boxShadow: '0 14px 34px rgba(0,0,0,0.06)'
+            }) : (isMobile ? {
+              background: 'rgba(16, 185, 129, 0.15)',
+              border: 'none',
             } : {
               background: 'rgba(255,255,255,0.03)',
               border: '1px solid rgba(255,255,255,0.05)'
-            }}
+            })}
           >
             {/* Attachments */}
             {message.attachments && message.attachments.length > 0 && (
@@ -300,22 +310,22 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
 
           {/* Message actions — always visible on mobile */}
           {isBot && !hasRunningTools && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-1 mobile-visible" style={{ opacity: 1 }} role="group" aria-label="Message actions">
+            <div className={`mt-2 flex flex-wrap items-center ${isMobile ? 'gap-0.5' : 'gap-1.5 sm:gap-1'} mobile-visible`} style={{ opacity: 1 }} role="group" aria-label="Message actions">
               <button
                 onClick={copyToClipboard}
                 onKeyDown={(e) => handleActionKeyDown(e, copyToClipboard)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-md transition-colors sm:p-2"
-                style={{ color: 'var(--fg-muted)', minHeight: '40px' }}
+                className={`inline-flex items-center ${isMobile ? 'gap-0 p-1.5' : 'gap-1.5 px-2.5 py-2 sm:p-2'} rounded-md transition-colors`}
+                style={isMobile ? { color: 'var(--fg-muted)' } : { color: 'var(--fg-muted)', minHeight: '40px' }}
                 aria-label="Copy message"
               >
                 {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                <span className="text-[11px] sm:hidden">{copied ? 'Kopyalandı' : 'Kopyala'}</span>
+                {!isMobile && <span className="text-[11px] sm:hidden">{copied ? 'Kopyalandı' : 'Kopyala'}</span>}
               </button>
               <button
                 onClick={handleThumbsUp}
                 onKeyDown={(e) => handleActionKeyDown(e, handleThumbsUp)}
-                className="p-2 rounded-md transition-colors"
-                style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
+                className={`${isMobile ? 'p-1.5' : 'p-2'} rounded-md transition-colors`}
+                style={isMobile ? { color: 'var(--fg-muted)' } : { color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Good response"
               >
                 <ThumbsUp size={14} />
@@ -323,8 +333,8 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
               <button
                 onClick={handleThumbsDown}
                 onKeyDown={(e) => handleActionKeyDown(e, handleThumbsDown)}
-                className="p-2 rounded-md transition-colors"
-                style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
+                className={`${isMobile ? 'p-1.5' : 'p-2'} rounded-md transition-colors`}
+                style={isMobile ? { color: 'var(--fg-muted)' } : { color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Bad response"
               >
                 <ThumbsDown size={14} />
@@ -332,8 +342,11 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
               <button
                 onClick={speakMessage}
                 onKeyDown={(e) => handleActionKeyDown(e, speakMessage)}
-                className="p-2 rounded-md transition-colors flex items-center justify-center"
-                style={{
+                className={`${isMobile ? 'p-1.5' : 'p-2'} rounded-md transition-colors flex items-center justify-center`}
+                style={isMobile ? {
+                  color: isPlaying ? 'var(--color-accent)' : 'var(--fg-muted)',
+                  background: isPlaying ? 'var(--color-accent-muted)' : 'transparent'
+                } : {
                   color: isPlaying ? 'var(--color-accent)' : 'var(--fg-muted)',
                   minHeight: '40px',
                   minWidth: '40px',
@@ -347,8 +360,8 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
               <button
                 onClick={handleRegenerate}
                 onKeyDown={(e) => handleActionKeyDown(e, handleRegenerate)}
-                className="p-2 rounded-md transition-colors"
-                style={{ color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
+                className={`${isMobile ? 'p-1.5' : 'p-2'} rounded-md transition-colors`}
+                style={isMobile ? { color: 'var(--fg-muted)' } : { color: 'var(--fg-muted)', minHeight: '40px', minWidth: '40px' }}
                 aria-label="Regenerate"
               >
                 <RotateCcw size={14} />
