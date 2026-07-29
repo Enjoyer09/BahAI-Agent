@@ -283,34 +283,35 @@ function AppContent() {
           </>
         )}
 
-        {/* Mobile top bar */}
+        {/* Mobile top bar — Gemini Mobile App style */}
         {isMobile && (
-          <div className="flex items-center justify-between px-3.5 py-2.5 shrink-0 safe-top gap-2"
+          <div className="flex items-center justify-between px-3 py-2 shrink-0 safe-top gap-2"
                style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-lg transition-colors active:scale-95"
-              style={{ color: 'var(--fg-main)' }}
-              aria-label="Open menu"
-            >
-              <Menu size={22} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 rounded-full hover:bg-[var(--bg-hover)] transition-colors active:scale-95 text-[var(--fg-main)]"
+                aria-label="Open menu"
+              >
+                <Menu size={22} />
+              </button>
 
-            <div className="flex items-center gap-2 min-w-0 px-1">
-              <div className="relative w-7 h-7 rounded-full overflow-hidden shrink-0 border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.3)]">
-                <img 
-                  src="/assets/bahar_avatar.jpg" 
-                  alt="Bahar Avatar" 
-                  className="w-full h-full object-cover object-center"
-                />
-              </div>
-              <div className="min-w-0 text-left">
-                <div className="text-sm font-extrabold tracking-wide truncate" style={{ color: 'var(--fg-main)' }}>
-                  BAH<span style={{ color: '#10b981' }}>AI</span>
+              {/* Gemini-style Model Pill Selector */}
+              <div 
+                onClick={() => setSidebarOpen(true)}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-[var(--bg-hover)] border border-[var(--border)] active:scale-95 transition-transform cursor-pointer shadow-sm"
+              >
+                <div className="relative w-5 h-5 rounded-full overflow-hidden shrink-0 border border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.4)]">
+                  <img 
+                    src="/assets/bahar_avatar.jpg" 
+                    alt="Bahar Avatar" 
+                    className="w-full h-full object-cover object-center"
+                  />
                 </div>
-                <div className="text-[10px] font-medium text-emerald-400 truncate">
+                <span className="text-xs font-semibold text-[var(--fg-main)] tracking-tight">
                   ✨ Bahar Smart
-                </div>
+                </span>
+                <span className="text-[10px] text-[var(--fg-muted)]">▾</span>
               </div>
             </div>
 
@@ -320,8 +321,7 @@ function AppContent() {
                   if (chat.activeProject) chat.createConversation(chat.activeProject.id);
                   else if (chat.projects && chat.projects.length > 0) chat.createConversation(chat.projects[0].id);
                 }}
-                className="p-2 rounded-lg transition-colors active:scale-95"
-                style={{ color: 'var(--fg-main)' }}
+                className="p-2 rounded-full hover:bg-[var(--bg-hover)] transition-colors active:scale-95 text-[var(--fg-main)]"
                 aria-label="New chat"
                 title="Yeni chat"
               >

@@ -53,24 +53,22 @@ export default function ChatArea({
 
   if (messages.length === 0 && !loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pb-16 sm:pb-32">
-        <div
-          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mb-5 sm:mb-6 shadow-[0_18px_50px_rgba(16,163,127,0.18)]"
-          style={{
-            background: 'linear-gradient(180deg, rgba(16,163,127,0.96), rgba(16,163,127,0.78))',
-            border: '1px solid rgba(255,255,255,0.16)'
-          }}
-        >
-          <MessageSquare size={28} className="text-white" />
+      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pb-16 sm:pb-28">
+        <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden mb-5 sm:mb-6 border-2 border-emerald-500/50 shadow-[0_0_24px_rgba(16,185,129,0.35)] animate-pulse">
+          <img 
+            src="/assets/bahar_avatar.jpg" 
+            alt="Bahar Avatar" 
+            className="w-full h-full object-cover object-center"
+          />
         </div>
 
-        <h2 className="text-xl sm:text-3xl font-semibold mb-2 text-center tracking-tight" style={{ color: 'var(--fg-main)' }}>
-          {productMode === 'web_chat' ? 'Bu gün nədən başlayaq?' : 'BahAI Desktop ilə nə qururuq?'}
+        <h2 className="text-2xl sm:text-3xl font-extrabold mb-2 text-center tracking-tight" style={{ color: 'var(--fg-main)' }}>
+          {productMode === 'web_chat' ? 'Salam! Sizə necə kömək edə bilərəm?' : 'BahAI ilə nə qururuq?'}
         </h2>
-        <p className="text-sm sm:text-base text-center mb-6 sm:mb-8 max-w-xl leading-7" style={{ color: 'var(--fg-secondary)' }}>
+        <p className="text-xs sm:text-sm text-center mb-6 sm:mb-8 max-w-md text-[var(--fg-muted)] leading-relaxed">
           {productMode === 'web_chat'
-            ? 'Sual verin, mətni yaxşılaşdırın, ideyanı dəqiqləşdirin və ya bir şəkil göndərin.'
-            : 'Repo ilə işləyin, audit etdirin, bug düzəltdirin və yeni funksiya qurun.'}
+            ? 'Sual verin, fikrinizi dəqiqləşdirin və ya ən son yenilikləri soruşun.'
+            : 'Repo ilə işləyin, audit etdirin və yeni funksiyalar qurun.'}
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 max-w-2xl w-full">

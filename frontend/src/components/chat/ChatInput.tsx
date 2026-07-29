@@ -171,19 +171,14 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
           </div>
         )}
 
-        {/* Input container — pill shape */}
+        {/* Input container — Gemini pill shape */}
         <div
-          className="relative flex items-end rounded-3xl transition-all tahoe-glass"
+          className={`relative flex items-center transition-all ${isMobile ? 'rounded-full px-3 py-1.5 shadow-xl border border-emerald-500/20 bg-[var(--bg-surface-elevated)]' : 'rounded-3xl p-3 tahoe-glass'}`}
           style={{
-            background: productMode === 'web_chat'
+            background: !isMobile ? (productMode === 'web_chat'
               ? 'linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.05))'
-              : 'var(--glass-surface)',
-            border: productMode === 'web_chat' ? '1px solid rgba(255,255,255,0.08)' : '1px solid var(--border)',
-            padding: isMobile ? '9px 10px' : '12px 14px',
-            borderRadius: isMobile ? '22px' : undefined,
-            boxShadow: productMode === 'web_chat'
-              ? '0 22px 60px rgba(0, 0, 0, 0.16)'
-              : (isMobile ? '0 8px 30px rgba(0, 0, 0, 0.22)' : undefined),
+              : 'var(--glass-surface)') : undefined,
+            boxShadow: isMobile ? '0 10px 32px rgba(0,0,0,0.25)' : undefined
           }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
@@ -197,17 +192,16 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             className="rounded-full transition-all shrink-0 flex items-center justify-center cursor-pointer hover:opacity-75 active:scale-95"
             style={{
               color: 'var(--fg-muted)',
-              width: isMobile ? '38px' : '44px',
-              height: isMobile ? '38px' : '44px',
-              background: 'rgba(255,255,255,0.03)',
+              width: isMobile ? '34px' : '44px',
+              height: isMobile ? '34px' : '44px',
+              background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.06)',
-              opacity: 0.4,
-              filter: 'grayscale(100%)',
+              opacity: 0.45,
             }}
             title="Pre-Beta: Fayl yükləmə müvəqqəti passivdir"
             aria-label="Attach file pre-beta"
           >
-            <Paperclip size={isMobile ? 17 : 20} />
+            <Paperclip size={isMobile ? 16 : 20} />
           </button>
 
           {/* Textarea */}
