@@ -10,8 +10,9 @@ function cleanWebAssistantResponse(text = '', isWebProduct = false) {
 
   let cleaned = text;
 
-  // 1. Strip raw tool JSON invocations if leaked
+  // 1. Strip raw tool JSON & array invocations if leaked
   cleaned = cleaned.replace(/```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"[\s\S]*?\}\s*```/gi, '');
+  cleaned = cleaned.replace(/\[\s*"web_search"\s*,\s*"[^"]+"\s*\]/gi, '');
 
   // 2. Strip internal agent monologues (e.g. "Axtarış aparıram...", "İndi əsas biznes ideyalarını araşdırıram...")
   const monologuePatterns = [
@@ -19,7 +20,6 @@ function cleanWebAssistantResponse(text = '', isWebProduct = false) {
     /Axtarış sisteminin səhv istiqamətlənməsi səbəbindən.*?\n\n/gi,
     /İndi birbaşa bir neçə bankın rəsmi səhifəsini açıb.*?\n\n/gi,
     /Əvvəlcə [^.]+-ın depozit səhifəsini açıram:?\s*/gi,
-    /^\[\s*"web_search"\s*,\s*".*?"\s*\]$/gi,
     /^(?:Ən son AI trendlərini araşdırım:|İndi əsas biznes ideyalarını araşdırıram\.|Axtarışa başlayıram\.)\s*/gim
   ];
 
