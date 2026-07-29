@@ -9,6 +9,7 @@ function notifyAuthExpired(message = 'Sessiya vaxtı bitib. Yenidən daxil olun.
   try {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('refresh_token');
+    localStorage.setItem('signed_out', '1');
     window.dispatchEvent(new CustomEvent('bahai-auth-expired', { detail: { message } }));
   } catch {
     // ignore

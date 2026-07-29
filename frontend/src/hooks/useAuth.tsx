@@ -158,6 +158,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     verifySession();
   }, [refreshAccessToken]);
 
+  // Automatically log out when auth session expires anywhere in the app
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.setItem('signed_out', '1');
+      setUser(null);
+    };
+    window.addEventListener('bahai-auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('bahai-auth-expired', handleAuthExpired);
+  }, []);
+
   const login = async (email: string, password: string) => {
     const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: 'POST',
