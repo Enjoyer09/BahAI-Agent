@@ -6,6 +6,7 @@ export function isToolCallLikeText(content: string): boolean {
   return (
     /^(?:https?:\/\/)?wttr\.in\/[^\s]+$/i.test(text) ||
     /^(?:["`{[]\s*)?web_search["']?,?\s*$/i.test(text) ||
+    /^\s*\[\s*"[a-z0-9_]+"\s*,\s*(?:"[\s\S]*?"|\{[\s\S]*?\})\s*\]\s*$/i.test(text) ||
     /^(?:["`{[]\s*)?(?:web_fetch|browser_open|gui_step|gui_observe|run_terminal_command)["']?,?\s*$/i.test(text) ||
     /^[`{\s,]*$/is.test(text) ||
     /^(?:json\s+)?\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/is.test(text) ||
