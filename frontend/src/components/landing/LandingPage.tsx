@@ -233,7 +233,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
                 <span className="text-xs text-slate-400 ml-2 font-mono">bahAI Web Session</span>
               </div>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">BahAI Smart • Online</span>
+              <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">Bahar Smart • Online</span>
             </div>
 
             {/* User message */}

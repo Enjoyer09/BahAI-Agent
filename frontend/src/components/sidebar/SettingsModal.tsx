@@ -269,7 +269,7 @@ export default function SettingsModal({
           >
             <div className="flex items-center gap-2 mb-1">
               <input type="radio" checked={aiMode === 'smart'} readOnly className="accent-blue-500" />
-              <span className="font-semibold text-sm">✨ BahAI Smart</span>
+              <span className="font-semibold text-sm">✨ Bahar Smart</span>
             </div>
             <span className="text-xs text-[var(--fg-secondary)] ml-5">Tamamilə pulsuz, avtomatik model seçimi və API tənzimləməsi.</span>
           </label>
