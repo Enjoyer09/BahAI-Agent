@@ -91,37 +91,37 @@ export default function SettingsModal({
   const renderGeneralTab = () => (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">Görünüş (Appearance)</h3>
+        <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">Görünüş</h3>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <div style={labelStyle}><Sun size={14}/> Dil (Language)</div>
+              <div style={labelStyle}><Sun size={14}/> Dil</div>
               <div style={descStyle}>İnterfeys dilini seçin.</div>
             </div>
-            <select style={{ ...inputStyle, width: '180px' }} value={language} onChange={e => setLanguage(e.target.value)}>
-              <option value="az">Azərbaycan (AZ)</option>
+            <select style={{ ...inputStyle }} className="w-full sm:w-[180px]" value={language} onChange={e => setLanguage(e.target.value)}>
+              <option value="az">Azərbaycan dili (AZ)</option>
               <option value="en">English (EN)</option>
             </select>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <div style={labelStyle}><Type size={14}/> Şrift Ölçüsü (Message Font Size)</div>
+              <div style={labelStyle}><Type size={14}/> Şrift Ölçüsü</div>
               <div style={descStyle}>Mesajların mətn ölçüsü.</div>
             </div>
-            <select style={{ ...inputStyle, width: '180px' }} value={messageFontSize} onChange={e => setMessageFontSize(e.target.value)}>
-              <option value="small">Kiçik (Small)</option>
-              <option value="medium">Orta (Medium)</option>
-              <option value="large">Böyük (Large)</option>
+            <select style={{ ...inputStyle }} className="w-full sm:w-[180px]" value={messageFontSize} onChange={e => setMessageFontSize(e.target.value)}>
+              <option value="small">Kiçik</option>
+              <option value="medium">Orta</option>
+              <option value="large">Böyük</option>
             </select>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <div style={labelStyle}><AlignLeft size={14}/> Söhbət İstiqaməti (Chat Direction)</div>
-              <div style={descStyle}>Soldan sağa və ya sağdan sola.</div>
+              <div style={labelStyle}><AlignLeft size={14}/> Söhbət İstiqaməti</div>
+              <div style={descStyle}>Mətnin düzülüş qaydası.</div>
             </div>
-            <select style={{ ...inputStyle, width: '180px' }} value={chatDirection} onChange={e => setChatDirection(e.target.value as any)}>
-              <option value="ltr">LTR (Soldan sağa)</option>
-              <option value="rtl">RTL (Sağdan sola)</option>
+            <select style={{ ...inputStyle }} className="w-full sm:w-[180px]" value={chatDirection} onChange={e => setChatDirection(e.target.value as any)}>
+              <option value="ltr">Soldan sağa (LTR)</option>
+              <option value="rtl">Sağdan sola (RTL)</option>
             </select>
           </div>
         </div>
@@ -130,26 +130,26 @@ export default function SettingsModal({
       <hr className="border-[var(--border)]" />
 
       <div>
-        <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">Layout (Görünüş Nümunəsi)</h3>
+        <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">Ekran Layoutu</h3>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <div style={labelStyle}><Maximize size={14}/> Məkanı Maksimumlaşdır (Maximize chat space)</div>
-              <div style={descStyle}>Söhbət pəncərəsini tam ekrana genişləndirir.</div>
+              <div style={labelStyle}><Maximize size={14}/> Məkanı Genişləndir</div>
+              <div style={descStyle}>Söhbət pəncərəsini tam ekrana yayır.</div>
             </div>
             <Switch checked={maximizeChatSpace} onChange={setMaximizeChatSpace} />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <div style={labelStyle}><PanelBottom size={14}/> Mərkəzi İnpüt (Center Chat Input)</div>
-              <div style={descStyle}>Yeni söhbət zamanı yazmaq yerini mərkəzə alır.</div>
+              <div style={labelStyle}><PanelBottom size={14}/> Mərkəzi Giriş Paneli</div>
+              <div style={descStyle}>Yazmaq yerini ekranın mərkəzində saxlayır.</div>
             </div>
             <Switch checked={centerChatInput} onChange={setCenterChatInput} />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <div style={labelStyle}><ArrowDownToLine size={14}/> Aşağı Sürüşdürmə Düyməsi (Scroll to End Button)</div>
-              <div style={descStyle}>Ən yeni mesaja getmək üçün düymə göstərir.</div>
+              <div style={labelStyle}><ArrowDownToLine size={14}/> Aşağı Enmə Düyməsi</div>
+              <div style={descStyle}>Ən yeni mesaja getmək üçün cəld düymə.</div>
             </div>
             <Switch checked={scrollToEndButton} onChange={setScrollToEndButton} />
           </div>
@@ -159,12 +159,12 @@ export default function SettingsModal({
       <hr className="border-[var(--border)]" />
 
       <div>
-        <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">Əlçatanlıq (Accessibility)</h3>
+        <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">Əlçatanlıq</h3>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <div style={labelStyle}><Eye size={14}/> Ekranı Oyaq Saxla (Keep screen awake)</div>
-              <div style={descStyle}>Cavab generasiya olunarkən ekranın sönməsinə mane olur.</div>
+              <div style={labelStyle}><Eye size={14}/> Ekranı Oyaq Saxla</div>
+              <div style={descStyle}>Cavab yazılarkən ekranın sönməsinə mane olur.</div>
             </div>
             <Switch checked={keepScreenAwake} onChange={setKeepScreenAwake} />
           </div>
@@ -178,7 +178,7 @@ export default function SettingsModal({
             <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">İnteqrasiyalar</h3>
             <div className="space-y-4">
               <div>
-                <label style={labelStyle}>GitHub</label>
+                <label style={labelStyle}>GitHub Hesabı</label>
                 {githubConnected ? (
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-sm" style={{ color: 'var(--color-success)' }}>@{githubUsername}</span>
@@ -222,33 +222,33 @@ export default function SettingsModal({
   const renderChatTab = () => (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">Mesajlaşma (Sending)</h3>
+        <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">Mesaj Göndərmə</h3>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <div style={labelStyle}><Send size={14}/> Enter düyməsi ilə göndər (Enter to Send)</div>
-              <div style={descStyle}>Sıradan Enter mesajı göndərir, Shift+Enter isə yeni sətirə keçir.</div>
+              <div style={labelStyle}><Send size={14}/> Enter Düyməsi ilə Göndər</div>
+              <div style={descStyle}>Enter mesajı göndərir, Shift+Enter yeni sətirə keçir.</div>
             </div>
             <Switch checked={enterToSend} onChange={setEnterToSend} />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <div style={labelStyle}><FileText size={14}/> Markdown Formatı (Enable Markdown)</div>
-              <div style={descStyle}>İstifadəçi mesajlarında kodu və qalın yazıları işıqlandırır.</div>
+              <div style={labelStyle}><FileText size={14}/> Markdown Formatı</div>
+              <div style={descStyle}>Kodu və qalın yazıları təmiz formatda göstərir.</div>
             </div>
             <Switch checked={enableMarkdown} onChange={setEnableMarkdown} />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <div style={labelStyle}><Brain size={14}/> Düşüncəni Göstər (Show Thinking)</div>
-              <div style={descStyle}>Agentin qərarvermə prosesini (Thinking) mesajlarda göstərir.</div>
+              <div style={labelStyle}><Brain size={14}/> Düşüncə Addımlarını Göstər</div>
+              <div style={descStyle}>Agentin daxili təhlil addımlarını göstərir.</div>
             </div>
             <Switch checked={showThinking} onChange={setShowThinking} />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <div style={labelStyle}><PanelRightClose size={14}/> Avtomatik Sürüşdür (Auto-Scroll)</div>
-              <div style={descStyle}>Yeni mesajlar gəldikcə pəncərəni avtomatik aşağı endirir.</div>
+              <div style={labelStyle}><PanelRightClose size={14}/> Avtomatik Sürüşdürmə</div>
+              <div style={descStyle}>Yeni cavab gəldikcə pəncərəni aşağı endirir.</div>
             </div>
             <Switch checked={autoScroll} onChange={setAutoScroll} />
           </div>
