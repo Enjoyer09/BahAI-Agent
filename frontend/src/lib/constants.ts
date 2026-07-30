@@ -36,10 +36,15 @@ export const MODELS: ModelOption[] = [
   { id: 'gpt-5.4', name: 'GPT-5.4 (FreeModel)', provider: 'FreeModel' },
   { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex (FreeModel)', provider: 'FreeModel' },
   { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini ⚡ (FreeModel)', provider: 'FreeModel' },
-  // OpenRouter free
+  // OpenRouter 90+ Free Models
+  { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash (Pulsuz) ⚡', provider: 'OpenRouter Free' },
+  { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B (Pulsuz) ⭐', provider: 'OpenRouter Free' },
+  { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1 Reasoning (Pulsuz) ⭐', provider: 'OpenRouter Free' },
+  { id: 'qwen/qwen-2.5-coder-32b-instruct:free', name: 'Qwen 2.5 Coder 32B (Pulsuz) 💻', provider: 'OpenRouter Free' },
   { id: 'qwen/qwen3-coder:free', name: 'Qwen3 Coder (Pulsuz)', provider: 'OpenRouter Free' },
   { id: 'deepseek/deepseek-v4-flash:free', name: 'DeepSeek V4 Flash (Pulsuz)', provider: 'OpenRouter Free' },
-  { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B (Pulsuz)', provider: 'OpenRouter Free' }
+  { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B (Pulsuz)', provider: 'OpenRouter Free' },
+  { id: 'mistralai/mistral-small-24b-instruct-2501:free', name: 'Mistral 24B (Pulsuz)', provider: 'OpenRouter Free' }
 ];
 
 export const DEFAULT_SETTINGS = {
