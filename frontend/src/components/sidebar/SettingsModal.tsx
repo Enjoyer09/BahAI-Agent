@@ -254,32 +254,45 @@ export default function SettingsModal({
     <div className="space-y-6 max-w-2xl">
       <div>
         <h3 className="text-sm font-semibold mb-4 text-[var(--fg-main)]">AI Rejimi (AI Mode)</h3>
-        
-        <div className="flex flex-col sm:flex-row gap-3 mb-6">
-          <label 
-            className={`flex-1 flex flex-col p-3 rounded-lg border cursor-pointer transition-colors ${aiMode === 'smart' ? 'bg-[var(--bg-accent)] border-blue-500/50' : 'bg-[var(--bg-surface-elevated)] border-[var(--border)]'}`}
-            onClick={() => setAiMode('smart')}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <input type="radio" checked={aiMode === 'smart'} readOnly className="accent-blue-500" />
-              <span className="font-semibold text-sm">✨ Bahar Smart</span>
-            </div>
-            <span className="text-xs text-[var(--fg-secondary)] ml-5">Tamamilə pulsuz, avtomatik model seçimi və API tənzimləməsi.</span>
-          </label>
 
-          <label 
-            className={`flex-1 flex flex-col p-3 rounded-lg border cursor-pointer transition-colors ${aiMode === 'manual' ? 'bg-[var(--bg-accent)] border-blue-500/50' : 'bg-[var(--bg-surface-elevated)] border-[var(--border)]'}`}
-            onClick={() => setAiMode('manual')}
-          >
+        {!isDesktopProduct ? (
+          <div className="p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-hover)]">
             <div className="flex items-center gap-2 mb-1">
-              <input type="radio" checked={aiMode === 'manual'} readOnly className="accent-blue-500" />
-              <span className="font-semibold text-sm">⚙️ Manual (Pro)</span>
+              <Brain size={16} />
+              <span className="font-semibold text-sm">BahAI Smart</span>
             </div>
-            <span className="text-xs text-[var(--fg-secondary)] ml-5">Öz API açarlarınızı və lokal modellərinizi (Ollama) istifadə edin.</span>
-          </label>
-        </div>
+            <p className="text-xs text-[var(--fg-secondary)]">
+              Web versiyada provider və model seçimini BahAI arxa planda avtomatik idarə edir.
+              Manual model seçimi desktop tətbiqində mövcuddur.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row gap-3 mb-6">
+            <label
+              className={`flex-1 flex flex-col p-3 rounded-lg border cursor-pointer transition-colors ${aiMode === 'smart' ? 'bg-[var(--bg-accent)] border-blue-500/50' : 'bg-[var(--bg-surface-elevated)] border-[var(--border)]'}`}
+              onClick={() => setAiMode('smart')}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <input type="radio" checked={aiMode === 'smart'} readOnly className="accent-blue-500" />
+                <span className="font-semibold text-sm">✨ BahAI Smart</span>
+              </div>
+              <span className="text-xs text-[var(--fg-secondary)] ml-5">Avtomatik model və provider seçimi.</span>
+            </label>
 
-        {aiMode === 'manual' && (
+            <label
+              className={`flex-1 flex flex-col p-3 rounded-lg border cursor-pointer transition-colors ${aiMode === 'manual' ? 'bg-[var(--bg-accent)] border-blue-500/50' : 'bg-[var(--bg-surface-elevated)] border-[var(--border)]'}`}
+              onClick={() => setAiMode('manual')}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <input type="radio" checked={aiMode === 'manual'} readOnly className="accent-blue-500" />
+                <span className="font-semibold text-sm">⚙️ Manual (Pro)</span>
+              </div>
+              <span className="text-xs text-[var(--fg-secondary)] ml-5">Öz API açarınızı, provider-i və modeli istifadə edin.</span>
+            </label>
+          </div>
+        )}
+
+        {isDesktopProduct && aiMode === 'manual' && (
           <div className="space-y-4 bg-[var(--bg-surface-elevated)] p-4 rounded-lg border border-[var(--border)]">
             {isDesktopProduct && (
               <div>

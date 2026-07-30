@@ -61,7 +61,14 @@ export function useSettings() {
   const [guiBrowserPath, setGuiBrowserPath] = useState(() => loadSetting('guiBrowserPath', DEFAULT_SETTINGS.guiBrowserPath));
   const [guiBrowserCdpUrl, setGuiBrowserCdpUrl] = useState(() => loadSetting('guiBrowserCdpUrl', DEFAULT_SETTINGS.guiBrowserCdpUrl));
   const [guiAutoStartBrowser, setGuiAutoStartBrowser] = useState(() => loadBoolSetting('guiAutoStartBrowser', false));
-  const [aiMode, setAiMode] = useState<'smart' | 'manual'>(() => loadSetting('aiMode', DEFAULT_SETTINGS.aiMode) as 'smart' | 'manual');
+  const [aiMode, setAiModeState] = useState<'smart' | 'manual'>(() => {
+    if (productMode === 'web_chat') return 'smart';
+    const saved = loadSetting('aiMode', DEFAULT_SETTINGS.aiMode);
+    return saved === 'manual' ? 'manual' : 'smart';
+  });
+  const setAiMode = (mode: 'smart' | 'manual') => {
+    setAiModeState(productMode === 'web_chat' ? 'smart' : mode);
+  };
 
   // Appearance & Layout Settings
   const [language, setLanguage] = useState(() => loadSetting('language', 'en'));
@@ -108,6 +115,12 @@ export function useSettings() {
   }, [productMode, orchestrationMode]);
 
   useEffect(() => {
+    if (productMode === 'web_chat' && aiMode !== 'smart') {
+      setAiModeState('smart');
+    }
+  }, [aiMode, productMode]);
+
+  useEffect(() => {
     if (productMode !== 'desktop_code') return;
 
     if (executionMode === 'local') {
@@ -146,7 +159,9 @@ export function useSettings() {
   useEffect(() => { localStorage.setItem('guiBrowserPath', guiBrowserPath); }, [guiBrowserPath]);
   useEffect(() => { localStorage.setItem('guiBrowserCdpUrl', guiBrowserCdpUrl); }, [guiBrowserCdpUrl]);
   useEffect(() => { localStorage.setItem('guiAutoStartBrowser', String(guiAutoStartBrowser)); }, [guiAutoStartBrowser]);
-  useEffect(() => { localStorage.setItem('aiMode', aiMode); }, [aiMode]);
+  useEffect(() => {
+    localStorage.setItem('aiMode', productMode === 'web_chat' ? 'smart' : aiMode);
+  }, [aiMode, productMode]);
   
   useEffect(() => { localStorage.setItem('language', language); }, [language]);
   useEffect(() => { localStorage.setItem('messageFontSize', messageFontSize); }, [messageFontSize]);
