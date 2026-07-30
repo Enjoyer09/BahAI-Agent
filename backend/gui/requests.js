@@ -52,8 +52,10 @@ function isGuiOpenAndAwaitRequest(text = '') {
   return Boolean(extractUrlFromGuiRequest(value));
 }
 
-function isGuiContinuationRequest(text = '') {
+function isGuiContinuationRequest(text = '', options = {}) {
   const value = String(text || '').toLowerCase();
+  const hasExplicitGuiContext = /(workflow:\s*gui|gui agent|browser sessiya|browser session|chrome-da|chrome da)/i.test(value);
+  if (!options.hasActiveSession && !hasExplicitGuiContext) return false;
   if (extractUrlFromGuiRequest(value)) return false;
   if (isGuiLoginResumeRequest(value) || isGuiLoginCheckpointRequest(value) || isGuiObserveSelfTestRequest(value)) return false;
   // Don't trigger for file/document comparison or attachment analysis requests

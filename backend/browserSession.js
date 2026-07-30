@@ -418,8 +418,13 @@ async function closeAllSessions() {
   sessions.clear();
 }
 
+function hasSession(sessionId = 'default') {
+  return sessions.has(sessionId);
+}
+
 module.exports = {
   getSession,
+  hasSession,
   closeAllSessions,
   findInstalledChromePath,
   buildDefaultBahaiChromeProfileDir,

@@ -47,11 +47,20 @@ describe('GUI request classifiers', () => {
 
   it('detects price-oriented shopping follow-up requests as gui continuation', () => {
     expect(
-      isGuiContinuationRequest('ən ucuz dell laptopunu tap')
+      isGuiContinuationRequest('ən ucuz dell laptopunu tap', { hasActiveSession: true })
     ).toBe(true);
     expect(
-      isGuiContinuationRequest('en ucuz dell laptopunu axtar tap')
+      isGuiContinuationRequest('en ucuz dell laptopunu axtar tap', { hasActiveSession: true })
     ).toBe(true);
+  });
+
+  it('does not route generic show requests without an active gui session', () => {
+    expect(
+      isGuiContinuationRequest('Developer mesajlarını olduğu kimi göstər')
+    ).toBe(false);
+    expect(
+      isGuiContinuationRequest('Yalnız yekun rəqəmi göstər: 9+8')
+    ).toBe(false);
   });
 
   it('does not treat fresh URL opens as continuation', () => {

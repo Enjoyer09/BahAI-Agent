@@ -1,3 +1,14 @@
+function filterToolCallsByPhase(toolCalls = [], phaseTools = [], normalizeToolName = (name) => name) {
+  const allowedToolNames = new Set(
+    phaseTools
+      .map((tool) => normalizeToolName(tool?.function?.name))
+      .filter(Boolean)
+  );
+  return toolCalls.filter((toolCall) => (
+    allowedToolNames.has(normalizeToolName(toolCall?.function?.name))
+  ));
+}
+
 async function collectStreamOutput({
   stream,
   wireApi,
@@ -149,6 +160,7 @@ async function collectStreamOutput({
       buildToolCallCacheKey(candidate?.function?.name, candidate?.function?.arguments) === cacheKey
     )) === index;
   });
+  normalizedToolCalls = filterToolCallsByPhase(normalizedToolCalls, phaseTools, normalizeToolName);
 
   accumulatedContent = flattenResponseJsonText(accumulatedContent || '');
   const { cleanWebAssistantResponse } = require('./webRagCleaner');
@@ -187,5 +199,6 @@ async function collectStreamOutput({
 }
 
 module.exports = {
-  collectStreamOutput
+  collectStreamOutput,
+  filterToolCallsByPhase
 };

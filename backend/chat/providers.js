@@ -143,6 +143,39 @@ function isResponsesSchemaMismatchError(error) {
   );
 }
 
+function parseModelList(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  if (raw.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+      }
+    } catch {
+      return [];
+    }
+  }
+  return raw
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function uniqueModels(models = []) {
+  const seen = new Set();
+  const list = [];
+  for (const model of models) {
+    const normalized = String(model || '').trim();
+    const key = normalized.toLowerCase();
+    if (normalized && !seen.has(key)) {
+      seen.add(key);
+      list.push(normalized);
+    }
+  }
+  return list;
+}
+
 function buildOpenAIClient(provider) {
   return new OpenAI({
     baseURL: provider.baseURL,
@@ -171,13 +204,23 @@ function buildProviderCandidates({
 
   const OLLAMA_BASE = env.OLLAMA_BASE_URL || 'http://localhost:11434/v1';
   const normalizedFrontendBaseUrl = normalizeProviderBaseUrl(frontendBaseUrl);
-  const defaultLocalModel = env.DESKTOP_LOCAL_DEFAULT_MODEL || env.OLLAMA_DEFAULT_MODEL || 'gemma4:12b';
+  const configuredLocalModel = [
+    env.DESKTOP_LOCAL_DEFAULT_MODEL,
+    env.OLLAMA_DEFAULT_MODEL,
+    env.AUTO_FAST_MODEL,
+    env.OPENAI_MODEL
+  ].find((model) => model && looksLikeOllamaModel(model));
+  const defaultLocalModel = configuredLocalModel || 'gemma4:12b';
   const cloudOnly = productMode === 'web_chat' || executionMode === 'cloud';
   const localOnly = productMode === 'desktop_code' && executionMode === 'local';
   const omniRouteEnabled = String(env.OMNIROUTE_ENABLED || '').toLowerCase() === 'true';
   const omniRouteApiKey = env.OMNIROUTE_API_KEY || '';
   const omniRouteBase = normalizeProviderBaseUrl(env.OMNIROUTE_BASE_URL || '');
   const omniRouteModel = env.OMNIROUTE_MODEL || '';
+  const omniRouteFallbackModels = uniqueModels([
+    omniRouteModel || 'auto',
+    ...parseModelList(env.OMNIROUTE_FALLBACK_MODELS || env.OMNIROUTE_MODELS || '')
+  ]);
 
   function buildCloudProvider({ id, apiKey, baseURL, model }) {
     if (!apiKey || !baseURL || !model) return null;
@@ -198,7 +241,7 @@ function buildProviderCandidates({
       ? (omniRouteApiKey || 'bahai-omniroute')
       : (frontendApiKey || env.OPENAI_API_KEY || '');
     const defaultModel = useOmniRoute
-      ? (omniRouteModel || 'auto')
+      ? (omniRouteFallbackModels[0] || 'auto')
       : (env.OPENAI_MODEL || env.AUTO_SMART_MODEL || env.AUTO_FAST_MODEL || 'gpt-5.5');
     const frontLooksLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));
     // In web mode Railway owns routing. Browser-local or stale provider
@@ -208,7 +251,7 @@ function buildProviderCandidates({
       : '';
     const effectiveBase = requestedBase || defaultBase;
     const effectiveKey = (requestedBase && frontendApiKey) ? frontendApiKey : defaultKey;
-    const isBaseLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(effectiveBase);
+    const isBaseLocal = !useOmniRoute && /localhost|127\.0\.0\.1|11434|1234|8080/i.test(effectiveBase);
 
     if (isBaseLocal) {
       const chosenLocalModel = looksLikeOllamaModel(frontendModel) ? frontendModel : (env.AUTO_FAST_MODEL || env.OPENAI_MODEL || defaultLocalModel);
@@ -221,20 +264,24 @@ function buildProviderCandidates({
       }];
     }
 
-    const fastModel = useOmniRoute ? defaultModel : (env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel);
-    const smartModel = useOmniRoute ? defaultModel : (env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || fastModel);
-    const visionModel = useOmniRoute ? defaultModel : (env.WEB_CHAT_VISION_MODEL || 'google/gemini-2.0-flash-exp:free');
-    const codeModel = useOmniRoute ? defaultModel : (env.WEB_CHAT_CODE_MODEL || smartModel);
     const primaryTask = hasImageAttachment ? 'vision' : webTaskType;
-    const orderedModels = primaryTask === 'vision'
-      ? [visionModel, smartModel, fastModel, codeModel]
-      : primaryTask === 'code'
-        ? [codeModel, smartModel, fastModel, visionModel]
-        : autoIntent === 'smart'
-          ? [smartModel, fastModel, codeModel, visionModel]
-          : [fastModel, smartModel, codeModel, visionModel];
+    const orderedModels = useOmniRoute
+      ? omniRouteFallbackModels
+      : (() => {
+        const fastModel = env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel;
+        const smartModel = env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || fastModel;
+        const visionModel = env.WEB_CHAT_VISION_MODEL || 'google/gemini-2.0-flash-exp:free';
+        const codeModel = env.WEB_CHAT_CODE_MODEL || smartModel;
+        return primaryTask === 'vision'
+          ? [visionModel, smartModel, fastModel, codeModel]
+          : primaryTask === 'code'
+            ? [codeModel, smartModel, fastModel, visionModel]
+            : autoIntent === 'smart'
+              ? [smartModel, fastModel, codeModel, visionModel]
+              : [fastModel, smartModel, codeModel, visionModel];
+      })();
 
-    const candidates = orderedModels
+    const cloudCandidates = orderedModels
       .filter(Boolean)
       .map((model, index) => buildCloudProvider({
         id: index === 0
@@ -246,9 +293,19 @@ function buildProviderCandidates({
       }))
       .filter(Boolean);
 
+    const candidates = [];
+    const seenKeys = new Set();
+    for (const cand of cloudCandidates) {
+      const key = `${cand.baseURL}|${cand.model}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        candidates.push(cand);
+      }
+    }
+
     // Cloud Fallback: OpenRouter Free Models (only if valid key is configured)
     const openRouterKey = env.OPENROUTER_API_KEY || (String(env.OPENAI_API_KEY || '').startsWith('sk-or-') ? env.OPENAI_API_KEY : '');
-    if (openRouterKey) {
+    if (openRouterKey && !seenKeys.has('https://openrouter.ai/api/v1|meta-llama/llama-3.3-70b-instruct:free')) {
       candidates.push({
         id: 'web_auto_openrouter_free_fallback',
         apiKey: openRouterKey,

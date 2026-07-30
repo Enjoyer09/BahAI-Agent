@@ -73,8 +73,10 @@ function createProviderRuntime(opts) {
     },
     canUseProviderNow: function(providerId) {
       if (!providerId) return true;
-      if ((failureCounts[providerId] || 0) >= 3) return false;
-      return !cooldowns[providerId] || Date.now() > cooldowns[providerId];
+      if (!cooldowns[providerId]) return true;
+      if (Date.now() <= cooldowns[providerId]) return false;
+      delete cooldowns[providerId];
+      return true;
     },
     getFailureCount: function(providerId) {
       return failureCounts[providerId] || 0;

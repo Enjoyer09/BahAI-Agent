@@ -54,6 +54,7 @@ describe('runner failover behavior', () => {
   it('treats 503 and network-style errors as retryable', () => {
     expect(isRetryableProviderError({ status: 503, message: 'Service Unavailable' }, () => false)).toBe(true);
     expect(isRetryableProviderError({ message: 'fetch failed ECONNREFUSED' }, () => false)).toBe(true);
+    expect(isRetryableProviderError({ name: 'AbortError', message: 'aborted' }, () => false)).toBe(true);
   });
 
   it('omits tools when final synthesis is forced', async () => {
@@ -129,6 +130,122 @@ describe('runner failover behavior', () => {
     expect(runtime.markSessionProviderSuccess).toHaveBeenCalledWith('web:anon:test', 'fallback');
     expect(telemetry.some((item) => item.event === 'provider_failure' && item.providerId === 'primary')).toBe(true);
     expect(telemetry.some((item) => item.event === 'provider_failover' && item.providerId === 'fallback')).toBe(true);
+  });
+
+  it('switches to the next OmniRoute model when a model returns 401', async () => {
+    const runtime = createProviderRuntime();
+    const primary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'omni-key' };
+    const fallback = { id: 'web_general_fallback_1', wireApi: 'chat_completions', model: 'qwen/qwen3-coder:free', baseURL: 'https://omni.example/v1', apiKey: 'omni-key' };
+    const clients = {
+      [primary.id]: createClientThatFails({ status: 401, message: 'Insufficient balance' }),
+      [fallback.id]: createStreamingClient('omni-model-ok')
+    };
+    const telemetry = [];
+
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: clients[primary.id],
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => clients[provider.id],
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: (event) => telemetry.push(event),
+      providerSessionKey: 'web:anon:omni-401'
+    });
+
+    expect(result.activeProvider.id).toBe(fallback.id);
+    expect(result.effectiveModel).toBe('qwen/qwen3-coder:free');
+    expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id);
+    expect(telemetry.some((item) => item.event === 'provider_failover' && item.providerId === fallback.id)).toBe(true);
+  });
+
+  it('uses a fresh abort signal for a fallback attempt', async () => {
+    vi.useFakeTimers();
+    const runtime = createProviderRuntime();
+    const primary = { id: 'primary', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: 'https://a.example', apiKey: 'a' };
+    const fallback = { id: 'fallback', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: 'https://b.example', apiKey: 'b' };
+    const primaryClient = {
+      chat: {
+        completions: {
+          create: vi.fn((_input, options) => new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+          }))
+        }
+      }
+    };
+    const fallbackClient = createStreamingClient('fallback-after-timeout');
+
+    const resultPromise = openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: primaryClient,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => provider.id === 'fallback' ? fallbackClient : primaryClient,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 10,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:timeout'
+    });
+
+    await vi.advanceTimersByTimeAsync(11);
+    const result = await resultPromise;
+    expect(result.activeProvider.id).toBe('fallback');
+    expect(fallbackClient.chat.completions.create.mock.calls[0][1].signal.aborted).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('uses the only fallback as a last resort during cooldown', async () => {
+    const runtime = createProviderRuntime();
+    const primary = { id: 'primary', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: 'https://a.example', apiKey: 'a' };
+    const fallback = { id: 'fallback', wireApi: 'chat_completions', model: 'qwen:latest', baseURL: 'http://127.0.0.1:11434/v1', apiKey: 'ollama' };
+    const primaryClient = createClientThatFails({ status: 401, message: 'invalid key' });
+    const fallbackClient = createStreamingClient('last-resort-ok');
+    runtime.markProviderFailure('fallback');
+
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: primaryClient,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => provider.id === 'fallback' ? fallbackClient : primaryClient,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:last-resort'
+    });
+
+    expect(result.activeProvider.id).toBe('fallback');
   });
 
   it('returns softer multi-provider network message after alternatives fail', async () => {

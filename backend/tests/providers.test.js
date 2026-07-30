@@ -143,6 +143,96 @@ describe('provider candidate routing', () => {
     expect(candidates[0].apiKey).toBe('omni-key');
   });
 
+  it('expands OmniRoute fallback models for 401 model rotation', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: 'frontend-key-ignored',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'fast',
+      webTaskType: 'general',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        OMNIROUTE_ENABLED: 'true',
+        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
+        OMNIROUTE_API_KEY: 'omni-key',
+        OMNIROUTE_MODEL: 'auto',
+        OMNIROUTE_FALLBACK_MODELS: 'qwen/qwen3-coder:free, meta-llama/llama-3.3-70b-instruct:free, auto'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    expect(candidates.slice(0, 3).map((provider) => provider.model)).toEqual([
+      'auto',
+      'qwen/qwen3-coder:free',
+      'meta-llama/llama-3.3-70b-instruct:free'
+    ]);
+    expect(candidates.slice(0, 3).every((provider) => provider.baseURL === 'https://omniroute.example/v1')).toBe(true);
+    expect(new Set(candidates.slice(0, 3).map((provider) => provider.id)).size).toBe(3);
+  });
+
+  it('keeps local OmniRoute gateway as OmniRoute instead of Ollama', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'fast',
+      webTaskType: 'general',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        OMNIROUTE_ENABLED: 'true',
+        OMNIROUTE_BASE_URL: 'http://localhost:20128/v1',
+        OMNIROUTE_API_KEY: 'omni-key',
+        OMNIROUTE_MODEL: 'auto',
+        OMNIROUTE_FALLBACK_MODELS: 'qwen/qwen3-coder:free'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    expect(candidates[0]).toMatchObject({
+      id: 'web_general_primary_omniroute',
+      baseURL: 'http://localhost:20128/v1',
+      model: 'auto',
+      wireApi: 'chat_completions'
+    });
+    expect(candidates[1]).toMatchObject({
+      baseURL: 'http://localhost:20128/v1',
+      model: 'qwen/qwen3-coder:free'
+    });
+  });
+
+  it('uses the configured fast Ollama model for local web fallback', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'fast',
+      webTaskType: 'general',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        LOCAL_MODE: 'true',
+        OMNIROUTE_ENABLED: 'true',
+        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
+        OMNIROUTE_API_KEY: 'omni-key',
+        OMNIROUTE_MODEL: 'gpt-5.5',
+        AUTO_FAST_MODEL: 'qwen2.5-coder:latest',
+        OPENAI_MODEL: 'qwen2.5-coder:latest',
+        OLLAMA_BASE_URL: 'http://localhost:11434/v1'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    expect(candidates.at(-1)).toMatchObject({
+      id: 'web_auto_ollama_fallback',
+      model: 'qwen2.5-coder:latest'
+    });
+  });
+
   it('ignores stale browser cloud settings when web OmniRoute is enabled', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: 'stale-browser-key',

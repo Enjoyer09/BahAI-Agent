@@ -1,6 +1,7 @@
 function isRetryableProviderError(error, isResponsesSchemaMismatchError) {
   const status = error?.status || error?.code;
   const msg = String(error?.message || '').toLowerCase();
+  if (error?.name === 'AbortError') return true;
   if (status === 401) return true;
   if (status === 408 || status === 409 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
   if (status === 400 || String(status) === '400') {
@@ -37,17 +38,6 @@ async function openAiStreamWithFallback({
   providerSessionKey,
   forceDisableTools = false
 }) {
-  const abortController = new AbortController();
-  const FIRST_CHUNK_TIMEOUT_MS = Math.min(llmTimeoutMs, 15000); // First chunk within 15s
-  let firstChunkTimer = setTimeout(() => abortController.abort(), FIRST_CHUNK_TIMEOUT_MS);
-  const timeoutId = setTimeout(() => {
-    if (firstChunkTimer) {
-      clearTimeout(firstChunkTimer);
-      firstChunkTimer = null;
-    }
-    abortController.abort();
-  }, llmTimeoutMs);
-
   let stream;
   let nextProvider = activeProvider;
   let nextClient = client;
@@ -55,36 +45,39 @@ async function openAiStreamWithFallback({
   let nextMessages = currentMessages;
   let deepSeekRecoveryUsed = false;
   let providerNoToolsFallbackUsed = false;
+  let lastAttemptTimeoutMs = llmTimeoutMs;
 
   async function createStream(provider, providerClient, model, messages, disableTools = false) {
     const apiInputMessages = await normalizeMessagesForModel(messages, model);
     const shouldDisableTools = disableTools || modelDisablesTools(model);
-    // Clear first-chunk timer when we successfully create a stream
-    if (firstChunkTimer) {
-      clearTimeout(firstChunkTimer);
-      firstChunkTimer = null;
-    }
-    if (provider.wireApi === 'responses') {
-      return providerClient.responses.create({
+    const isLocalProvider = /localhost|127\.0\.0\.1|11434|ollama/i.test(String(provider.baseURL || ''));
+    lastAttemptTimeoutMs = isLocalProvider ? Math.max(llmTimeoutMs, 90000) : llmTimeoutMs;
+    const attemptController = new AbortController();
+    const attemptTimer = setTimeout(() => attemptController.abort(), lastAttemptTimeoutMs);
+    try {
+      if (provider.wireApi === 'responses') {
+        return await providerClient.responses.create({
+          model,
+          input: mapMessagesToResponsesInput(apiInputMessages),
+          tools: shouldDisableTools ? undefined : mapToolsToResponsesTools(phaseTools),
+          stream: true,
+          parallel_tool_calls: false
+        }, { signal: attemptController.signal });
+      }
+      return await providerClient.chat.completions.create({
         model,
-        input: mapMessagesToResponsesInput(apiInputMessages),
-        tools: shouldDisableTools ? undefined : mapToolsToResponsesTools(phaseTools),
-        stream: true,
-        parallel_tool_calls: false
-      }, { signal: abortController.signal });
+        messages: apiInputMessages,
+        tools: shouldDisableTools ? undefined : phaseTools,
+        temperature: 0.2,
+        stream: true
+      }, { signal: attemptController.signal });
+    } finally {
+      clearTimeout(attemptTimer);
     }
-    return providerClient.chat.completions.create({
-      model,
-      messages: apiInputMessages,
-      tools: shouldDisableTools ? undefined : phaseTools,
-      temperature: 0.2,
-      stream: true
-    }, { signal: abortController.signal });
   }
 
-  try {
-    while (true) {
-      try {
+  while (true) {
+    try {
         if (providerCandidates.length > 1 && !providerRuntime.canUseProviderNow(nextProvider.id)) {
           const warmAlternative = providerCandidates.find((candidate) => (
             candidate.id !== nextProvider.id && providerRuntime.canUseProviderNow(candidate.id)
@@ -142,11 +135,14 @@ async function openAiStreamWithFallback({
             status: currentErr?.status || currentErr?.code || null,
             message: String(currentErr?.message || '').slice(0, 240)
           });
-          const alternatives = providerCandidates.filter((p) => p.id !== nextProvider.id && providerRuntime.canUseProviderNow(p.id));
+          const allAlternatives = providerCandidates.filter((provider) => provider.id !== nextProvider.id);
+          const warmAlternatives = allAlternatives.filter((provider) => providerRuntime.canUseProviderNow(provider.id));
+          const alternatives = warmAlternatives.length > 0 ? warmAlternatives : allAlternatives;
           for (const alt of alternatives) {
             try {
               const altClient = buildOpenAIClient(alt);
               stream = await createStream(alt, altClient, alt.model, nextMessages, forceDisableTools);
+              const previousProviderId = nextProvider.id;
               nextProvider = alt;
               nextClient = altClient;
               nextModel = alt.model;
@@ -155,7 +151,7 @@ async function openAiStreamWithFallback({
               onProviderTelemetry?.({
                 event: 'provider_failover',
                 fromProviderId: activeProvider?.id || null,
-                previousProviderId: nextProvider.id,
+                previousProviderId,
                 providerId: alt.id,
                 model: alt.model,
                 baseURL: alt.baseURL,
@@ -225,7 +221,7 @@ async function openAiStreamWithFallback({
         }
 
         if (currentErr.name === 'AbortError') {
-          const sec = Math.round(llmTimeoutMs / 1000);
+          const sec = Math.round(lastAttemptTimeoutMs / 1000);
           return {
             errorEvent: { type: 'error', message: `Model ${sec}s ərzində cavab vermədi. Daha kiçik model (məs. Qwen 2.5 Coder 7B) sınayın və ya \`LLM_TIMEOUT_MS\` env-i artırın.` }
           };
@@ -319,13 +315,6 @@ async function openAiStreamWithFallback({
         return {
           errorEvent: { type: 'error', message: userMsg }
         };
-      }
-    }
-  } finally {
-    clearTimeout(timeoutId);
-    if (firstChunkTimer) {
-      clearTimeout(firstChunkTimer);
-      firstChunkTimer = null;
     }
   }
 }

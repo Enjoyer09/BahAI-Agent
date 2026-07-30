@@ -150,6 +150,16 @@ AUTO_FAST_MODEL=qwen2.5-coder:7b
 AUTO_SMART_MODEL=anthropic/claude-sonnet-4.5
 ```
 
+OmniRoute istifadə edirsinizsə, pulsuz model fallback siyahısını BahAI səviyyəsində də verə bilərsiniz. `auto` uğursuz olarsa, 401/429/5xx kimi retryable xətalarda növbəti model sınanır:
+
+```bash
+OMNIROUTE_ENABLED=true
+OMNIROUTE_BASE_URL=http://localhost:20128/v1
+OMNIROUTE_API_KEY=bahai-omniroute
+OMNIROUTE_MODEL=auto
+OMNIROUTE_FALLBACK_MODELS=qwen/qwen3-coder:free,meta-llama/llama-3.3-70b-instruct:free,google/gemini-2.0-flash-exp:free
+```
+
 ### Variant B: Manual Provider Pool (failover)
 
 ```bash
