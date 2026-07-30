@@ -472,6 +472,10 @@ export async function getConversationMessages(id: string, input?: { limit?: numb
 
 export async function extractAttachments(attachments: Attachment[]): Promise<Attachment[]> {
   if (attachments.length === 0) return [];
+  const images = attachments.filter((attachment) => attachment.type === 'image' || /^image\//i.test(attachment.mimeType || ''));
+  const documents = attachments.filter((attachment) => !images.includes(attachment));
+  // Vision-capable cloud models need the original image, not a slow OCR pass.
+  if (documents.length === 0) return attachments;
   
   // Use AbortController with 120s timeout for large file processing
   const controller = new AbortController();
@@ -483,7 +487,7 @@ export async function extractAttachments(attachments: Attachment[]): Promise<Att
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ attachments }),
+      body: JSON.stringify({ attachments: documents }),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
@@ -493,8 +497,8 @@ export async function extractAttachments(attachments: Attachment[]): Promise<Att
       console.warn('Attachment extraction failed:', response.status);
       return attachments.map(attachment => ({
         ...attachment,
-        extractedText: '',
-        extractionError: `Server xətası: ${response.status}`
+        extractedText: attachment.type === 'image' ? attachment.extractedText : '',
+        extractionError: attachment.type === 'image' ? attachment.extractionError : `Server xətası: ${response.status}`
       }));
     }
     const data = await response.json();
@@ -506,6 +510,7 @@ export async function extractAttachments(attachments: Attachment[]): Promise<Att
           ? [data.attachment]
           : [];
     return attachments.map(attachment => {
+      if (images.includes(attachment)) return attachment;
       const match = extracted.find((item: Attachment) => item.id === attachment.id);
       if (match && match.extractedText) {
         // Extraction successful — keep extractedText, keep URL as backup

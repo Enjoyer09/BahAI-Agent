@@ -108,10 +108,44 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
     }
   }, [text, attachments, loading, blockedByActionCenter, onSend]);
 
-  const pushFiles = useCallback((_files: FileList | null) => {
-    // Attachments currently disabled
-    return;
-  }, []);
+  const pushFiles = useCallback((files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    const allowedExtensions = /\.(png|jpe?g|gif|webp|pdf|docx?|xlsx?|csv|txt|md|json|ya?ml|xml|log)$/i;
+    const selected = Array.from(files).slice(0, Math.max(0, 5 - attachments.length));
+    if (selected.length === 0) {
+      toast?.('Bir mesajda maksimum 5 fayl əlavə etmək olar.', 'info', 4000);
+      return;
+    }
+
+    void Promise.all(selected.map((file) => new Promise<Attachment | null>((resolve) => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast?.(`${file.name}: fayl ölçüsü 10 MB-dan böyükdür.`, 'error', 5000);
+        resolve(null);
+        return;
+      }
+      if (!file.type.startsWith('image/') && !allowedExtensions.test(file.name)) {
+        toast?.(`${file.name}: bu fayl növü dəstəklənmir.`, 'error', 5000);
+        resolve(null);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => resolve({
+        id: globalThis.crypto?.randomUUID?.() || `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name,
+        type: file.type.startsWith('image/') ? 'image' : 'file',
+        mimeType: file.type || 'application/octet-stream',
+        url: String(reader.result || ''),
+      });
+      reader.onerror = () => {
+        toast?.(`${file.name}: faylı oxumaq alınmadı.`, 'error', 5000);
+        resolve(null);
+      };
+      reader.readAsDataURL(file);
+    }))).then((items) => {
+      const valid = items.filter((item): item is Attachment => Boolean(item));
+      if (valid.length > 0) setAttachments((previous) => [...previous, ...valid].slice(0, 5));
+    });
+  }, [attachments.length, toast]);
 
   const removeAttachment = useCallback((idx: number) => {
     setAttachments(prev => prev.filter((_, i) => i !== idx));
@@ -182,12 +216,11 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
           onDrop={handleDrop}
           onDragOver={handleDragOver}
         >
-          {/* Attach button — Pre-Beta Grayed Out */}
+          {/* Attach button */}
           <button
             type="button"
-            onClick={() => {
-              toast?.("Hələ ki Pre-Beta versiya olduğuna görə fayl yükləmələri (attachments) aktiv edilməyib. Komandamız sizin rahatlığınız üçün aktiv şəkildə çalışır! 🚀", "info", 5000);
-            }}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading || blockedByActionCenter || attachments.length >= 5}
             className="rounded-full transition-all shrink-0 flex items-center justify-center cursor-pointer hover:opacity-75 active:scale-95"
             style={{
               color: 'var(--fg-muted)',
@@ -195,13 +228,25 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
               height: isMobile ? '30px' : '44px',
               background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.06)',
-              opacity: 0.45,
+              opacity: loading || blockedByActionCenter || attachments.length >= 5 ? 0.45 : 1,
             }}
-            title="Pre-Beta: Fayl yükləmə müvəqqəti passivdir"
-            aria-label="Attach file pre-beta"
+            title="Şəkil və ya fayl əlavə et"
+            aria-label="Attach file"
           >
             {isMobile ? <Plus size={16} /> : <Paperclip size={20} />}
           </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json,.yaml,.yml,.xml,.log"
+            onChange={(event) => {
+              pushFiles(event.target.files);
+              event.target.value = '';
+            }}
+            aria-label="Choose attachment"
+          />
 
           {/* Textarea */}
           <textarea

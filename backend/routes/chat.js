@@ -294,7 +294,9 @@ router.post('/', async (req, res) => {
   const requestAttachment = requestAttachments[0] || null;
   const hasAttachment = requestAttachments.length > 0;
   const hasAttachmentInRequest = hasAttachment && !latestUserText;
-  const hasImageAttachment = requestAttachments.some(att => /^image\//i.test(String(att.mimetype || att.type || '')));
+  const hasImageAttachment = requestAttachments.some((att) => (
+    att?.type === 'image' || /^image\//i.test(String(att?.mimeType || att?.mimetype || att?.type || ''))
+  ));
 
   if (!latestUserText && !hasAttachmentInRequest) {
     return res.status(400).json({ error: 'Mesaj tələb olunur' });
