@@ -49,44 +49,37 @@ async function openSettings(page) {
   const sidebarSettingsButton = page.getByRole('button', { name: /parametrlər/i });
   assert(await sidebarSettingsButton.count() >= 1, 'Parametrlər button tapılmadı');
   await sidebarSettingsButton.first().click();
-  await page.waitForFunction(() => {
-    const text = document.body.innerText || '';
-    return text.includes('Execution Source') && text.includes('Desktop Runtime Status');
-  }, { timeout: 12000 });
+  const aiTab = page.getByRole('button', { name: 'Süni İntellekt', exact: true });
+  assert(await aiTab.count() === 1, 'Süni İntellekt settings tab tapılmadı');
+  await aiTab.click();
+  await page.waitForFunction(() => (document.body.innerText || '').includes('Manual (Pro)'), { timeout: 12000 });
 }
 
 async function switchExecutionMode(page, mode) {
-  const button = page.getByRole('button', { name: new RegExp(`^${mode}$`, 'i') });
-  assert(await button.count() >= 1, `${mode} button tapılmadı`);
-  await button.first().click();
-  await page.waitForTimeout(1000);
+  const manual = page.getByText('⚙️ Manual (Pro)', { exact: true });
+  assert(await manual.count() === 1, 'Manual (Pro) seçimi tapılmadı');
+  await manual.click();
+  const select = page.getByLabel('Execution mode', { exact: true });
+  assert(await select.count() === 1, 'Execution mode seçimi tapılmadı');
+  await select.selectOption(mode.toLowerCase());
 }
 
 async function assertLocalMode(page) {
-  await page.waitForFunction(() => {
-    const text = document.body.innerText || '';
-    return text.includes('Local Desktop aktivdir');
-  }, { timeout: 10000 });
-  const body = await page.locator('body').innerText();
-  assert(
-    body.includes('Desktop Runtime Status') && (body.includes('Ollama') || body.includes('Local Fix Guidance') || body.includes('lokal modellər')),
-    'Local runtime guidance/status görünmədi'
-  );
+  const select = page.getByLabel('Execution mode', { exact: true });
+  assert(await select.inputValue() === 'local', 'Local mode tətbiq olunmadı');
+  assert((await page.getByLabel('Provider base URL', { exact: true }).inputValue()).includes('11434'), 'Local Ollama URL tətbiq olunmadı');
 }
 
 async function assertCloudMode(page) {
-  await page.waitForFunction(() => {
-    const text = document.body.innerText || '';
-    return text.includes('Cloud Desktop aktivdir');
-  }, { timeout: 10000 });
-  const body = await page.locator('body').innerText();
-  assert(body.includes('Desktop Runtime Status'), 'Cloud runtime status görünmədi');
+  const select = page.getByLabel('Execution mode', { exact: true });
+  assert(await select.inputValue() === 'cloud', 'Cloud mode tətbiq olunmadı');
+  assert(!(await page.getByLabel('Provider base URL', { exact: true }).inputValue()).includes('11434'), 'Cloud mode lokal URL ilə qaldı');
 }
 
 async function closeSettings(page) {
-  const doneButton = page.getByRole('button', { name: /bitdi/i });
-  assert(await doneButton.count() >= 1, 'Bitdi button tapılmadı');
-  await doneButton.first().click();
+  const closeButton = page.getByRole('button', { name: 'Parametrləri bağla', exact: true });
+  assert(await closeButton.count() >= 1, 'Parametrləri bağla düyməsi tapılmadı');
+  await closeButton.first().click();
   await page.waitForTimeout(500);
 }
 

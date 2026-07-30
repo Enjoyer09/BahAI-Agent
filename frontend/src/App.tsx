@@ -31,7 +31,8 @@ function LazyFallback() {
 
 // FUNC-FIX: cache so we only check Electron once and avoid repeatedly hitting
 // `window.navigator.userAgent` deep inside render.
-const isElectron = typeof window !== 'undefined' && window.navigator.userAgent.includes('Electron');
+const isElectron = typeof window !== 'undefined'
+  && (Boolean((window as any).electron?.isDesktop) || window.navigator.userAgent.includes('Electron'));
 
 function AppContent() {
   const auth = useAuth();
@@ -78,6 +79,21 @@ function AppContent() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  useEffect(() => {
+    const electron = (window as any).electron;
+    const disposeSettings = electron?.onOpenSettings?.(() => {
+      window.dispatchEvent(new CustomEvent('bahai-open-settings'));
+    });
+    const disposeNewChat = electron?.onNewChat?.(() => {
+      const projectId = chat.activeProject?.id || chat.projects?.[0]?.id;
+      if (projectId) chat.createConversation(projectId);
+    });
+    return () => {
+      disposeSettings?.();
+      disposeNewChat?.();
+    };
+  }, [chat.activeProject?.id, chat.createConversation, chat.projects]);
 
   useEffect(() => {
     if (auth.user && !auth.loading) setAuthModalOpen(false);
@@ -129,13 +145,7 @@ function AppContent() {
   const autoPreview = chat.activeProject?.name?.match(/site|web|app|frontend|ui/i);
   const selectedWorkflow = WORKFLOW_OPTIONS.find((item) => item.id === settings.workflow);
   const isDesktopProduct = settings.productMode === 'desktop_code';
-  const desktopIsLocal = isDesktopProduct && settings.executionMode === 'local';
   const allowDesktopAuxPanels = isDesktopProduct;
-  const browserModeLabel = settings.guiBrowserMode === 'persistent'
-    ? 'Chrome Profile'
-    : settings.guiBrowserMode === 'bundled'
-      ? 'Chrome Testing'
-      : 'CDP';
 
   // Landing page
   if (!isChat) {
@@ -316,51 +326,19 @@ function AppContent() {
           </div>
         )}
 
-        {isDesktopProduct && (
-          <div
-            className="px-3 sm:px-4 py-2 shrink-0"
-            style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}
-          >
-            <div className={isMobile ? 'max-w-3xl mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar whitespace-nowrap pb-1' : 'max-w-3xl mx-auto flex flex-wrap items-center gap-2'}>
-              <span
-                className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
-                style={{ background: 'var(--bg-hover)', color: 'var(--fg-main)', border: '1px solid var(--border)' }}
-              >
-                {`Desktop • ${settings.executionMode === 'local' ? 'Local' : 'Cloud'}`}
+        {isDesktopProduct && !isMobile && (
+          <div className="desktop-contextbar">
+            <div className="desktop-contextbar-copy">
+              <strong>{chat.activeConversation?.title || 'Yeni söhbət'}</strong>
+              <span>
+                {settings.executionMode === 'local' ? 'Lokal' : 'Cloud'}
+                {' · '}
+                {settings.aiMode === 'manual' ? settings.model : 'Smart routing'}
+                {' · '}
+                {settings.orchestrationMode ? (selectedWorkflow?.name || settings.workflow) : 'Tək agent'}
+                {chat.activeProject ? ` · ${chat.activeProject.name}` : ''}
+                {chat.safeMode ? ' · Təsdiqli icra' : ' · Avtomatik icra'}
               </span>
-              <span
-                className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
-                style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
-              >
-                {settings.orchestrationMode ? `Workflow: ${selectedWorkflow?.name || settings.workflow}` : 'Workflow off'}
-              </span>
-              {!desktopIsLocal && (
-                <span
-                  className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
-                  style={{ background: 'var(--bg-hover)', color: 'var(--fg-secondary)', border: '1px solid var(--border)' }}
-                >
-                  Browser: {browserModeLabel}
-                </span>
-              )}
-              <span
-                className="text-[11px] px-2.5 py-1 rounded-md shrink-0"
-                style={{
-                  background: chat.safeMode ? 'rgba(245, 158, 11, 0.12)' : 'rgba(34, 197, 94, 0.12)',
-                  color: chat.safeMode ? '#fbbf24' : '#86efac',
-                  border: '1px solid var(--border)'
-                }}
-              >
-                {chat.safeMode ? 'Safe Mode' : 'Auto Execute'}
-              </span>
-              {chat.activeProject && (
-                <span
-                  className="text-[11px] px-2.5 py-1 rounded-md truncate max-w-[180px] shrink-0"
-                  style={{ background: 'var(--bg-hover)', color: 'var(--fg-muted)', border: '1px solid var(--border)' }}
-                  title={chat.activeProject.path}
-                >
-                  {chat.activeProject.name}
-                </span>
-              )}
             </div>
           </div>
         )}

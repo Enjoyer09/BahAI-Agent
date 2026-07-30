@@ -35,7 +35,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
   const [showTools, setShowTools] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
-  
+  const isDesktopProduct = productMode === 'desktop_code';
   const isBot = message.role === 'assistant';
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -140,17 +140,27 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
     const systemText = String(message.content || '');
     const isMetaSystemNote = /^(Workflow:|Faza:|☁️ Auto|🦙 Auto)/i.test(systemText);
     if (productMode === 'web_chat' && isMetaSystemNote) return null;
+    const compactSystemText = isMetaSystemNote
+      ? systemText
+          .replace(/\*\*/g, '')
+          .replace(/\s*\|\s*/g, ' · ')
+          .replace(/\nMarşrut:[^\n]*/i, '')
+          .replace(/\nSəbəb:[\s\S]*/i, '')
+          .replace(/^Workflow:\s*/i, '')
+          .replace(/^Faza:\s*/i, '')
+          .trim()
+      : systemText;
     return (
-      <div className="flex items-center justify-center my-2" data-testid={`system-note-${message.id}`}>
+      <div className="flex items-center justify-center my-1" data-testid={`system-note-${message.id}`}>
         <div
-          className="text-xs px-3 py-1 rounded-full"
+          className="text-[11px] px-2.5 py-1 rounded-full truncate max-w-full"
           style={{
             background: 'var(--bg-hover)',
             color: 'var(--fg-secondary)',
             border: '1px solid var(--border-subtle)'
           }}
         >
-          <span>{renderInlineSystemContent(message.content || '')}</span>
+          <span>{renderInlineSystemContent(compactSystemText)}</span>
         </div>
       </div>
     );
@@ -162,7 +172,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
   return (
     <div className="group animate-in" style={{ animationDelay: '50ms' }}>
       <div className={`flex items-start ${isMobile ? (isBot ? 'pl-2' : 'justify-end') : 'gap-2.5 sm:gap-4'}`}>
-        {!isMobile && (
+        {!isMobile && !isDesktopProduct && (
         <div
           className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
           style={{
@@ -187,7 +197,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
         </div>
         )}
 
-        <div className={`flex-1 min-w-0 ${isMobile && !isBot ? 'max-w-[85%]' : ''}`}>
+        <div className={`flex-1 min-w-0 ${(isMobile || isDesktopProduct) && !isBot ? 'max-w-[85%] ml-auto' : ''}`}>
           {/* Running indicator */}
           {isBot && hasRunningTools && (
             <div
@@ -205,7 +215,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
 
           <div
             className={`leading-relaxed break-words ${isMobile && !isBot ? 'rounded-2xl px-4 py-2.5' : 'rounded-[22px] px-4 py-3 sm:px-4.5 sm:py-3.5'} ${isMobile && isBot ? 'pl-2' : ''}`}
-            style={isBot ? (isMobile ? {
+            style={isBot ? ((isMobile || isDesktopProduct) ? {
               background: 'transparent',
               border: 'none',
               boxShadow: 'none'
@@ -213,8 +223,8 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
               background: 'var(--bg-surface-elevated, rgba(255,255,255,0.03))',
               border: '1px solid var(--border-subtle)',
               boxShadow: '0 14px 34px rgba(0,0,0,0.06)'
-            }) : (isMobile ? {
-              background: 'rgba(16, 185, 129, 0.15)',
+            }) : ((isMobile || isDesktopProduct) ? {
+              background: 'var(--bg-surface-alt)',
               border: 'none',
             } : {
               background: 'rgba(255,255,255,0.03)',

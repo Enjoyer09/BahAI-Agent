@@ -713,6 +713,42 @@ button, a, [role="button"] {
   box-shadow: 0 10px 30px rgba(0,0,0,0.1);
 }
 
+.desktop-contextbar {
+  min-height: 52px;
+  padding: 7px 116px 7px 20px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-main) 94%, var(--bg-surface));
+}
+
+.desktop-contextbar-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.desktop-contextbar-copy strong,
+.desktop-contextbar-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-contextbar-copy strong {
+  color: var(--fg-main);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.desktop-contextbar-copy span {
+  margin-top: 2px;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
 .composer-input-row {
   display: flex;
   align-items: flex-end;

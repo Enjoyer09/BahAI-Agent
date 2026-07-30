@@ -297,7 +297,7 @@ export default function SettingsModal({
             {isDesktopProduct && (
               <div>
                 <label style={labelStyle}><Zap size={14} /> Rejim (Execution Mode)</label>
-                <select style={inputStyle} value={executionMode} onChange={(e) => setExecutionMode(e.target.value as 'cloud' | 'local')}>
+                <select aria-label="Execution mode" style={inputStyle} value={executionMode} onChange={(e) => setExecutionMode(e.target.value as 'cloud' | 'local')}>
                   <option value="cloud">☁️ Bulud (Cloud / API)</option>
                   <option value="local">💻 Lokal (Ollama / LMStudio)</option>
                 </select>
@@ -305,15 +305,15 @@ export default function SettingsModal({
             )}
             <div>
               <label style={labelStyle}><Globe size={14} /> Base URL</label>
-              <input style={inputStyle} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" />
+              <input aria-label="Provider base URL" style={inputStyle} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" />
             </div>
             <div>
               <label style={labelStyle}><Key size={14} /> API Key</label>
-              <input style={inputStyle} type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." />
+              <input aria-label="Provider API key" style={inputStyle} type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." />
             </div>
             <div>
               <label style={labelStyle}><Code2 size={14} /> Model</label>
-              <select style={inputStyle} value={model} onChange={(e) => setModel(e.target.value)}>
+              <select aria-label="AI model" style={inputStyle} value={model} onChange={(e) => setModel(e.target.value)}>
                 {MODELS.map((m) => (
                   <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>
                 ))}
@@ -380,7 +380,7 @@ export default function SettingsModal({
         <div className="w-full md:w-64 bg-[var(--bg-hover)] border-b md:border-b-0 md:border-r border-[var(--border)] flex flex-col shrink-0">
           <div className="p-3 sm:p-5 flex items-center justify-between">
             <h2 className="text-lg sm:text-xl font-bold text-[var(--fg-main)]">Tənzimləmələr</h2>
-            <button onClick={onClose} className="p-2 rounded-full hover:bg-[var(--bg-active)] text-[var(--fg-muted)] transition-colors active:scale-95">
+            <button aria-label="Parametrləri bağla" onClick={onClose} className="p-2 rounded-full hover:bg-[var(--bg-active)] text-[var(--fg-muted)] transition-colors active:scale-95">
               <X size={20} />
             </button>
           </div>
@@ -413,7 +413,7 @@ export default function SettingsModal({
         {/* Content Area */}
         <div className="flex-1 flex flex-col min-h-0 relative">
           <div className="hidden md:flex absolute top-4 right-4 z-10">
-            <button onClick={onClose} className="p-2 rounded-full hover:bg-[var(--bg-hover)] bg-[var(--bg-surface)] text-[var(--fg-muted)] hover:text-[var(--fg-main)] transition-all border border-[var(--border)] shadow-sm">
+            <button aria-label="Parametrləri bağla" onClick={onClose} className="p-2 rounded-full hover:bg-[var(--bg-hover)] bg-[var(--bg-surface)] text-[var(--fg-muted)] hover:text-[var(--fg-main)] transition-all border border-[var(--border)] shadow-sm">
               <X size={18} />
             </button>
           </div>

@@ -128,6 +128,12 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
   const [newProjName, setNewProjName] = useState('');
   const [newProjPath, setNewProjPath] = useState('');
   const [newProjRepo, setNewProjRepo] = useState('');
+
+  useEffect(() => {
+    const openSettings = () => setShowSettings(true);
+    window.addEventListener('bahai-open-settings', openSettings);
+    return () => window.removeEventListener('bahai-open-settings', openSettings);
+  }, []);
   const [githubConnected, setGithubConnected] = useState(false);
   const [githubUsername, setGithubUsername] = useState<string | null>(null);
   const [githubRepos, setGithubRepos] = useState<Array<{ id: number; name: string; fullName: string; private: boolean; cloneUrl: string }>>([]);

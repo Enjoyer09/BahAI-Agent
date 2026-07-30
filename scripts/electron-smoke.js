@@ -37,16 +37,16 @@ async function openSettings(page) {
   const settingsButton = page.getByRole('button', { name: /parametrlər/i });
   assert(await settingsButton.count() >= 1, 'Parametrlər button tapılmadı');
   await settingsButton.first().click();
-  await page.waitForFunction(() => {
-    const text = document.body.innerText || '';
-    return text.includes('Execution Source') && text.includes('Desktop Runtime Status');
-  }, { timeout: 15000 });
+  const aiTab = page.getByRole('button', { name: 'Süni İntellekt', exact: true });
+  assert(await aiTab.count() === 1, 'Süni İntellekt settings tab tapılmadı');
+  await aiTab.click();
+  await page.waitForFunction(() => (document.body.innerText || '').includes('Manual (Pro)'), { timeout: 15000 });
 }
 
 async function closeSettings(page) {
-  const doneButton = page.getByRole('button', { name: /bitdi/i });
-  assert(await doneButton.count() >= 1, 'Bitdi button tapılmadı');
-  await doneButton.first().click();
+  const closeButton = page.getByRole('button', { name: 'Parametrləri bağla', exact: true });
+  assert(await closeButton.count() >= 1, 'Parametrləri bağla düyməsi tapılmadı');
+  await closeButton.first().click();
   await page.waitForTimeout(500);
 }
 

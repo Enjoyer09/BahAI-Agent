@@ -2,7 +2,7 @@
 // useSettings Hook — localStorage persistence
 // ==========================================
 
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import type { Settings } from '../lib/types';
 import { DEFAULT_BASE_URL, DEFAULT_SETTINGS } from '../lib/constants';
 
@@ -27,7 +27,9 @@ function loadBoolSetting(key: string, fallback: boolean): boolean {
 export function useSettings() {
   const [productMode] = useState<'web_chat' | 'desktop_code'>(() => {
     try {
-      return window.navigator.userAgent.includes('Electron') ? 'desktop_code' : 'web_chat';
+      return (window as any).electron?.isDesktop || window.navigator.userAgent.includes('Electron')
+        ? 'desktop_code'
+        : 'web_chat';
     } catch {
       return 'web_chat';
     }
@@ -66,9 +68,9 @@ export function useSettings() {
     const saved = loadSetting('aiMode', DEFAULT_SETTINGS.aiMode);
     return saved === 'manual' ? 'manual' : 'smart';
   });
-  const setAiMode = (mode: 'smart' | 'manual') => {
+  const setAiMode = useCallback((mode: 'smart' | 'manual') => {
     setAiModeState(productMode === 'web_chat' ? 'smart' : mode);
-  };
+  }, [productMode]);
 
   // Appearance & Layout Settings
   const [language, setLanguage] = useState(() => loadSetting('language', 'en'));

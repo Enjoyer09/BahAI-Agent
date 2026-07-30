@@ -145,9 +145,11 @@ function startBackend() {
       PATH: `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:${process.env.PATH || ''}`
     };
 
-    // Find node binary - Electron may not inherit shell PATH
+    // Packaged Electron can run the backend as Node, so the desktop app does
+    // not depend on a system-wide Node.js installation.
     const fs = require('fs');
     const nodeCandidates = [
+      app.isPackaged ? process.execPath : null,
       '/usr/local/bin/node',
       '/opt/homebrew/bin/node',
       '/usr/bin/node',
@@ -168,6 +170,9 @@ function startBackend() {
     // Fallback: use 'node' from PATH (works in --dev mode)
     if (!selectedNode) {
       selectedNode = 'node';
+    }
+    if (app.isPackaged && selectedNode === process.execPath) {
+      env.ELECTRON_RUN_AS_NODE = '1';
     }
 
     if (verboseDesktopLogs) {
@@ -245,13 +250,15 @@ function createWindow() {
   if (process.argv.includes('--dev') && !useBackendUiInDev) {
     // Dev mode: use Vite dev server
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    if (process.env.BAHAI_DESKTOP_DEVTOOLS === 'true') {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
   } else {
     // Production/desktop mode: use backend-served frontend build so the app
     // is not coupled to a stale or conflicting Vite dev server.
     mainWindow.loadURL(`http://localhost:${BACKEND_PORT}`);
-    if (process.argv.includes('--dev')) {
-      mainWindow.webContents.openDevTools();
+    if (process.argv.includes('--dev') && process.env.BAHAI_DESKTOP_DEVTOOLS === 'true') {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
     }
   }
 
@@ -347,18 +354,13 @@ function createMenu() {
 
 // App lifecycle
 app.whenReady().then(async () => {
-  // Set up microphone/media permission handlers
+  // The current product has no voice workflow. Never grant camera or
+  // microphone access silently.
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === 'media') {
-      return callback(true); // Auto-approve media (mic) permission
-    }
     callback(false);
   });
 
   session.defaultSession.setPermissionCheckHandler((webContents, permission, origin) => {
-    if (permission === 'media') {
-      return true; // Auto-allow media check
-    }
     return false;
   });
 
