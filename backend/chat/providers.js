@@ -185,46 +185,59 @@ function buildProviderCandidates({
     if (productMode === 'web_chat') {
       list.push(...resolveWebAutoPlan());
     } else {
-    const cloudKey = frontendApiKey || env.OPENAI_API_KEY || '';
-    const normalizedEnvBase = normalizeProviderBaseUrl(env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1');
-    const frontendLooksLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));
-    const cloudBase = (cloudOnly && frontendLooksLocal)
-      ? normalizedEnvBase
-      : (normalizedFrontendBaseUrl || normalizedEnvBase);
-    const fastLocal = env.AUTO_FAST_MODEL || 'qwen2.5-coder:7b';
-    const smartCloud = env.AUTO_SMART_MODEL || 'anthropic/claude-sonnet-4.5';
+      const cloudKey = frontendApiKey || env.OPENAI_API_KEY || '';
+      const normalizedEnvBase = normalizeProviderBaseUrl(env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1');
+      const frontendLooksLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));
+      const cloudBase = (cloudOnly && frontendLooksLocal)
+        ? normalizedEnvBase
+        : (normalizedFrontendBaseUrl || normalizedEnvBase);
+      const fastLocal = env.AUTO_FAST_MODEL || 'qwen2.5-coder:7b';
+      const smartCloud = env.AUTO_SMART_MODEL || 'anthropic/claude-sonnet-4.5';
 
-    const localProvider = { id: 'auto_ollama_fast', apiKey: 'ollama', baseURL: OLLAMA_BASE, model: fastLocal };
-    const cloudProvider = cloudKey ? { id: 'auto_cloud_smart', apiKey: cloudKey, baseURL: cloudBase, model: smartCloud, wireApi: detectWireApi(cloudBase) } : null;
+      const localProvider = { id: 'auto_ollama_fast', apiKey: 'ollama', baseURL: OLLAMA_BASE, model: fastLocal };
+      const cloudProvider = cloudKey ? { id: 'auto_cloud_smart', apiKey: cloudKey, baseURL: cloudBase, model: smartCloud, wireApi: detectWireApi(cloudBase) } : null;
 
-    if (cloudOnly) {
-      if (cloudProvider) list.push(cloudProvider);
-    } else if (autoIntent === 'smart' && cloudProvider) {
-      list.push(cloudProvider);
-      list.push(localProvider);
-    } else {
-      list.push(localProvider);
-      if (cloudProvider) list.push(cloudProvider);
+      if (cloudOnly) {
+        if (cloudProvider) list.push(cloudProvider);
+      } else if (autoIntent === 'smart' && cloudProvider) {
+        list.push(cloudProvider);
+        list.push(localProvider);
+      } else {
+        list.push(localProvider);
+        if (cloudProvider) list.push(cloudProvider);
+      }
     }
-    }
-  } else if (!localOnly && frontendModel && looksLikeOllamaModel(frontendModel) && !cloudOnly) {
-    list.push({
-      id: 'local_ollama_auto',
-      apiKey: 'ollama',
-      baseURL: OLLAMA_BASE,
-      model: frontendModel,
-      wireApi: 'chat_completions'
-    });
   }
 
-  if (!localOnly && frontendApiKey && frontendBaseUrl && frontendModel && frontendModel !== 'auto') {
-    list.push({
-      id: 'frontend',
-      apiKey: frontendApiKey,
-      baseURL: normalizedFrontendBaseUrl,
-      model: frontendModel,
-      wireApi: detectWireApi(normalizedFrontendBaseUrl)
-    });
+  if (!localOnly && frontendModel && frontendModel !== 'auto') {
+    const cloudKey = frontendApiKey || (env.OPENAI_API_KEY !== 'ollama' ? env.OPENAI_API_KEY : '');
+    const cloudBase = normalizeProviderBaseUrl(frontendBaseUrl || (env.OPENAI_BASE_URL !== OLLAMA_BASE ? env.OPENAI_BASE_URL : 'https://openrouter.ai/api/v1'));
+    
+    if (looksLikeOllamaModel(frontendModel) && !cloudOnly) {
+      list.push({
+        id: 'local_ollama_auto',
+        apiKey: 'ollama',
+        baseURL: OLLAMA_BASE,
+        model: frontendModel,
+        wireApi: 'chat_completions'
+      });
+    } else if (frontendApiKey && normalizedFrontendBaseUrl) {
+      list.push({
+        id: 'frontend',
+        apiKey: frontendApiKey,
+        baseURL: normalizedFrontendBaseUrl,
+        model: frontendModel,
+        wireApi: detectWireApi(normalizedFrontendBaseUrl)
+      });
+    } else if (cloudKey) {
+      list.push({
+        id: 'env_cloud_explicit',
+        apiKey: cloudKey,
+        baseURL: cloudBase,
+        model: frontendModel,
+        wireApi: detectWireApi(cloudBase)
+      });
+    }
   }
 
   const getProviderPool = typeof parseProviderPoolFromEnv === 'function' ? parseProviderPoolFromEnv : (() => []);
@@ -242,16 +255,14 @@ function buildProviderCandidates({
     }
   }
 
-  const envApiKey = env.OPENAI_API_KEY || env.NVIDIA_API_KEY || '';
-  const envBase = env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
-  const envModel = env.OPENAI_MODEL || 'qwen/qwen3-coder:free';
-  if (!localOnly && envApiKey && frontendModel !== 'auto') {
+  // Append local Ollama fallback as last resort if not in pure cloud-restricted mode
+  if (!localOnly && !cloudOnly) {
     list.push({
-      id: env.OPENAI_API_KEY ? 'env_openai' : 'env_nvidia',
-      apiKey: envApiKey,
-      baseURL: envBase,
-      model: envModel,
-      wireApi: detectWireApi(envBase)
+      id: 'local_ollama_last_resort',
+      apiKey: 'ollama',
+      baseURL: OLLAMA_BASE,
+      model: defaultLocalModel,
+      wireApi: 'chat_completions'
     });
   }
 
