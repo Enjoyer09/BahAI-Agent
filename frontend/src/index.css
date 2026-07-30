@@ -518,6 +518,119 @@ button, a, [role="button"] {
    RESPONSIVE BREAKPOINTS
    ========================================== */
 @media (max-width: 768px) {
+  html, body, #root {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  textarea, input {
+    font-size: 16px;
+  }
+
+  .mobile-topbar {
+    min-height: calc(52px + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 8px 0;
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
+    align-items: center;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--bg-main) 88%, transparent);
+    border-bottom: 1px solid var(--border-subtle);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+  }
+
+  .mobile-topbar-side {
+    display: flex;
+    align-items: center;
+  }
+
+  .mobile-topbar-side-right {
+    justify-content: flex-end;
+  }
+
+  .mobile-topbar-button {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    color: var(--fg-main);
+    touch-action: manipulation;
+  }
+
+  .mobile-topbar-button:active {
+    background: var(--bg-hover);
+    transform: scale(0.96);
+  }
+
+  .mobile-topbar-title {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.2;
+  }
+
+  .mobile-topbar-title strong {
+    font-size: 15px;
+    font-weight: 650;
+  }
+
+  .mobile-topbar-title span {
+    max-width: 100%;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--fg-muted);
+    font-size: 11px;
+  }
+
+  .mobile-chat-scroll {
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    scroll-padding-bottom: 24px;
+  }
+
+  .mobile-message-list {
+    width: 100%;
+    padding-bottom: 18px;
+  }
+
+  .mobile-composer-dock {
+    padding: 6px 10px max(8px, env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--bg-main) 78%, transparent);
+  }
+
+  .mobile-message-actions button {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .composer-frame {
+    border-radius: 24px;
+  }
+
+  .composer-input-row {
+    min-height: 48px;
+  }
+
+  .composer-textarea {
+    font-size: 16px;
+    padding: 11px 2px;
+  }
+
+  .composer-attachment-tray {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    touch-action: pan-x;
+  }
+
   .toast-container {
     top: env(safe-area-inset-top, 0.5rem);
     bottom: auto;
@@ -585,6 +698,125 @@ button, a, [role="button"] {
   .mobile-disclaimer {
     display: none;
   }
+}
+
+.composer-frame {
+  width: 100%;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 6px;
+  overflow: hidden;
+  color: var(--fg-main);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}
+
+.composer-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.composer-icon-button,
+.composer-send-button {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--fg-muted);
+  touch-action: manipulation;
+}
+
+.composer-icon-button:disabled,
+.composer-send-button:disabled {
+  opacity: 0.4;
+}
+
+.composer-send-button {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+  color: white;
+  background: var(--color-accent);
+}
+
+.composer-send-button.is-stop {
+  color: white;
+  background: var(--color-danger);
+}
+
+.composer-textarea {
+  min-width: 0;
+  min-height: 44px;
+  max-height: 160px;
+  flex: 1;
+  padding: 10px 4px;
+  overflow-y: auto;
+  resize: none;
+  border: 0;
+  outline: 0;
+  color: var(--fg-main);
+  background: transparent;
+  line-height: 1.45;
+}
+
+.composer-attachment-tray {
+  display: flex;
+  gap: 8px;
+  padding: 4px 4px 8px;
+}
+
+.composer-attachment {
+  position: relative;
+  width: 72px;
+  height: 64px;
+  flex: 0 0 72px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface-alt);
+}
+
+.composer-attachment img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.composer-attachment > button {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: white;
+  background: rgba(15, 23, 42, 0.82);
+}
+
+.composer-file-preview {
+  height: 100%;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  color: var(--fg-muted);
+}
+
+.composer-file-preview span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
 }
 
 @media (min-width: 769px) {

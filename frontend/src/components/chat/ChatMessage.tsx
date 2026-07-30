@@ -310,7 +310,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
 
           {/* Message actions — always visible on mobile */}
           {isBot && !hasRunningTools && (
-            <div className={`mt-2 flex flex-wrap items-center ${isMobile ? 'gap-0.5' : 'gap-1.5 sm:gap-1'} mobile-visible`} style={{ opacity: 1 }} role="group" aria-label="Message actions">
+            <div className={`mt-2 flex flex-wrap items-center ${isMobile ? 'gap-0.5 mobile-message-actions' : 'gap-1.5 sm:gap-1'} mobile-visible`} style={{ opacity: 1 }} role="group" aria-label="Message actions">
               <button
                 onClick={copyToClipboard}
                 onKeyDown={(e) => handleActionKeyDown(e, copyToClipboard)}

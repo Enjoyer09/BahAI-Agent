@@ -254,7 +254,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
 
         {/* Pre-Beta Note */}
         <div className="mt-8 text-center text-xs text-slate-500 max-w-md">
-          ℹ️ Pre-Beta sınaq dövründəyik. Fayl yükləmələri müvəqqəti passivdir; mətn və canlı axtarış funksionallığı 100% aktivdir.
+          ℹ️ Pre-Beta sınaq dövründəyik. Mətn, şəkil, fayl və canlı axtarış funksionallığı aktivdir.
         </div>
         {/* Scroll indicator */}
         <div className="absolute bottom-4 animate-bounce" style={{ opacity: 0.3 }}>

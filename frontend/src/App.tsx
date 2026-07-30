@@ -189,7 +189,7 @@ function AppContent() {
         </aside>
       )}
 
-      {/* MOBILE SIDEBAR OVERLAY — FULL SCREEN */}
+      {/* MOBILE SIDEBAR DRAWER */}
       {sidebarOpen && isMobile && (
         <>
           <div
@@ -200,8 +200,10 @@ function AppContent() {
           <aside
             className="fixed inset-y-0 left-0 z-50 flex flex-col overflow-hidden animate-slide-in-left safe-top safe-bottom"
             style={{
-              width: '100vw',
+              width: 'min(86vw, 360px)',
               background: 'var(--bg-surface)',
+              borderRight: '1px solid var(--border)',
+              boxShadow: '24px 0 64px rgba(0,0,0,0.3)',
             }}
           >
             <Sidebar
@@ -282,45 +284,29 @@ function AppContent() {
           </>
         )}
 
-        {/* Mobile top bar — Gemini Mobile App style */}
+        {/* Mobile top bar */}
         {isMobile && (
-          <div className="flex items-center justify-between px-3 py-2 shrink-0 safe-top gap-2"
-               style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
-            <div className="flex items-center gap-2">
+          <div className="mobile-topbar safe-top">
+            <div className="mobile-topbar-side">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="p-2 rounded-full hover:bg-[var(--bg-hover)] transition-colors active:scale-95 text-[var(--fg-main)]"
+                className="mobile-topbar-button"
                 aria-label="Open menu"
               >
-                <Menu size={22} />
+                <Menu size={21} />
               </button>
-
-              {/* Gemini-style Model Pill Selector */}
-              <div 
-                onClick={() => setSidebarOpen(true)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-[var(--bg-hover)] border border-[var(--border)] active:scale-95 transition-transform cursor-pointer shadow-sm"
-              >
-                <div className="relative w-5 h-5 rounded-full overflow-hidden shrink-0 border border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.4)]">
-                  <img 
-                    src="/assets/bahar_avatar.jpg" 
-                    alt="Bahar Avatar" 
-                    className="w-full h-full object-cover object-center"
-                  />
-                </div>
-                <span className="text-xs font-semibold text-[var(--fg-main)] tracking-tight">
-                  ✨ Bahar Smart
-                </span>
-                <span className="text-[10px] text-[var(--fg-muted)]">▾</span>
-              </div>
             </div>
-
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="mobile-topbar-title">
+              <strong>BahAI</strong>
+              <span>{chat.activeConversation?.title || 'Yeni chat'}</span>
+            </div>
+            <div className="mobile-topbar-side mobile-topbar-side-right">
               <button
                 onClick={() => {
                   if (chat.activeProject) chat.createConversation(chat.activeProject.id);
                   else if (chat.projects && chat.projects.length > 0) chat.createConversation(chat.projects[0].id);
                 }}
-                className="p-2 rounded-full hover:bg-[var(--bg-hover)] transition-colors active:scale-95 text-[var(--fg-main)]"
+                className="mobile-topbar-button"
                 aria-label="New chat"
                 title="Yeni chat"
               >
@@ -394,7 +380,10 @@ function AppContent() {
           onEdit={chat.editMessage}
           onRegenerate={chat.regenerateMessage}
         />
-        <div className={`shrink-0 w-full ${chat.messages.length === 0 && settings.centerChatInput ? 'max-w-3xl mx-auto mb-auto mt-0' : 'max-w-3xl mx-auto'} ${settings.maximizeChatSpace ? '!max-w-full !px-8' : ''}`}>
+        <div className={isMobile
+          ? 'mobile-composer-dock shrink-0 w-full'
+          : `shrink-0 w-full ${chat.messages.length === 0 && settings.centerChatInput ? 'max-w-3xl mx-auto mb-auto mt-0' : 'max-w-3xl mx-auto'} ${settings.maximizeChatSpace ? '!max-w-full !px-8' : ''}`
+        }>
           <Composer
             onSendMessage={(text, attachments) => {
               chat.sendMessage(text, attachments); 

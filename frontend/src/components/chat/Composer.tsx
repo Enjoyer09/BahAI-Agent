@@ -1,81 +1,114 @@
-/**
- * bahAI - Composer + Attachment Tray
- * Adapted from LibreChat's input area.
- * Provides a UI logic pattern for adding/removing attachments before sending a message.
- */
-
-import React, { useState, useRef } from 'react';
-import { Paperclip, Send, X, FileText, Square } from 'lucide-react';
-
-interface Attachment {
-  id: string;
-  file: File;
-  previewUrl?: string;
-}
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { FileText, Paperclip, Send, Square, X } from 'lucide-react';
+import type { Attachment } from '../../lib/types';
+import { useToast } from '../common/Toast';
 
 interface ComposerProps {
-  onSendMessage: (text: string, attachments: File[]) => void;
+  onSendMessage: (text: string, attachments: Attachment[]) => void;
   disabled?: boolean;
   isGenerating?: boolean;
   onStop?: () => void;
   settings?: any;
 }
 
+const MAX_ATTACHMENTS = 5;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const ALLOWED_FILE = /\.(png|jpe?g|gif|webp|pdf|docx?|xlsx?|csv|txt|md|json|ya?ml|xml|log)$/i;
+
+function fileToAttachment(file: File): Promise<Attachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({
+      id: globalThis.crypto?.randomUUID?.() || `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: file.name,
+      type: file.type.startsWith('image/') ? 'image' : 'file',
+      mimeType: file.type || 'application/octet-stream',
+      url: String(reader.result || ''),
+    });
+    reader.onerror = () => reject(new Error(`${file.name}: faylı oxumaq alınmadı.`));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function Composer({ onSendMessage, disabled, isGenerating, onStop, settings }: ComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const toastCtx = useToast();
+  const toast = toastCtx?.toast;
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newAttachments = Array.from(e.target.files).map(file => ({
-        id: Math.random().toString(36).substring(7),
-        file,
-        previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
-      }));
-      setAttachments(prev => [...prev, ...newAttachments]);
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, [text]);
+
+  const addFiles = useCallback(async (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    const available = MAX_ATTACHMENTS - attachments.length;
+    if (available <= 0) {
+      toast?.('Bir mesajda maksimum 5 fayl əlavə etmək olar.', 'info', 4000);
+      return;
     }
-  };
 
-  const removeAttachment = (id: string) => {
-    setAttachments(prev => prev.filter(att => att.id !== id));
-  };
-
-  const handleSubmit = () => {
-    if ((text.trim() || attachments.length > 0) && !disabled) {
-      onSendMessage(text, attachments.map(a => a.file));
-      setText('');
-      setAttachments([]);
+    const accepted: File[] = [];
+    for (const file of Array.from(files).slice(0, available)) {
+      if (file.size > MAX_FILE_SIZE) {
+        toast?.(`${file.name}: maksimum ölçü 10 MB-dır.`, 'error', 5000);
+      } else if (!file.type.startsWith('image/') && !ALLOWED_FILE.test(file.name)) {
+        toast?.(`${file.name}: bu fayl növü dəstəklənmir.`, 'error', 5000);
+      } else {
+        accepted.push(file);
+      }
     }
-  };
+
+    const results = await Promise.allSettled(accepted.map(fileToAttachment));
+    const next = results
+      .filter((result): result is PromiseFulfilledResult<Attachment> => result.status === 'fulfilled')
+      .map((result) => result.value);
+    const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failed) toast?.(String(failed.reason?.message || 'Fayl oxunmadı.'), 'error', 5000);
+    if (next.length > 0) setAttachments((previous) => [...previous, ...next].slice(0, MAX_ATTACHMENTS));
+  }, [attachments.length, toast]);
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((previous) => previous.filter((attachment) => attachment.id !== id));
+  }, []);
+
+  const handleSubmit = useCallback(() => {
+    if ((!text.trim() && attachments.length === 0) || disabled) return;
+    onSendMessage(text.trim(), attachments);
+    setText('');
+    setAttachments([]);
+  }, [attachments, disabled, onSendMessage, text]);
 
   return (
-    <div 
-      className="flex flex-col w-full rounded-lg shadow-sm p-3 relative"
-      style={{
-        backgroundColor: 'var(--bg-elevated)',
-        border: '1px solid var(--border)',
-        color: 'var(--fg-main)'
+    <div
+      className="composer-frame"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        void addFiles(event.dataTransfer.files);
       }}
     >
-      {/* Attachment Tray */}
       {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-3 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
-          {attachments.map(att => (
-            <div 
-              key={att.id} 
-              className="relative flex items-center justify-center rounded-md p-1 h-16 w-16 group"
-              style={{ backgroundColor: 'var(--bg-surface-alt)', border: '1px solid var(--border-subtle)' }}
-            >
-              {att.previewUrl ? (
-                <img src={att.previewUrl} alt="preview" className="h-full w-full object-cover rounded" />
+        <div className="composer-attachment-tray no-scrollbar" aria-label="Selected attachments">
+          {attachments.map((attachment) => (
+            <div key={attachment.id} className="composer-attachment">
+              {attachment.type === 'image' ? (
+                <img src={attachment.url} alt={attachment.name} />
               ) : (
-                <FileText size={24} style={{ color: 'var(--fg-muted)' }} />
+                <div className="composer-file-preview">
+                  <FileText size={18} />
+                  <span>{attachment.name}</span>
+                </div>
               )}
               <button
-                onClick={() => removeAttachment(att.id)}
-                className="absolute -top-2 -right-2 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ backgroundColor: 'var(--color-danger)', color: 'white' }}
+                type="button"
+                onClick={() => removeAttachment(attachment.id)}
+                aria-label={`${attachment.name} faylını sil`}
               >
                 <X size={12} />
               </button>
@@ -84,82 +117,67 @@ export function Composer({ onSendMessage, disabled, isGenerating, onStop, settin
         </div>
       )}
 
-      {/* Input Area */}
-      <div className="flex items-end gap-2">
-        <button 
+      <div className="composer-input-row">
+        <button
           type="button"
-          onClick={() => {
-            if (typeof window !== 'undefined' && (window as any).__BAHAI_TOAST) {
-              (window as any).__BAHAI_TOAST("Hələ ki Pre-Beta versiya olduğuna görə fayl yükləmələri (attachments) aktiv edilməyib. Komandamız sizin rahatlığınız üçün aktiv şəkildə çalışır! 🚀", "info", 5000);
-            } else {
-              alert("Hələ ki Pre-Beta versiya olduğuna görə fayl yükləmələri (attachments) aktiv edilməyib. Komandamız sizin rahatlığınız üçün aktiv şəkildə çalışır! 🚀");
-            }
-          }}
-          className="p-2 transition-all opacity-40 cursor-pointer hover:opacity-75 active:scale-95"
-          style={{ color: 'var(--fg-muted)', filter: 'grayscale(100%)' }}
-          title="Pre-Beta: Fayl yükləmə müvəqqəti passivdir"
-          aria-label="Attach file pre-beta"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled || attachments.length >= MAX_ATTACHMENTS}
+          className="composer-icon-button"
+          title="Şəkil və ya fayl əlavə et"
+          aria-label="Attach file"
         >
           <Paperclip size={20} />
         </button>
-        <input 
-          type="file" 
-          multiple 
-          className="hidden" 
-          ref={fileInputRef} 
-          onChange={handleFileSelect}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json,.yaml,.yml,.xml,.log"
+          onChange={(event) => {
+            void addFiles(event.target.files);
+            event.target.value = '';
+          }}
+          aria-label="Choose attachment"
         />
-        
+
         <textarea
+          ref={textareaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            const shouldEnterToSend = settings?.enterToSend !== false;
-            
-            if (e.key === 'Enter') {
-              if (shouldEnterToSend) {
-                if (!e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              } else {
-                // If Enter To Send is OFF, Enter just adds a newline. 
-                // Wait, if it just adds a newline, we don't preventDefault.
-                // But how do they send? They click the button. Or maybe Shift+Enter sends? 
-                // Usually if EnterToSend is off, Shift+Enter or Ctrl+Enter sends.
-                if (e.ctrlKey || e.metaKey) {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }
+          onChange={(event) => setText(event.target.value)}
+          onPaste={(event) => {
+            const imageFiles = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'));
+            if (imageFiles.length > 0) {
+              event.preventDefault();
+              void addFiles(imageFiles);
+            }
+          }}
+          onKeyDown={(event) => {
+            const enterToSend = settings?.enterToSend !== false;
+            if (event.key !== 'Enter') return;
+            if ((enterToSend && !event.shiftKey) || (!enterToSend && (event.ctrlKey || event.metaKey))) {
+              event.preventDefault();
+              handleSubmit();
             }
           }}
           placeholder="Mesajınızı yazın..."
-          className="flex-1 bg-transparent outline-none resize-none max-h-32 py-2"
-          style={{ color: 'var(--fg-main)' }}
+          className="composer-textarea"
           rows={1}
           disabled={disabled}
+          aria-label="Message input"
         />
 
         {isGenerating ? (
-          <button 
-            onClick={onStop}
-            className="p-2 rounded-md transition-opacity hover:opacity-90"
-            style={{ backgroundColor: 'var(--color-danger)', color: 'white' }}
-            title="Yaradılmanı Dayandır (Stop Generation)"
-          >
-            <Square size={18} fill="currentColor" />
+          <button type="button" onClick={onStop} className="composer-send-button is-stop" aria-label="Stop generation">
+            <Square size={16} fill="currentColor" />
           </button>
         ) : (
-          <button 
+          <button
+            type="button"
             onClick={handleSubmit}
             disabled={disabled || (!text.trim() && attachments.length === 0)}
-            className="p-2 rounded-md transition-opacity hover:opacity-90 disabled:opacity-50"
-            style={{ 
-              backgroundColor: (disabled || (!text.trim() && attachments.length === 0)) ? 'var(--bg-surface-alt)' : 'var(--color-accent)',
-              color: (disabled || (!text.trim() && attachments.length === 0)) ? 'var(--fg-muted)' : 'white'
-            }}
-            title="Göndər (Send)"
+            className="composer-send-button"
+            aria-label="Send message"
           >
             <Send size={18} />
           </button>
