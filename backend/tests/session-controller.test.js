@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runChatSession } from '../chat/sessionController.js';
+import { runChatSession, prepareWebFinalSynthesisMessages } from '../chat/sessionController.js';
 
 function createReq() {
   return {
@@ -28,6 +28,19 @@ function createRunManager() {
 }
 
 describe('runChatSession', () => {
+  it('converts tool history into plain research context for final synthesis', () => {
+    const prepared = prepareWebFinalSynthesisMessages([
+      { role: 'user', content: 'Bazarı araşdır' },
+      { role: 'assistant', content: null, tool_calls: [{ id: 't1', function: { name: 'web_search' } }] },
+      { role: 'tool', tool_call_id: 't1', content: 'Bazar nəticəsi və mənbə' },
+      { role: 'assistant', content: '<｜｜DSML｜｜tool_calls>yenidən axtar</｜｜DSML｜｜tool_calls>' },
+    ]);
+
+    expect(prepared.some((item) => item.role === 'assistant')).toBe(false);
+    expect(prepared.some((item) => item.role === 'tool')).toBe(false);
+    expect(prepared.some((item) => item.role === 'system' && item.content.includes('Bazar nəticəsi'))).toBe(true);
+  });
+
   it('emits final assistant_message for partial streamed text and schedules a completion retry', async () => {
     const req = createReq();
     const res = createRes();

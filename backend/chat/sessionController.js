@@ -1,3 +1,28 @@
+function prepareWebFinalSynthesisMessages(messages = []) {
+  const prepared = [];
+  for (const message of messages) {
+    if (!message || !message.role) continue;
+    const content = String(message.content || '').trim();
+    if (message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      continue;
+    }
+    if (message.role === 'assistant' && /(?:DSML|tool_calls|<invoke\b|<function_calls)/i.test(content)) {
+      continue;
+    }
+    if (message.role === 'tool') {
+      if (content) {
+        prepared.push({
+          role: 'system',
+          content: `[Araşdırma mənbəsi]\n${content.slice(0, 8000)}`
+        });
+      }
+      continue;
+    }
+    prepared.push(message);
+  }
+  return prepared.slice(-24);
+}
+
 async function runChatSession({
   req,
   res,
@@ -99,9 +124,10 @@ async function runChatSession({
       currentMessages = phaseContext.currentMessages;
       const forceFinalSynthesis = productMode === 'web_chat' && step === stepLimit;
       if (forceFinalSynthesis) {
+        currentMessages = prepareWebFinalSynthesisMessages(currentMessages);
         currentMessages.push({
           role: 'system',
-          content: 'Bu son cavab mərhələsidir. Daha heç bir tool çağırma. Toplanmış mənbə və tool nəticələrinə əsasən istifadəçinin tələb etdiyi formatda konkret yekun cavab yaz. Məlumat çatışmırsa bunu qısa qeyd et, amma cavabı boş buraxma.'
+          content: 'Bu son cavab mərhələsidir. Daha heç bir tool çağırma və tool-call sintaksisi yazma. Yuxarıdakı araşdırma mənbələrinə əsasən istifadəçinin tələb etdiyi formatda konkret yekun cavab yaz. Məlumat çatışmırsa bunu qısa qeyd et, amma cavabı boş buraxma.'
         });
       }
 
@@ -386,5 +412,6 @@ async function runChatSession({
 }
 
 module.exports = {
-  runChatSession
+  runChatSession,
+  prepareWebFinalSynthesisMessages
 };
