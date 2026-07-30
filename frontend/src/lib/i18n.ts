@@ -117,7 +117,9 @@ function getDefaultLocale(): Locale {
   try {
     const saved = localStorage.getItem('locale');
     if (saved === 'az' || saved === 'en') return saved;
-  } catch {}
+  } catch {
+    // Ignore unavailable browser storage.
+  }
   
   // Detect from browser language
   const browserLang = navigator.language?.toLowerCase() || '';
@@ -130,7 +132,11 @@ let currentLocale: Locale = getDefaultLocale();
 
 export function setLocale(locale: Locale) {
   currentLocale = locale;
-  try { localStorage.setItem('locale', locale); } catch {}
+  try {
+    localStorage.setItem('locale', locale);
+  } catch {
+    // Ignore unavailable browser storage.
+  }
 }
 
 export function getLocale(): Locale {

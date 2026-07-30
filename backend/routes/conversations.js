@@ -280,6 +280,16 @@ router.post('/', async (req, res) => {
       });
     }
 
+    if (projectId) {
+      const projectResult = await db.query(
+        'SELECT id FROM projects WHERE id = $1 AND user_id = $2',
+        [projectId, req.user.id]
+      );
+      if (projectResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Project tapılmadı' });
+      }
+    }
+
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');

@@ -7,6 +7,9 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs/promises');
 const { isPathSafe, resolveWorkingDirectory, readPdfFile, fileExists } = require('../helpers');
+const { requireWorkspaceAccess } = require('../auth');
+
+router.use(requireWorkspaceAccess);
 
 // GET /api/files (mounted at /api) — List directory contents
 router.get('/files', async (req, res) => {

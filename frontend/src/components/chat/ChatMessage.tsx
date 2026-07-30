@@ -1,4 +1,4 @@
-import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Bot, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import { User, Copy, Check, FileText, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { useState, useCallback, useRef, lazy, Suspense } from 'react';
 import ToolCallCard from './ToolCallCard';
 import type { Message } from '../../lib/types';
@@ -256,7 +256,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
 
             {/* Content */}
             {(() => {
-              let displayContent = (message.content || '')
+              const displayContent = (message.content || '')
                 .replace(/```(?:json)?[\s\S]*?```/gi, (match) => {
                   if (/name|arguments|query|web_search|browser_open/i.test(match)) return '';
                   return match;

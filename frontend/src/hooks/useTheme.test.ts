@@ -2,7 +2,7 @@
 // useTheme Hook Tests
 // ==========================================
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTheme } from './useTheme';
 

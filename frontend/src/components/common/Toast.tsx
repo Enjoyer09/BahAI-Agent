@@ -21,7 +21,11 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function useToast() {
-  return useContext(ToastContext);
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within ToastProvider');
+  }
+  return context;
 }
 
 const ICONS: Record<ToastType, React.ComponentType<{ size?: number; className?: string }>> = {

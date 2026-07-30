@@ -11,7 +11,6 @@ import {
   Shield,
   Sparkles,
   Bot,
-  Play,
 } from 'lucide-react';
 
 interface LandingPageProps {
@@ -117,12 +116,6 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       title: 'Daha Dərin İşə Keç',
       desc: 'Lazım olanda desktop tətbiqinə keçərək Local və ya Cloud source ilə kod agent axınlarını davam etdir.',
     },
-  ];
-
-  const stats = [
-    { value: '2', label: 'MƏHSUL XƏTTİ' },
-    { value: 'Cloud', label: 'CHAT-FIRST WEB' },
-    { value: 'Desktop', label: 'CODE AGENT' },
   ];
 
   return (

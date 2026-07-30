@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { MessageSquare, Square, ArrowDownToLine } from 'lucide-react';
+import { ArrowDownToLine } from 'lucide-react';
 import type { Message } from '../../lib/types';
 import ChatMessage from './ChatMessage';
 import { ErrorBoundary } from '../common/ErrorBoundary';
@@ -24,14 +24,12 @@ export default function ChatArea({
   messages,
   loading,
   onSend,
-  onStop,
   onLoadOlderMessages,
   canLoadOlderMessages = false,
   loadingOlderMessages = false,
   workingDirectory,
   productMode = 'desktop_code',
   settings,
-  onEdit,
   onRegenerate
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);

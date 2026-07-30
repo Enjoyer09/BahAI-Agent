@@ -1,9 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
-import { X, Code2, MonitorCog, Type, AlignLeft, Maximize, PanelRightClose, PanelBottom, Sun, Moon, Layout, Eye, Send, FileText, Brain, ArrowDownToLine, Zap, Key, Globe, LayoutTemplate, ShieldAlert, CircleOff, CheckCircle2, AlertTriangle, Workflow } from 'lucide-react';
+import { useState } from 'react';
+import { X, Code2, Type, AlignLeft, Maximize, PanelRightClose, PanelBottom, Sun, Eye, Send, FileText, Brain, ArrowDownToLine, Zap, Key, Globe, LayoutTemplate, ShieldAlert, Workflow } from 'lucide-react';
 import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
 import { MODELS, WORKFLOW_OPTIONS } from '../../lib/constants';
-import { getDesktopRuntimeStatus, getGuiCapabilities, getInstalledBrowsers } from '../../lib/api';
-import type { GuiCapabilityStatus } from '../../lib/types';
 
 interface Props {
   isOpen: boolean;
@@ -69,8 +67,6 @@ export default function SettingsModal({
     model, setModel, performanceMode, setPerformanceMode,
     orchestrationMode, setOrchestrationMode, workflow, setWorkflow,
     customInstructions, setCustomInstructions,
-    guiBrowserMode, setGuiBrowserMode, guiBrowserPath, setGuiBrowserPath,
-    guiBrowserCdpUrl, setGuiBrowserCdpUrl, guiAutoStartBrowser, setGuiAutoStartBrowser,
     apiKey, setApiKey, baseUrl, setBaseUrl,
     language, setLanguage, messageFontSize, setMessageFontSize,
     chatDirection, setChatDirection, maximizeChatSpace, setMaximizeChatSpace,
@@ -80,9 +76,6 @@ export default function SettingsModal({
     autoScroll, setAutoScroll,
     aiMode, setAiMode,
   } = settingsCtx;
-
-  const [browsers, setBrowsers] = useState<Array<any>>([]);
-  const [guiCapabilities, setGuiCapabilities] = useState<GuiCapabilityStatus | null>(null);
 
   if (!isOpen) return null;
 

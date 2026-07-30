@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import { Save, Check, Loader2 } from 'lucide-react';
 import { API_BASE_URL } from '../../lib/constants';
@@ -85,9 +85,9 @@ export default function CodeEditor({ filePath, workingDirectory }: Props) {
       }
     };
     fetchFile();
-  }, [filePath, workingDirectory]);
+  }, [filePath, workingDirectory, toast]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     setSaving(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/write-file`, {
@@ -105,7 +105,7 @@ export default function CodeEditor({ filePath, workingDirectory }: Props) {
     } finally {
       setSaving(false);
     }
-  };
+  }, [content, filePath, toast, workingDirectory]);
 
   // Ctrl+S to save
   useEffect(() => {
@@ -117,7 +117,7 @@ export default function CodeEditor({ filePath, workingDirectory }: Props) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [content, originalContent, saving]);
+  }, [content, handleSave, originalContent, saving]);
 
   const isDirty = content !== originalContent;
   const fileExtension = filePath.split('.').pop()?.toLowerCase() || 'plaintext';

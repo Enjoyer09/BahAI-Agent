@@ -45,7 +45,6 @@ import {
   mergeGuiCapabilitiesIntoMemory,
   resolveActiveGuiSessionInMemory,
   isToolCallLikeText,
-  areAssistantMessagesNearDuplicate,
   simplifyAssistantTextForDedupe,
 } from '../lib/chatRuntime';
 import type { SendMessageContext } from '../store/chatService';
@@ -120,6 +119,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   // ==========================================
   // Workspace Hydration
   // ==========================================
+  const workspaceProductMode = settings.productMode;
   useEffect(() => {
     if (!userKey) {
       dispatch({ type: 'SET_HYDRATED', hydrated: true });
@@ -127,7 +127,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     }
     let cancelled = false;
     const init = async () => {
-      const result = await loadWorkspace(userKey, settings);
+      const result = await loadWorkspace(userKey, { productMode: workspaceProductMode });
       if (cancelled) return;
       if (result.serverBacked) {
         dispatch({ type: 'SET_PROJECTS', projects: result.projects });
@@ -148,7 +148,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     };
     init();
     return () => { cancelled = true; };
-  }, [userKey]);
+  }, [userKey, workspaceProductMode]);
 
   // ==========================================
   // Auto-init Default Project & Conversation
@@ -185,7 +185,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     } else if (!state.activeConvId && state.conversations.length > 0) {
       dispatch({ type: 'SET_ACTIVE_CONV_ID', id: state.conversations[0].id });
     }
-  }, [state.hydrated, state.serverBacked, state.projects.length, state.conversations.length, state.activeConvId]);
+  }, [settings.productMode, state.hydrated, state.serverBacked, state.projects.length, state.conversations, state.activeConvId]);
 
   // ==========================================
   // Computed Values
@@ -295,7 +295,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
           cdpUrl: settings.guiBrowserCdpUrl,
         });
         if (cancelled) return;
-        const merged = mergeGuiCapabilitiesIntoMemory(state.projectMemory, guiCapabilities);
+        const merged = mergeGuiCapabilitiesIntoMemory(stateRef.current.projectMemory, guiCapabilities);
         dispatch({ type: 'MERGE_PROJECT_MEMORY', memory: merged });
       } catch { /* silent */ }
     };
@@ -385,11 +385,6 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       }
       const normalizedIncomingLoose = simplifyAssistantTextForDedupe(normalizedIncoming);
       const normalizedLastLoose = simplifyAssistantTextForDedupe(normalizedLast);
-      const recentAssistantContents = msgs
-        .filter((item) => item.role === 'assistant')
-        .slice(-3)
-        .map((item) => simplifyAssistantTextForDedupe(String(item.content || '').trim()))
-        .filter(Boolean);
       if (!normalizedIncoming && lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
         msgs.pop();
         dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
@@ -454,6 +449,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     },
 
     addToolResult: (toolMsg: Message, _updatedToolCallId: string) => {
+      void _updatedToolCallId;
       const convId = activeConvIdRef.current;
       if (!convId) return;
       const conv = conversationsRef.current.find(c => c.id === convId);
@@ -526,7 +522,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     incrementPreviewKey: () => {
       dispatch({ type: 'INCREMENT_PREVIEW_KEY' });
     },
-  }), [activeProject]);
+  }), [activeProject, settings.productMode]);
 
   const ensureConversationForSend = useCallback(async (): Promise<{ convId: string; project: Project | null }> => {
     const existingConvId = activeConvIdRef.current;
@@ -745,7 +741,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         .catch(console.error);
     }
     return newConv.id;
-  }, [state.serverBacked, state.abortController]);
+  }, [settings.productMode, state.serverBacked, state.abortController]);
 
   const createProject = useCallback((name: string, path: string, repoUrl?: string) => {
     const newProj: Project = { id: generateId(), name, path, createdAt: Date.now(), repoUrl };

@@ -109,7 +109,7 @@ function groupByDate(conversations: Conversation[]): { label: string; items: Con
   }
 
   return Object.entries(groups)
-    .filter(([_, items]) => items.length > 0)
+    .filter(([, items]) => items.length > 0)
     .map(([label, items]) => ({ label, items }));
 }
 
@@ -128,7 +128,6 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
   const [newProjName, setNewProjName] = useState('');
   const [newProjPath, setNewProjPath] = useState('');
   const [newProjRepo, setNewProjRepo] = useState('');
-  const [githubToken, setGithubToken] = useState('');
   const [githubConnected, setGithubConnected] = useState(false);
   const [githubUsername, setGithubUsername] = useState<string | null>(null);
   const [githubRepos, setGithubRepos] = useState<Array<{ id: number; name: string; fullName: string; private: boolean; cloneUrl: string }>>([]);
@@ -139,10 +138,13 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
   const addBtnRef = useRef<HTMLButtonElement>(null);
 
   const safeProjects = Array.isArray(chat.projects) ? chat.projects : [];
-  const safeConversations = Array.isArray(chat.conversations) ? chat.conversations : [];
+  const safeConversations = useMemo(
+    () => Array.isArray(chat.conversations) ? chat.conversations : [],
+    [chat.conversations]
+  );
   const activeProjects = safeProjects.filter(p => p && !p.archived);
 
-  const filteredConversations = useMemo(() => safeConversations, [safeConversations]);
+  const filteredConversations = safeConversations;
 
   const grouped = useMemo(() => groupByDate(filteredConversations), [filteredConversations]);
 
@@ -157,12 +159,13 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const searchConversations = chat.searchConversations;
   useEffect(() => {
     const timer = setTimeout(() => {
-      chat.searchConversations?.(searchQuery);
+      searchConversations?.(searchQuery);
     }, 220);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchConversations, searchQuery]);
 
   useEffect(() => {
     if (!showSettings) return;
@@ -220,7 +223,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
           setNewProjPath('');
         }
       }
-    } catch (e) {
+    } catch {
       toast.error('Qovluq seçimi zamanı xəta baş verdi.');
     }
   };

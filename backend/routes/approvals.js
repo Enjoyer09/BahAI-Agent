@@ -14,6 +14,9 @@ router.post('/approvals/:id', async (req, res) => {
     }
     const interaction = req.chatRuntime?.getInteraction(req.params.id);
     if (!interaction) return res.status(404).json({ error: 'Approval tapılmadı' });
+    if (String(interaction.userId || '') !== String(req.user?.id || '')) {
+      return res.status(404).json({ error: 'Approval tapılmadı' });
+    }
     if (interaction.status !== 'pending') return res.status(400).json({ error: 'Bu approval artıq cavablandırılıb' });
 
     if (interaction._resolve) {
@@ -31,6 +34,10 @@ router.post('/checkpoints/:id', async (req, res) => {
     const decision = req.body.decision;
     if (!decision || !['resume', 'cancel'].includes(decision)) {
       return res.status(400).json({ error: 'decision "resume" və ya "cancel" olmalıdır' });
+    }
+    const pending = req.chatRuntime?.getInteraction(req.params.id);
+    if (!pending || String(pending.userId || '') !== String(req.user?.id || '')) {
+      return res.status(404).json({ error: 'Checkpoint tapılmadı' });
     }
     const checkpoint = req.chatRuntime?.resolveCheckpoint(req.params.id, decision);
     if (!checkpoint) return res.status(404).json({ error: 'Checkpoint tapılmadı' });

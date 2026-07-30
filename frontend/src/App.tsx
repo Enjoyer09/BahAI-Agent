@@ -1,5 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen, Mic } from 'lucide-react';
+import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen } from 'lucide-react';
 import ChatArea from './components/chat/ChatArea';
 import { Composer } from './components/chat/Composer';
 import ActionCenterModal from './components/chat/ActionCenterModal';
@@ -13,7 +13,7 @@ import { useTheme } from './hooks/useTheme';
 import { useSettings } from './hooks/useSettings';
 import { ToastProvider, useConfirm } from './components/common/Toast';
 import { trackAppOpen } from './lib/telemetry';
-import { API_BASE_URL, WORKFLOW_OPTIONS } from './lib/constants';
+import { WORKFLOW_OPTIONS } from './lib/constants';
 
 // P2-FIX: Code-split heavy components that are not needed on initial render
 const CodeEditor = lazy(() => import('./components/chat/CodeEditor'));
@@ -128,7 +128,6 @@ function AppContent() {
 
   const autoPreview = chat.activeProject?.name?.match(/site|web|app|frontend|ui/i);
   const selectedWorkflow = WORKFLOW_OPTIONS.find((item) => item.id === settings.workflow);
-  const isWebProduct = settings.productMode === 'web_chat';
   const isDesktopProduct = settings.productMode === 'desktop_code';
   const desktopIsLocal = isDesktopProduct && settings.executionMode === 'local';
   const allowDesktopAuxPanels = isDesktopProduct;

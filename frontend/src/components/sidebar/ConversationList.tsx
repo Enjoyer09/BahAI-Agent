@@ -22,7 +22,7 @@ interface ConversationListProps {
   onRename: (id: string, newTitle: string) => void;
 }
 
-export function ConversationList({ conversations, activeId, onSelect, onDelete, onRename }: ConversationListProps) {
+export function ConversationList({ conversations, activeId, onSelect, onDelete }: ConversationListProps) {
   // LibreChat inspired grouping logic
   const groupedConversations = useMemo(() => {
     const today = new Date();

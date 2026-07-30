@@ -35,6 +35,10 @@ function isDemoEmail(email) {
   return DEMO_EMAILS.has(String(email || '').trim().toLowerCase());
 }
 
+function isDemoLoginEnabled() {
+  return isLocalModeEnabled() || process.env.DEMO_LOGIN_ENABLED === 'true';
+}
+
 async function ensureDemoUser() {
   if (!db.hasDatabase()) {
     return { id: 9998, email: 'demo@bahai.local', name: 'Demo User', role: 'user' };
@@ -76,7 +80,7 @@ async function login(req, res) {
   }
 
   try {
-    if (isDemoEmail(email)) {
+    if (isDemoEmail(email) && isDemoLoginEnabled()) {
       if (password !== DEMO_PASSWORD) {
         return res.status(401).json({ error: 'Demo şifrəsi yanlışdır' });
       }
@@ -193,6 +197,24 @@ function verifyToken(req, res, next) {
   return res.status(401).json({ error: 'Giriş qadağandır' });
 }
 
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin icazəsi tələb olunur' });
+  }
+  next();
+}
+
+function requireWorkspaceAccess(req, res, next) {
+  if (
+    isLocalModeEnabled()
+    || req.user?.role === 'admin'
+    || process.env.ENABLE_SERVER_TOOLS === 'true'
+  ) {
+    return next();
+  }
+  return res.status(403).json({ error: 'Server workspace alətləri bu hesab üçün deaktivdir' });
+}
+
 // SEC-4: Get current user (/me)
 async function getMe(req, res) {
   // If user info is already in the token (local mode), return it directly
@@ -274,7 +296,7 @@ async function googleLogin(req, res) {
 function getAuthConfig(req, res) {
   res.json({
     googleClientId: process.env.GOOGLE_CLIENT_ID || null,
-    localMode: process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL
+    localMode: isLocalModeEnabled()
   });
 }
 
@@ -320,6 +342,9 @@ router.get('/desktop-callback', (req, res) => {
 
 // Google OAuth for Desktop - no database needed, creates JWT from Google info
 router.post('/google-login-desktop', async (req, res) => {
+  if (!isLocalModeEnabled()) {
+    return res.status(403).json({ error: 'Desktop Google girişi yalnız lokal rejimdə aktivdir' });
+  }
   const { credential } = req.body;
   if (!credential) {
     return res.status(400).json({ error: 'Google məlumatı tapılmadı' });
@@ -405,7 +430,7 @@ router.get('/google-callback', async (req, res) => {
     }
 
     // Create JWT (works with or without database)
-    const isLocalMode = process.env.LOCAL_MODE === 'true' || !process.env.DATABASE_URL;
+    const isLocalMode = isLocalModeEnabled();
     let user;
 
     if (isLocalMode) {
@@ -555,4 +580,11 @@ router.post('/refresh', refreshTokenHandler);
 router.get('/config', getAuthConfig);
 router.get('/me', verifyToken, getMe);
 
-module.exports = { router, verifyToken, generateTokenPair, JWT_SECRET };
+module.exports = {
+  router,
+  verifyToken,
+  requireAdmin,
+  requireWorkspaceAccess,
+  generateTokenPair,
+  JWT_SECRET
+};

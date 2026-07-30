@@ -97,7 +97,7 @@ const corsConfig = allowedOrigins.length > 0
   : cors({ origin: true });
 
 app.use(corsConfig);
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '25mb' }));
 
 // ==========================================
 // Frontend Static App (Railway/Web)
@@ -107,9 +107,9 @@ app.use(express.static(FRONTEND_DIST));
 // ==========================================
 // Helmet / CSP
 // ==========================================
-const cspReportOnly = process.env.CSP_REPORT_ONLY !== 'false';
+const disableCsp = process.env.DISABLE_CSP === 'true';
 app.use(helmet({
-  contentSecurityPolicy: cspReportOnly ? false : {
+  contentSecurityPolicy: disableCsp ? false : {
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
@@ -134,8 +134,15 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: '\xc7ox sor\u011fu. Bir az sonra yenid\u0259n c\u0259hd edin.' }
 });
+const chatLimiter = rateLimit({
+  windowMs: parseInt(process.env.CHAT_RATE_WINDOW_MS || '60000', 10),
+  max: parseInt(process.env.CHAT_RATE_MAX || '30', 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çox chat sorğusu. Bir az sonra yenidən cəhd edin.' }
+});
 app.use('/api', (req, res, next) => {
-  if (req.path === '/chat' || req.path === '/chat-stream' || req.path === '/project-health') return next();
+  if (req.path === '/chat' || req.path === '/chat-stream') return chatLimiter(req, res, next);
   return apiLimiter(req, res, next);
 });
 
@@ -261,8 +268,10 @@ app.use(function(err, req, res, next) {
 // ==========================================
 // Server Start
 // ==========================================
-app.listen(PORT, '0.0.0.0', function() {
+const HOST = process.env.HOST || (isLocalMode() ? '127.0.0.1' : '0.0.0.0');
+app.listen(PORT, HOST, function() {
   console.log('\u2705 BahAI server running on port ' + PORT);
+  console.log('   Bind host: ' + HOST);
   console.log('   CORS origins: ' + (allowedOrigins.length > 0 ? allowedOrigins.join(', ') : 'all (dev mode)'));
   console.log('   Workspace root: ' + WORKSPACE_ROOT);
   console.log('   Local mode: ' + isLocalMode());

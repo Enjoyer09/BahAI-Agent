@@ -104,7 +104,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   localStorage.removeItem('auth_token');
                   localStorage.removeItem('refresh_token');
                 }
-              } catch {}
+              } catch {
+                // Ignore refresh failures and continue with signed-out handling.
+              }
             }
             
             if (localStorage.getItem('signed_out') === '1') {

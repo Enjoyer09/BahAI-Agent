@@ -108,7 +108,7 @@ function isWebChatHistoryNoise(message: Message): boolean {
   // System-generated orchestration messages (match EXACT format, not just first word)
   if (/^Workflow:\s*\*\*[^*]+\*\*\s*\|/i.test(content)) return true;
   if (/^Faza:\s*\*\*[^*]+\*\*/i.test(content)) return true;
-  if (/^[☁️🦙]\s*Auto\s*→/i.test(content)) return true;
+  if (/^(?:☁️|🦙)\s*Auto\s*→/iu.test(content)) return true;
   // GUI/browser session noise
   if (/active gui session|cari visible browser sessiyası açıqdır/i.test(content)) return true;
   if (/eyni browser sessiyasında davam edirəm/i.test(content)) return true;
@@ -258,7 +258,6 @@ export async function handleSendMessage(
         role: m.role,
         content: String(m.content || '').slice(0, 8000),
         attachments: m.attachments?.map((at: any) => {
-          const isImage = at.type === 'image' || /^image\//i.test(at.mimeType || '');
           return {
             id: at.id,
             name: at.name,
@@ -700,7 +699,7 @@ export interface WorkspaceLoadResult {
 
 export async function loadWorkspace(
   userKey: string | number | null | undefined,
-  settings: Settings
+  settings: Pick<Settings, 'productMode'>
 ): Promise<WorkspaceLoadResult> {
   if (!userKey) {
     return { projects: [], conversations: [], serverBacked: false, activeConvId: null };

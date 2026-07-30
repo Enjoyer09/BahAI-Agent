@@ -68,10 +68,10 @@ describe('AuthModal', () => {
     expect(screen.getByLabelText('Ad Soyad')).toBeInTheDocument();
   });
 
-  it('shows demo fill button in login mode', () => {
+  it('does not expose demo credentials in login mode', () => {
     render(<AuthModal {...defaultProps} />);
-    expect(screen.getByTestId('auth-demo-fill')).toBeInTheDocument();
-    expect(screen.getByText('Demo desktop girişini doldur')).toBeInTheDocument();
+    expect(screen.queryByTestId('auth-demo-fill')).not.toBeInTheDocument();
+    expect(screen.queryByText('Demo desktop girişini doldur')).not.toBeInTheDocument();
   });
 
   it('calls onClose when close button is clicked', () => {

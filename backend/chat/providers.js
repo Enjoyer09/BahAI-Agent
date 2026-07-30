@@ -1,5 +1,73 @@
 const { OpenAI } = require('openai');
 const BaseProvider = require('../providers/BaseProvider');
+const dns = require('dns/promises');
+const net = require('net');
+
+function isPrivateAddress(address) {
+  const normalized = String(address || '').toLowerCase();
+  if (net.isIPv4(normalized)) {
+    const parts = normalized.split('.').map(Number);
+    return (
+      parts[0] === 0
+      || parts[0] === 10
+      || parts[0] === 127
+      || (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127)
+      || (parts[0] === 169 && parts[1] === 254)
+      || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)
+      || (parts[0] === 192 && parts[1] === 168)
+      || (parts[0] === 198 && parts[1] >= 18 && parts[1] <= 19)
+      || parts[0] >= 224
+    );
+  }
+  if (net.isIPv6(normalized)) {
+    if (normalized.startsWith('::ffff:')) {
+      return isPrivateAddress(normalized.slice(7));
+    }
+    return (
+      normalized === '::'
+      || normalized === '::1'
+      || normalized.startsWith('fc')
+      || normalized.startsWith('fd')
+      || normalized.startsWith('fe8')
+      || normalized.startsWith('fe9')
+      || normalized.startsWith('fea')
+      || normalized.startsWith('feb')
+    );
+  }
+  return false;
+}
+
+async function validateProviderBaseUrl(rawBaseUrl, { allowPrivate = false } = {}) {
+  let parsed;
+  try {
+    parsed = new URL(String(rawBaseUrl || ''));
+  } catch {
+    throw new Error('Provider base URL etibarsızdır');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Provider base URL yalnız HTTP(S) ola bilər');
+  }
+  if (!allowPrivate && parsed.protocol !== 'https:') {
+    throw new Error('Cloud provider üçün HTTPS tələb olunur');
+  }
+
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!allowPrivate && (hostname === 'localhost' || hostname.endsWith('.local') || isPrivateAddress(hostname))) {
+    throw new Error('Private və ya lokal provider ünvanına giriş bloklandı');
+  }
+  if (!allowPrivate) {
+    let addresses;
+    try {
+      addresses = await dns.lookup(hostname, { all: true, verbatim: true });
+    } catch {
+      throw new Error('Provider host adı həll edilə bilmədi');
+    }
+    if (addresses.some((item) => isPrivateAddress(item.address))) {
+      throw new Error('Provider host private şəbəkəyə yönəlir');
+    }
+  }
+  return parsed.toString().replace(/\/$/, '');
+}
 
 function createProviderRuntime({ providerCooldownMs }) {
   const runtime = new Map();
@@ -317,5 +385,6 @@ module.exports = {
   isResponsesSchemaMismatchError,
   buildOpenAIClient,
   buildProviderCandidates,
+  validateProviderBaseUrl,
   BaseProvider // Exporting LibreChat abstraction for external use
 };

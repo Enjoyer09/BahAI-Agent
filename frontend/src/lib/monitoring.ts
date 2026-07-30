@@ -78,6 +78,7 @@ export function captureEvent(name: string, data?: Record<string, any>) {
  * Set user context for error reports.
  */
 export function setUser(_user: { id: number | string; email: string } | null) {
+  void _user;
   // Example Sentry integration:
   // Sentry.setUser(user ? { id: String(user.id), email: user.email } : null);
 }

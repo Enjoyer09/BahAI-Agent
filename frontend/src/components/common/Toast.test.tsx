@@ -3,7 +3,7 @@
 // ==========================================
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { ToastProvider, useToast, useConfirm } from './Toast';
 
 // Test component that triggers toasts

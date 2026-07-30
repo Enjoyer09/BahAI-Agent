@@ -133,6 +133,7 @@ function startBackend() {
     const env = {
       ...process.env,
       PORT: String(BACKEND_PORT),
+      HOST: '127.0.0.1',
       LOCAL_MODE: 'true',
       NODE_ENV: 'development',
       DOTENV_CONFIG_PATH: envPath,

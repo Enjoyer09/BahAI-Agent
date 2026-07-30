@@ -9,7 +9,7 @@ const visionContext = require('./chat/visionContext');
 const fs_promises = require('fs/promises');
 const crypto = require('crypto');
 const mammoth = require('mammoth');
-const XLSX = require('xlsx');
+const readXlsxFile = require('read-excel-file/node');
 const { createWorker } = require('tesseract.js');
 const util = require('util');
 const { execFile } = require('child_process');
@@ -606,12 +606,15 @@ function isPathSafe(filePath, workingDirectory, user) {
     return !relGlobally.startsWith('..') && !path.isAbsolute(relGlobally);
   });
 
-  const isSafe = isInsideProject || (isLocalMode() && (isAllowedGlobally || path.isAbsolute(resolvedPath)));
+  const baseIsAllowed = isWorkingDirectoryAllowed(resolvedBase);
+  const isSafe = baseIsAllowed
+    && (isInsideProject || (isLocalMode() && (isAllowedGlobally || path.isAbsolute(resolvedPath))));
 
   if (!isSafe) {
     console.warn(`🚨 SECURITY ALERT: Blocked access to ${resolvedPath}`);
     console.warn(`   Rel to Project: ${rel} | Inside: ${isInsideProject}`);
     console.warn(`   Allowed Globally: ${isAllowedGlobally}`);
+    console.warn(`   Working directory allowed: ${baseIsAllowed}`);
   }
 
   return isSafe;
@@ -919,16 +922,12 @@ async function extractDocxText(buffer) {
   return result?.value || '';
 }
 
-function extractSpreadsheetText(buffer) {
-  const wb = XLSX.read(buffer, { type: 'buffer' });
-  const chunks = [];
-  for (const sheetName of wb.SheetNames.slice(0, 10)) {
-    const sheet = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, raw: false });
-    const lines = rows.slice(0, 500).map((row) => Array.isArray(row) ? row.map((c) => String(c ?? '')).join('\t') : String(row)).join('\n');
-    chunks.push(`[Sheet: ${sheetName}]\n${lines}`);
-  }
-  return chunks.join('\n\n');
+async function extractSpreadsheetText(buffer) {
+  const rows = await readXlsxFile(buffer);
+  return rows
+    .slice(0, 500)
+    .map((row) => row.map((cell) => String(cell ?? '')).join('\t'))
+    .join('\n');
 }
 
 let ocrWorkerPromise = null;
@@ -972,6 +971,16 @@ function isImageInspectionPrompt(text = '') {
 
 function decodeDataUrl(dataUrl) {
   if (!dataUrl || typeof dataUrl !== 'string') return null;
+  const maxAttachmentBytes = Math.max(1, parseInt(process.env.MAX_ATTACHMENT_BYTES || String(20 * 1024 * 1024), 10));
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex === -1) return null;
+  const encodedLength = dataUrl.length - commaIndex - 1;
+  const estimatedBytes = dataUrl.slice(0, commaIndex).includes(';base64')
+    ? Math.floor(encodedLength * 0.75)
+    : encodedLength;
+  if (estimatedBytes > maxAttachmentBytes) {
+    throw new Error(`Attachment ölçüsü ${Math.floor(maxAttachmentBytes / 1024 / 1024)}MB limitini keçir`);
+  }
   const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
   if (!match) return null;
   const mimeType = match[1] || 'application/octet-stream';
@@ -1006,8 +1015,8 @@ async function extractAttachment(attachment) {
       catch (e) { return { name, mimeType, extractedText: '', extractionError: `DOCX parse xətası: ${e.message}` }; }
     }
 
-    if (mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
-      try { const text = extractSpreadsheetText(buf); return { name, mimeType, extractedText: (text || '').slice(0, 50000) }; }
+    if (mimeType.includes('spreadsheetml') || lowerName.endsWith('.xlsx')) {
+      try { const text = await extractSpreadsheetText(buf); return { name, mimeType, extractedText: (text || '').slice(0, 50000) }; }
       catch (e) { return { name, mimeType, extractedText: '', extractionError: `Cədvəl parse xətası: ${e.message}` }; }
     }
 

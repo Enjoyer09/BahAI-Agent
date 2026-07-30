@@ -277,6 +277,7 @@ router.post('/', async (req, res) => {
   // --- Extract request params ---
   const { message, messages, conversationId, projectId, safeMode, productMode, executionMode,
     orchestrationMode, workflow, apiKey: frontendApiKey, baseUrl: frontendBaseUrl, model: frontendModel,
+    workingDirectory,
     guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, referentSummary } = req.body;
 
   const normalizedMessages = Array.isArray(messages) ? messages : [];
@@ -302,8 +303,27 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Mesaj tələb olunur' });
   }
 
+  const canUseServerTools = isLocalMode()
+    || req.user?.role === 'admin'
+    || process.env.ENABLE_SERVER_TOOLS === 'true';
+  if (productMode !== 'web_chat' && !canUseServerTools) {
+    return res.status(403).json({ error: 'Server workspace alətləri bu hesab üçün deaktivdir' });
+  }
+
+  if (frontendBaseUrl) {
+    const { validateProviderBaseUrl } = require('../chat/providers');
+    const allowPrivateProvider = isLocalMode()
+      && productMode === 'desktop_code'
+      && executionMode === 'local';
+    try {
+      await validateProviderBaseUrl(frontendBaseUrl, { allowPrivate: allowPrivateProvider });
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
   const workspaceRoot = path.resolve(process.env.WORKSPACE_ROOT || path.join(__dirname, '../../sandbox'));
-  const resolvedWD = productMode === 'web_chat' ? '' : resolveWorkingDirectory(undefined, req.user);
+  const resolvedWD = productMode === 'web_chat' ? '' : resolveWorkingDirectory(workingDirectory, req.user);
   const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '6', 10);
   const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '60000', 10);
   const LLM_TIMEOUT_CHAT = parseInt(process.env.LLM_TIMEOUT_CHAT || '45000', 10);

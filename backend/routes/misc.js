@@ -10,9 +10,10 @@ const { detectRepoProfile, serializeRepoProfile, buildValidationHint, buildCompa
 const { execFile } = require('child_process');
 const util = require('util');
 const execFileAsync = util.promisify(execFile);
+const { requireAdmin, requireWorkspaceAccess } = require('../auth');
 
 // POST /api/task-plan — Generate task plan
-router.post('/task-plan', async (req, res) => {
+router.post('/task-plan', requireWorkspaceAccess, async (req, res) => {
   try {
     const resolvedWD = resolveWorkingDirectory(req.body.workingDirectory, req.user);
     const profile = await detectRepoProfile(resolvedWD);
@@ -27,13 +28,16 @@ router.post('/task-plan', async (req, res) => {
 });
 
 // POST /api/diff/preview — Generate diff preview
-router.post('/diff/preview', async (req, res) => {
+router.post('/diff/preview', requireWorkspaceAccess, async (req, res) => {
   try {
     const { path: filePath, content, originalContent } = req.body;
     if (!filePath) return res.status(400).json({ error: 'path tələb olunur' });
     const resolvedWD = resolveWorkingDirectory(req.body.workingDirectory, req.user);
     const targetPath = path.resolve(resolvedWD, filePath);
     const fs = require('fs/promises');
+    if (!isPathSafe(targetPath, req.body.workingDirectory, req.user)) {
+      return res.status(403).json({ error: 'Path outside workspace' });
+    }
 
     let oldContent = originalContent;
     if (!oldContent) {
@@ -52,7 +56,7 @@ router.post('/diff/preview', async (req, res) => {
 });
 
 // POST /api/diff/apply — Apply file changes
-router.post('/diff/apply', async (req, res) => {
+router.post('/diff/apply', requireWorkspaceAccess, async (req, res) => {
   try {
     const { path: filePath, content } = req.body;
     if (!filePath || content === undefined) return res.status(400).json({ error: 'path və content tələb olunur' });
@@ -69,7 +73,7 @@ router.post('/diff/apply', async (req, res) => {
 });
 
 // POST /api/terminal/run — Run terminal command
-router.post('/terminal/run', async (req, res) => {
+router.post('/terminal/run', requireWorkspaceAccess, async (req, res) => {
   try {
     const { command } = req.body;
     if (!command) return res.status(400).json({ error: 'command tələb olunur' });
@@ -84,7 +88,7 @@ router.post('/terminal/run', async (req, res) => {
 });
 
 // POST /api/project-health — Check project health
-router.post('/project-health', async (req, res) => {
+router.post('/project-health', requireWorkspaceAccess, async (req, res) => {
   try {
     const resolvedWD = resolveWorkingDirectory(req.body.workingDirectory, req.user);
     const profile = await detectRepoProfile(resolvedWD);
@@ -115,11 +119,24 @@ router.post('/project-memory/:projectId', async (req, res) => {
     if (!db.hasDatabase()) return res.json({ success: true });
     const { memory } = req.body;
     if (!memory) return res.status(400).json({ error: 'memory tələb olunur' });
-    await db.query(
+    const ownedProject = await db.query(
+      'SELECT id FROM projects WHERE id = $1 AND user_id = $2',
+      [req.params.projectId, req.user.id]
+    );
+    if (ownedProject.rows.length === 0) {
+      return res.status(404).json({ error: 'Project tapılmadı' });
+    }
+    const result = await db.query(
       `INSERT INTO project_memories (project_id, user_id, memory, updated_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-       ON CONFLICT (project_id) DO UPDATE SET memory = $3, updated_at = CURRENT_TIMESTAMP`,
+       ON CONFLICT (project_id) DO UPDATE
+       SET memory = EXCLUDED.memory, updated_at = CURRENT_TIMESTAMP
+       WHERE project_memories.user_id = EXCLUDED.user_id
+       RETURNING project_id`,
       [req.params.projectId, req.user.id, JSON.stringify(memory)]
     );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Project tapılmadı' });
+    }
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -159,7 +176,7 @@ router.get('/signed-url', async (req, res) => {
 });
 
 // GET /api/admin/stats — Admin stats
-router.get('/admin/stats', async (req, res) => {
+router.get('/admin/stats', requireAdmin, async (req, res) => {
   try {
     const db = require('../db');
     if (!db.hasDatabase()) return res.json({ stats: { users: 1, conversations: 0, projects: 0 } });
@@ -173,7 +190,7 @@ router.get('/admin/stats', async (req, res) => {
 });
 
 // GET /api/admin/users — Admin user list
-router.get('/admin/users', async (req, res) => {
+router.get('/admin/users', requireAdmin, async (req, res) => {
   try {
     const db = require('../db');
     if (!db.hasDatabase()) return res.json({ users: [{ id: 1, email: 'admin@local', name: 'Local Admin', role: 'admin' }] });

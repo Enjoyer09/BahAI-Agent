@@ -45,6 +45,7 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
   // Listen for OAuth callback message (from popup window)
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
       if (event.data?.type === 'google-oauth-credential' && event.data?.token) {
         setLoading(true);
         setError(null);
@@ -77,7 +78,9 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
           if (data.refreshToken) localStorage.setItem('refresh_token', data.refreshToken);
           window.location.reload();
         }
-      } catch {}
+      } catch {
+        // Ignore malformed or inaccessible cached OAuth results.
+      }
     }, 700);
     return () => window.clearInterval(poll);
   }, []);
@@ -110,8 +113,6 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
     const top = window.screenY + (window.outerHeight - height) / 2;
     window.open(url, 'google-oauth', `width=${width},height=${height},left=${left},top=${top}`);
   };
-
-  if (!isOpen) return null;
 
   // Focus trap refs
   const modalRef = useRef<HTMLDivElement>(null);
@@ -192,6 +193,8 @@ export default function AuthModal({ isOpen, onClose, productMode = 'desktop_code
 
   const isWebProduct = productMode === 'web_chat';
   const productName = isWebProduct ? 'BahAI Cloud' : 'BahAI Desktop';
+
+  if (!isOpen) return null;
 
   return (
     <div
