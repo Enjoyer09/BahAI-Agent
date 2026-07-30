@@ -143,6 +143,32 @@ describe('provider candidate routing', () => {
     expect(candidates[0].apiKey).toBe('omni-key');
   });
 
+  it('ignores stale browser cloud settings when web OmniRoute is enabled', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: 'stale-browser-key',
+      frontendBaseUrl: 'https://agentrouter.example/v1',
+      frontendModel: 'auto',
+      autoIntent: 'fast',
+      webTaskType: 'general',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        OPENAI_API_KEY: 'legacy-key',
+        OPENAI_BASE_URL: 'https://legacy.example/v1',
+        OPENAI_MODEL: 'qwen2.5-coder:latest',
+        WEB_CHAT_FAST_MODEL: 'qwen2.5-coder:latest',
+        OMNIROUTE_ENABLED: 'true',
+        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    expect(candidates[0].id).toContain('omniroute');
+    expect(candidates[0].baseURL).toBe('https://omniroute.example/v1');
+    expect(candidates[0].model).toBe('auto');
+  });
+
   it('desktop local mode forces ollama provider', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: 'dummy',

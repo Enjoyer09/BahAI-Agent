@@ -289,9 +289,12 @@ export async function handleSendMessage(
     }
 
     const isSmartMode = settings.aiMode === 'smart';
-    const effectiveBaseUrl = (isSmartMode && settings.baseUrl.includes('omniroute')) ? settings.baseUrl : settings.baseUrl;
-    const effectiveApiKey = settings.apiKey;
-    const effectiveModel = isSmartMode ? 'auto' : settings.model;
+    const isWebChat = settings.productMode === 'web_chat';
+    // Web provider credentials and routing belong to the BahAI backend. Do not
+    // let stale browser settings override Railway's OmniRoute configuration.
+    const effectiveBaseUrl = isWebChat ? '' : settings.baseUrl;
+    const effectiveApiKey = isWebChat ? '' : settings.apiKey;
+    const effectiveModel = (isWebChat || isSmartMode) ? 'auto' : settings.model;
 
     await apiSendChatMessage(
       finalPreparedMessages,

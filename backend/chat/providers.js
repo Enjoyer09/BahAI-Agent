@@ -124,11 +124,20 @@ function buildProviderCandidates({
 
   function resolveWebAutoPlan() {
     const normalizedEnvBase = normalizeProviderBaseUrl(env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1');
-    const defaultBase = omniRouteEnabled && omniRouteBase ? omniRouteBase : normalizedEnvBase;
-    const defaultKey = (omniRouteEnabled && omniRouteApiKey) ? omniRouteApiKey : (frontendApiKey || env.OPENAI_API_KEY || '');
-    const defaultModel = omniRouteModel || env.OPENAI_MODEL || env.AUTO_SMART_MODEL || env.AUTO_FAST_MODEL || 'gpt-5.5';
+    const useOmniRoute = omniRouteEnabled && Boolean(omniRouteBase);
+    const defaultBase = useOmniRoute ? omniRouteBase : normalizedEnvBase;
+    const defaultKey = useOmniRoute
+      ? (omniRouteApiKey || 'bahai-omniroute')
+      : (frontendApiKey || env.OPENAI_API_KEY || '');
+    const defaultModel = useOmniRoute
+      ? (omniRouteModel || 'auto')
+      : (env.OPENAI_MODEL || env.AUTO_SMART_MODEL || env.AUTO_FAST_MODEL || 'gpt-5.5');
     const frontLooksLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));
-    const requestedBase = normalizedFrontendBaseUrl && !frontLooksLocal ? normalizedFrontendBaseUrl : '';
+    // In web mode Railway owns routing. Browser-local or stale provider
+    // settings must never bypass an explicitly enabled OmniRoute gateway.
+    const requestedBase = !useOmniRoute && normalizedFrontendBaseUrl && !frontLooksLocal
+      ? normalizedFrontendBaseUrl
+      : '';
     const effectiveBase = requestedBase || defaultBase;
     const effectiveKey = (requestedBase && frontendApiKey) ? frontendApiKey : defaultKey;
     const isBaseLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(effectiveBase);
@@ -144,10 +153,10 @@ function buildProviderCandidates({
       }];
     }
 
-    const fastModel = env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel;
-    const smartModel = env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || fastModel;
-    const visionModel = env.WEB_CHAT_VISION_MODEL || 'google/gemini-2.0-flash-exp:free';
-    const codeModel = env.WEB_CHAT_CODE_MODEL || smartModel;
+    const fastModel = useOmniRoute ? defaultModel : (env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel);
+    const smartModel = useOmniRoute ? defaultModel : (env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || fastModel);
+    const visionModel = useOmniRoute ? defaultModel : (env.WEB_CHAT_VISION_MODEL || 'google/gemini-2.0-flash-exp:free');
+    const codeModel = useOmniRoute ? defaultModel : (env.WEB_CHAT_CODE_MODEL || smartModel);
     const primaryTask = hasImageAttachment ? 'vision' : webTaskType;
     const orderedModels = primaryTask === 'vision'
       ? [visionModel, smartModel, fastModel, codeModel]
@@ -157,7 +166,7 @@ function buildProviderCandidates({
           ? [smartModel, fastModel, codeModel, visionModel]
           : [fastModel, smartModel, codeModel, visionModel];
 
-    return orderedModels
+    const candidates = orderedModels
       .filter(Boolean)
       .map((model, index) => buildCloudProvider({
         id: index === 0
@@ -168,6 +177,32 @@ function buildProviderCandidates({
         model
       }))
       .filter(Boolean);
+
+    // Cloud Fallback: OpenRouter Free Models (only if valid key is configured)
+    const openRouterKey = env.OPENROUTER_API_KEY || (String(env.OPENAI_API_KEY || '').startsWith('sk-or-') ? env.OPENAI_API_KEY : '');
+    if (openRouterKey) {
+      candidates.push({
+        id: 'web_auto_openrouter_free_fallback',
+        apiKey: openRouterKey,
+        baseURL: 'https://openrouter.ai/api/v1',
+        model: hasImageAttachment ? 'google/gemini-2.0-flash-exp:free' : 'meta-llama/llama-3.3-70b-instruct:free',
+        wireApi: 'chat_completions'
+      });
+    }
+
+    // Local Fallback: Always include Ollama in local mode or when local execution is allowed
+    const isLocalEnv = String(env.LOCAL_MODE || '').toLowerCase() === 'true';
+    if (isLocalEnv || !cloudOnly) {
+      candidates.push({
+        id: 'web_auto_ollama_fallback',
+        apiKey: 'ollama',
+        baseURL: OLLAMA_BASE,
+        model: defaultLocalModel,
+        wireApi: 'chat_completions'
+      });
+    }
+
+    return candidates;
   }
 
   if (localOnly) {
