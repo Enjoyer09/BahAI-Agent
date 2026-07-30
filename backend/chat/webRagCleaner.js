@@ -12,24 +12,27 @@ function cleanWebAssistantResponse(text = '', isWebProduct = false) {
 
   // 1. Strip raw tool JSON & array invocations if leaked
   cleaned = cleaned.replace(/```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"[\s\S]*?\}\s*```/gi, '');
-  cleaned = cleaned.replace(/\[\s*"web_search"\s*,\s*"[^"]+"\s*\]/gi, '');
+  cleaned = cleaned.replace(/\[\s*"(?:web_search|browser_open|file_view|run_command|code_edit)"\s*,\s*(?:"[\s\S]*?"|\{[\s\S]*?\})\s*\]/gi, '');
 
-  // 2. Strip internal agent monologues (e.g. "Axtarış aparıram...", "İndi əsas biznes ideyalarını araşdırıram...")
+  // 2. Strip internal agent monologues (Azerbaijani & English search filler phrases)
   const monologuePatterns = [
-    /^(?:Pulunuzu depozitə qoşmaq üçün|Cari faiz dərəcələrini öyrənmək üçün|Ən son AI trendlərini araşdırım:|İndi əsas biznes ideyalarını araşdırıram\.?\s*|Axtarışa başlayıram\.?\s*|Axtarış aparıram|İndi birbaşa|Əvvəlcə Kapital Bank).*?(?:\n\n|\.\s+|\n|$)/i,
+    /^(?:Mən sizin sualınızı aldım|Axtarış aparıram|Axtarışa başlayıram|Axtarış nəticələrini təhlil edirəm|İndi axtarış edirəm|İndi əsas biznes ideyalarını araşdırıram|Axtarış aparılır|Cari faiz dərəcələrini öyrənmək üçün|Pulunuzu depozitə qoşmaq üçün|İndi birbaşa|Əvvəlcə Kapital Bank|Ən son AI trendlərini araşdırım:|Searching the web|Let me search for this information|Searching for recent data|Performing search for query|Fetching information from web).*?(?:\.\.\.|\.\s*|\n|$)/gim,
+    /(?:Axtarış aparıram\.?|Axtarışa başlayıram\.?|Axtarış nəticələrini təhlil edirəm\.?|Mən sizin sualınızı aldım\.?|İndi ən son və aktual biznes ideyalarını tapmaq üçün axtarış aparıram\.?)+/gim,
     /Axtarış sisteminin səhv istiqamətlənməsi səbəbindən.*?\n\n/gi,
     /İndi birbaşa bir neçə bankın rəsmi səhifəsini açıb.*?\n\n/gi,
-    /Əvvəlcə [^.]+-ın depozit səhifəsini açıram:?\s*/gi,
-    /^(?:Ən son AI trendlərini araşdırım:|İndi əsas biznes ideyalarını araşdırıram\.|Axtarışa başlayıram\.)\s*/gim,
-    /(?:Axtarış aparıram\.?|Axtarışa başlayıram\.?|Mən sizin sualınızı aldım\.?|İndi ən son və aktual biznes ideyalarını tapmaq üçün axtarış aparıram\.?)+/gim,
-    /^Axtarış aparı[\s\S]*?(?:axtarış aparıram\.?|\n|$)/gim
+    /Əvvəlcə [^.]+-ın depozit səhifəsini açıram:?\s*/gi
   ];
 
-  for (const pattern of monologuePatterns) {
-    cleaned = cleaned.replace(pattern, '');
-  }
+  let prevCleaned;
+  do {
+    prevCleaned = cleaned;
+    for (const pattern of monologuePatterns) {
+      cleaned = cleaned.replace(pattern, '');
+    }
+    cleaned = cleaned.replace(/^[\s.\-\:\,]+/, '').trim();
+  } while (cleaned !== prevCleaned);
 
-  return cleaned.trim();
+  return cleaned;
 }
 
 module.exports = {

@@ -214,7 +214,8 @@ function buildProviderCandidates({
     });
   }
 
-  for (const provider of parseProviderPoolFromEnv()) {
+  const getProviderPool = typeof parseProviderPoolFromEnv === 'function' ? parseProviderPoolFromEnv : (() => []);
+  for (const provider of getProviderPool()) {
     const looksLocalBase = /localhost|127\.0\.0\.1|11434|1234/i.test(String(provider.baseURL || ''));
     if (localOnly && looksLocalBase) {
       list.push(provider);

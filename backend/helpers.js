@@ -1006,7 +1006,7 @@ async function extractAttachment(attachment) {
       catch (e) { return { name, mimeType, extractedText: '', extractionError: `DOCX parse xətası: ${e.message}` }; }
     }
 
-    if (mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv')) {
+    if (mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
       try { const text = extractSpreadsheetText(buf); return { name, mimeType, extractedText: (text || '').slice(0, 50000) }; }
       catch (e) { return { name, mimeType, extractedText: '', extractionError: `Cədvəl parse xətası: ${e.message}` }; }
     }
