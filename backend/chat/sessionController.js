@@ -97,6 +97,13 @@ async function runChatSession({
         projectMemory
       });
       currentMessages = phaseContext.currentMessages;
+      const forceFinalSynthesis = productMode === 'web_chat' && step === stepLimit;
+      if (forceFinalSynthesis) {
+        currentMessages.push({
+          role: 'system',
+          content: 'Bu son cavab mərhələsidir. Daha heç bir tool çağırma. Toplanmış mənbə və tool nəticələrinə əsasən istifadəçinin tələb etdiyi formatda konkret yekun cavab yaz. Məlumat çatışmırsa bunu qısa qeyd et, amma cavabı boş buraxma.'
+        });
+      }
 
       const runnerResult = await openAiStreamWithFallback({
         currentMessages,
@@ -117,7 +124,8 @@ async function runChatSession({
         shouldEmitDebugEvent,
         llmTimeoutMs: dependencies.llmTimeoutMs,
         onProviderTelemetry: dependencies.onProviderTelemetry,
-        providerSessionKey: dependencies.providerSessionKey
+        providerSessionKey: dependencies.providerSessionKey,
+        forceDisableTools: forceFinalSynthesis
       });
 
       if (runnerResult.errorEvent) {

@@ -34,7 +34,8 @@ async function openAiStreamWithFallback({
   shouldEmitDebugEvent,
   llmTimeoutMs,
   onProviderTelemetry,
-  providerSessionKey
+  providerSessionKey,
+  forceDisableTools = false
 }) {
   const abortController = new AbortController();
   const FIRST_CHUNK_TIMEOUT_MS = Math.min(llmTimeoutMs, 15000); // First chunk within 15s
@@ -107,7 +108,7 @@ async function openAiStreamWithFallback({
           nextClient,
           nextModel,
           nextMessages,
-          isLocalOrFlakyModel
+          forceDisableTools || isLocalOrFlakyModel
         );
         providerRuntime.markProviderSuccess(nextProvider.id);
         providerRuntime.markSessionProviderSuccess?.(providerSessionKey, nextProvider.id);
@@ -145,7 +146,7 @@ async function openAiStreamWithFallback({
           for (const alt of alternatives) {
             try {
               const altClient = buildOpenAIClient(alt);
-              stream = await createStream(alt, altClient, alt.model, nextMessages, false);
+              stream = await createStream(alt, altClient, alt.model, nextMessages, forceDisableTools);
               nextProvider = alt;
               nextClient = altClient;
               nextModel = alt.model;
@@ -186,7 +187,7 @@ async function openAiStreamWithFallback({
             try {
               const downgradedProvider = { ...nextProvider, wireApi: 'chat_completions' };
               const downgradedClient = buildOpenAIClient(downgradedProvider);
-              stream = await createStream(downgradedProvider, downgradedClient, nextModel, nextMessages, isLocalOrFlakyModel);
+              stream = await createStream(downgradedProvider, downgradedClient, nextModel, nextMessages, forceDisableTools || isLocalOrFlakyModel);
               nextProvider = downgradedProvider;
               nextClient = downgradedClient;
               providerRuntime.markProviderSuccess(downgradedProvider.id);

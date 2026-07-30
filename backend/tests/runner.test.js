@@ -56,6 +56,40 @@ describe('runner failover behavior', () => {
     expect(isRetryableProviderError({ message: 'fetch failed ECONNREFUSED' }, () => false)).toBe(true);
   });
 
+  it('omits tools when final synthesis is forced', async () => {
+    const runtime = createProviderRuntime();
+    const provider = { id: 'omni', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'key' };
+    const client = createStreamingClient('final');
+
+    await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Araşdır və yekunlaşdır' }],
+      effectiveModel: provider.model,
+      activeProvider: provider,
+      client,
+      phaseTools: [{ type: 'function', function: { name: 'web_search', parameters: {} } }],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [provider],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => client,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:final',
+      forceDisableTools: true,
+    });
+
+    expect(client.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ tools: undefined, stream: true }),
+      expect.any(Object),
+    );
+  });
+
   it('fails over to the next provider when the first provider returns 503', async () => {
     const runtime = createProviderRuntime();
     const primary = { id: 'primary', wireApi: 'responses', model: 'gpt-5.5', baseURL: 'https://a.example', apiKey: 'a' };
