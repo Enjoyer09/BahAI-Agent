@@ -353,6 +353,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         } else {
           msgs.push({ id: 'streaming_' + now, role: 'assistant', content, timestamp: now });
         }
+        conversationsRef.current = conversationsRef.current.map((item) =>
+          item.id === convId ? { ...item, messages: msgs, updatedAt: now } : item
+        );
         dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
       }
     },
@@ -417,6 +420,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       if (msg.role === 'assistant') {
         lastFinalAssistantContentRef.current = normalizedIncoming;
       }
+      conversationsRef.current = conversationsRef.current.map((item) =>
+        item.id === convId ? { ...item, messages: msgs, updatedAt: Date.now() } : item
+      );
       dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
       if (serverBackedRef.current) {
         updateConversationOnServer(convId, { messages: msgs }).catch(console.error);
@@ -539,10 +545,13 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
           path: 'workspace://default',
         });
         dispatch({ type: 'ADD_PROJECT', project: created.project });
+        projectsRef.current = [...projectsRef.current, created.project];
+        const createdConversation = { ...created.conversation, messagesLoaded: true, messagesHasMore: false };
         dispatch({
           type: 'ADD_CONVERSATION',
-          conversation: { ...created.conversation, messagesLoaded: true, messagesHasMore: false }
+          conversation: createdConversation
         });
+        conversationsRef.current = [createdConversation, ...conversationsRef.current];
         dispatch({ type: 'SET_ACTIVE_CONV_ID', id: created.conversation.id });
         return { convId: created.conversation.id, project: created.project };
       }
@@ -554,6 +563,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         createdAt: Date.now(),
       };
       dispatch({ type: 'ADD_PROJECT', project: localProject });
+      projectsRef.current = [...projectsRef.current, localProject];
       project = localProject;
     }
 
@@ -563,6 +573,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         type: 'ADD_CONVERSATION',
         conversation: { ...createdConversation, messagesLoaded: true, messagesHasMore: false }
       });
+      conversationsRef.current = [
+        { ...createdConversation, messagesLoaded: true, messagesHasMore: false },
+        ...conversationsRef.current,
+      ];
       dispatch({ type: 'SET_ACTIVE_CONV_ID', id: createdConversation.id });
       return { convId: createdConversation.id, project };
     }
@@ -576,6 +590,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       updatedAt: Date.now(),
     };
     dispatch({ type: 'ADD_CONVERSATION', conversation: localConversation });
+    conversationsRef.current = [localConversation, ...conversationsRef.current];
     dispatch({ type: 'SET_ACTIVE_CONV_ID', id: localConversation.id });
     return { convId: localConversation.id, project };
   }, [settings.productMode]);
@@ -620,6 +635,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     // Add user message to conversation
     const baseMessages = baseMessagesOverride || (Array.isArray(activeConv?.messages) ? activeConv.messages : []);
     const currentMsgs = [...baseMessages, userMsg];
+    conversationsRef.current = conversationsRef.current.map((item) =>
+      item.id === convId ? { ...item, messages: currentMsgs, updatedAt: Date.now() } : item
+    );
     dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: currentMsgs });
     if (stateRef.current.serverBacked) {
       dispatch({ type: 'UPDATE_CONVERSATION', id: convId, updates: { messagesLoaded: true } });

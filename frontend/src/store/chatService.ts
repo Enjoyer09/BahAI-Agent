@@ -209,16 +209,21 @@ export async function handleSendMessage(
   // Process attachments
   const enrichedAttachments = await extractAttachments(attachments);
 
-  const userMsg: Message = {
-    id: generateId(),
-    role: 'user',
-    content: input,
-    attachments: enrichedAttachments,
-    timestamp: Date.now(),
-  };
-
-  // Initial state for the message flow
-  let currentMsgs = [...messages, userMsg];
+  // useChat already places the optimistic user message in the conversation.
+  // Enrich that same message instead of appending a duplicate request entry.
+  const currentMsgs = [...messages];
+  const lastMessage = currentMsgs[currentMsgs.length - 1];
+  if (lastMessage?.role === 'user' && lastMessage.content === input) {
+    currentMsgs[currentMsgs.length - 1] = { ...lastMessage, attachments: enrichedAttachments };
+  } else {
+    currentMsgs.push({
+      id: generateId(),
+      role: 'user',
+      content: input,
+      attachments: enrichedAttachments,
+      timestamp: Date.now(),
+    });
+  }
   const convId = activeConvId;
   const streamBufferRef = { current: '' };
 
