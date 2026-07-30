@@ -131,6 +131,19 @@ function buildProviderCandidates({
     const requestedBase = normalizedFrontendBaseUrl && !frontLooksLocal ? normalizedFrontendBaseUrl : '';
     const effectiveBase = requestedBase || defaultBase;
     const effectiveKey = (requestedBase && frontendApiKey) ? frontendApiKey : defaultKey;
+    const isBaseLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(effectiveBase);
+
+    if (isBaseLocal) {
+      const chosenLocalModel = looksLikeOllamaModel(frontendModel) ? frontendModel : (env.AUTO_FAST_MODEL || env.OPENAI_MODEL || defaultLocalModel);
+      return [{
+        id: 'web_auto_local_primary',
+        apiKey: effectiveKey || 'ollama',
+        baseURL: effectiveBase,
+        model: chosenLocalModel,
+        wireApi: 'chat_completions'
+      }];
+    }
+
     const fastModel = env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel;
     const smartModel = env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || fastModel;
     const visionModel = env.WEB_CHAT_VISION_MODEL || 'google/gemini-2.0-flash-exp:free';
