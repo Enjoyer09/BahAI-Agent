@@ -106,6 +106,28 @@ export async function sendChatMessage(
   onEvent: (event: SSEEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
+  if (model.startsWith('puter:') || model === 'puter') {
+    onEvent({ type: 'assistant_message', message: { id: String(Date.now()), role: 'assistant', content: '' } });
+    const puter = (window as any).puter;
+    if (puter && puter.ai) {
+      try {
+        const puterModel = model.replace('puter:', '') || 'gpt-4o-mini';
+        const lastMsg = messages[messages.length - 1]?.content || '';
+        const res = await puter.ai.chat(lastMsg, { model: puterModel, stream: true });
+        for await (const part of res) {
+          const text = part?.text || part?.message?.content || part?.delta || '';
+          if (typeof text === 'string' && text) {
+            onEvent({ type: 'assistant_delta', content: text });
+          }
+        }
+        return;
+      } catch (err: any) {
+        console.error('Puter AI client error:', err);
+        throw new Error(`Puter AI xətası: ${err?.message || 'Cavab alınmadı'}`);
+      }
+    }
+  }
+
   const requestBody = JSON.stringify({
     messages,
     apiKey,

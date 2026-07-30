@@ -9,7 +9,11 @@ export const DEFAULT_BASE_URL = 'http://localhost:11434/v1';
 export const MODELS: ModelOption[] = [
   // Curated, actually useful model list. Keep the set compact and based on
   // real provider paths we expect users to run.
-  { id: 'auto', name: '✨ Auto (Smart Router)', provider: 'Hibrid' },
+  { id: 'auto', name: '✨ Bahar Smart (OmniRoute)', provider: 'Hibrid' },
+  // Puter AI (100% Keyless Free Cloud)
+  { id: 'puter:gpt-4o-mini', name: '⚡ Puter AI: GPT-4o Mini (Pulsuz)', provider: 'Puter AI' },
+  { id: 'puter:claude-3-5-sonnet', name: '⚡ Puter AI: Claude 3.5 Sonnet (Pulsuz) ⭐', provider: 'Puter AI' },
+  { id: 'puter:deepseek-r1', name: '⚡ Puter AI: DeepSeek R1 (Pulsuz) 🧠', provider: 'Puter AI' },
   // Local Ollama / MLX
   { id: 'gemma4:12b', name: 'Gemma 4 12B MLX ⭐', provider: 'Ollama / MLX (Lokal)' },
   { id: 'gemma4:latest', name: 'Gemma 4 9B', provider: 'Ollama / MLX (Lokal)' },
