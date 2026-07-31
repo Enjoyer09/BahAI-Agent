@@ -21,6 +21,34 @@ function getAuthHeader() {
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
+let refreshRequest: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshRequest) return refreshRequest;
+  const refreshToken = localStorage.getItem('refresh_token');
+  if (!refreshToken) return null;
+
+  refreshRequest = fetch(`${API_BASE_URL}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  })
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (!data?.token) return null;
+      localStorage.setItem('auth_token', data.token);
+      if (data.refreshToken) localStorage.setItem('refresh_token', data.refreshToken);
+      return data.token as string;
+    })
+    .catch(() => null)
+    .finally(() => {
+      refreshRequest = null;
+    });
+
+  return refreshRequest;
+}
+
 async function isLocalMode(): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/auth/config`, { cache: 'no-store' });
@@ -32,13 +60,21 @@ async function isLocalMode(): Promise<boolean> {
   }
 }
 
-async function apiFetch(input: string, init: RequestInit = {}, retryOnLocalAuth = true): Promise<Response> {
+async function apiFetch(input: string, init: RequestInit = {}, retryOnLocalAuth = true, retryOnRefresh = true): Promise<Response> {
   const headers = new Headers(init.headers || {});
   const authHeader = getAuthHeader();
   for (const [key, value] of Object.entries(authHeader)) headers.set(key, value);
 
   const response = await fetch(input, { ...init, headers });
   if (response.status === 401) {
+    if (retryOnRefresh) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken) {
+        const retryHeaders = new Headers(init.headers || {});
+        retryHeaders.set('Authorization', `Bearer ${refreshedToken}`);
+        return fetch(input, { ...init, headers: retryHeaders });
+      }
+    }
     notifyAuthExpired('Sessiya vaxtı bitib. Yenidən daxil olun.');
     return response;
   }

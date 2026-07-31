@@ -70,6 +70,7 @@ describe('API Client', () => {
     mockFetch.mockReset();
     localStorageMock.getItem.mockReset();
     localStorageMock.setItem.mockReset();
+    localStorageMock.removeItem.mockReset();
   });
 
   // ========== loadWorkspaceState ==========
@@ -94,6 +95,35 @@ describe('API Client', () => {
         .mockResolvedValueOnce(mockResponse({ error: 'Not found' }, 404))
         .mockResolvedValueOnce(mockResponse({ conversations: [] }, 200));
       await expect(loadWorkspaceState()).rejects.toThrow('Workspace məlumatları yüklənmədi');
+    });
+
+    it('refreshes an expired access token and retries workspace loading', async () => {
+      localStorageMock.getItem.mockImplementation((key: string) => {
+        if (key === 'auth_token') return 'expired-token';
+        if (key === 'refresh_token') return 'valid-refresh-token';
+        return null;
+      });
+
+      mockFetch.mockImplementation(async (input: string, init?: RequestInit) => {
+        if (input.endsWith('/api/auth/refresh')) {
+          return mockResponse({ token: 'fresh-token', refreshToken: 'rotated-refresh-token' });
+        }
+        const authorization = new Headers(init?.headers).get('Authorization');
+        if (authorization !== 'Bearer fresh-token') {
+          return mockResponse({ error: 'expired' }, 401);
+        }
+        if (input.includes('/api/projects')) {
+          return mockResponse({ projects: [{ id: 'p1', name: 'Saved', path: 'workspace://default' }] });
+        }
+        return mockResponse({ conversations: [{ id: 'c1', projectId: 'p1', title: 'Tarixçə', messages: [] }] });
+      });
+
+      const result = await loadWorkspaceState();
+
+      expect(result.projects[0].id).toBe('p1');
+      expect(result.conversations[0].id).toBe('c1');
+      expect(localStorageMock.setItem).toHaveBeenCalledWith('auth_token', 'fresh-token');
+      expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('auth_token');
     });
   });
 

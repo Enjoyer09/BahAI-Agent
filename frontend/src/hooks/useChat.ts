@@ -665,8 +665,16 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     }
     if (shouldAutoRenameConversation && nextTitle) {
       dispatch({ type: 'UPDATE_CONVERSATION', id: convId, updates: { title: nextTitle } });
-      if (stateRef.current.serverBacked) {
-        updateConversationOnServer(convId, { title: nextTitle, messages: currentMsgs }).catch(console.error);
+    }
+    if (serverBackedRef.current) {
+      try {
+        await updateConversationOnServer(convId, {
+          messages: currentMsgs,
+          ...(shouldAutoRenameConversation && nextTitle ? { title: nextTitle } : {}),
+        });
+      } catch (error) {
+        console.warn('Message persistence failed; keeping the local copy.', error);
+        persistLocalWorkspace(projectsRef.current, conversationsRef.current);
       }
     }
 
