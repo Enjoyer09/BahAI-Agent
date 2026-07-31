@@ -25,16 +25,19 @@
     "extraResources": [
       {
         "from": "../backend",
-        "to": "backend",
-        "filter": [
-          "**/*",
-          "!node_modules/.cache/**",
-          "!.npm-cache/**"
-        ]
+        "to": "backend"
+      },
+      {
+        "from": "../backend/node_modules",
+        "to": "backend/node_modules"
       },
       {
         "from": "../frontend/dist",
         "to": "frontend/dist"
+      },
+      {
+        "from": "../.env",
+        "to": ".env"
       }
     ],
     "mac": {

@@ -51,7 +51,9 @@ function createStreamingClient(tag = 'ok') {
 }
 
 describe('runner failover behavior', () => {
-  it('treats 503 and network-style errors as retryable', () => {
+  it('treats provider limits, 503 and network-style errors as retryable', () => {
+    expect(isRetryableProviderError({ status: 402, message: 'Usage limit reached' }, () => false)).toBe(true);
+    expect(isRetryableProviderError({ message: 'Provider quota exceeded' }, () => false)).toBe(true);
     expect(isRetryableProviderError({ status: 503, message: 'Service Unavailable' }, () => false)).toBe(true);
     expect(isRetryableProviderError({ message: 'fetch failed ECONNREFUSED' }, () => false)).toBe(true);
     expect(isRetryableProviderError({ name: 'AbortError', message: 'aborted' }, () => false)).toBe(true);

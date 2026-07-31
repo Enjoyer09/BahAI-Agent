@@ -79,22 +79,30 @@ function getBackendPath() {
 }
 
 function getEnvPath() {
+  const fs = require('fs');
   if (isDev) {
     return path.join(__dirname, '..', '.env');
   }
-  // User can place .env in app support directory
   const userDataPath = app.getPath('userData');
   const userEnv = path.join(userDataPath, '.env');
-  const fs = require('fs');
-  // Fallback to project root .env if user-level doesn't exist
-  if (!fs.existsSync(userEnv)) {
-    const rootEnv = path.join(__dirname, '..', '.env');
-    if (fs.existsSync(rootEnv)) return rootEnv;
+  if (fs.existsSync(userEnv)) return userEnv;
+
+  const resourcesEnv = path.join(process.resourcesPath, '.env');
+  if (fs.existsSync(resourcesEnv)) return resourcesEnv;
+
+  const rootEnv = path.join(__dirname, '..', '.env');
+  if (fs.existsSync(rootEnv)) return rootEnv;
+
+  try {
+    const defaultEnvContent = `PORT=3001\nLOCAL_MODE=true\nNODE_ENV=development\nOMNIROUTE_ENABLED=true\nOMNIROUTE_BASE_URL=https://api.freemodel.dev/v1\nOMNIROUTE_API_KEY=fe_oa_bf2a90d533a46282b0d87bbe00052ec79ba14a5bfb33eb29\nOMNIROUTE_MODEL=gpt-5.5\nOPENAI_BASE_URL=http://localhost:11434/v1\nOPENAI_API_KEY=ollama\nOPENAI_MODEL=qwen2.5-coder:latest\n`;
+    fs.writeFileSync(userEnv, defaultEnvContent, 'utf-8');
+    return userEnv;
+  } catch {
+    return userEnv;
   }
-  return userEnv;
 }
 
-function waitForPort(port, timeout = 15000) {
+function waitForPort(port, timeout = 25000) {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     const check = () => {
@@ -122,16 +130,37 @@ function waitForPort(port, timeout = 15000) {
   });
 }
 
-function startBackend() {
+async function startBackend() {
+  // Check if port is already active
+  try {
+    await waitForPort(BACKEND_PORT, 1200);
+    console.log('✅ Existing backend server detected on port', BACKEND_PORT);
+    return;
+  } catch {
+    // Proceed to spawn backend process
+  }
+
   return new Promise((resolve, reject) => {
     const backendPath = getBackendPath();
     const envPath = getEnvPath();
     const localDbPath = path.join(app.getPath('userData'), 'local_db.json');
 
-    if (verboseDesktopLogs) console.log('🚀 Starting backend:', backendPath);
+    const fs = require('fs');
+    const backendDir = path.dirname(backendPath);
+    const backendNodeModules = path.join(backendDir, 'node_modules');
+    const resourcesNodeModules = app.isPackaged ? path.join(process.resourcesPath, 'node_modules') : '';
+    const rootNodeModules = path.join(backendDir, '..', 'node_modules');
+
+    const nodePath = [
+      backendNodeModules,
+      resourcesNodeModules,
+      rootNodeModules,
+      process.env.NODE_PATH
+    ].filter((p) => p && fs.existsSync(p)).join(path.delimiter);
 
     const env = {
       ...process.env,
+      NODE_PATH: nodePath,
       PORT: String(BACKEND_PORT),
       HOST: '127.0.0.1',
       LOCAL_MODE: 'true',
@@ -145,16 +174,14 @@ function startBackend() {
       PATH: `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:${process.env.PATH || ''}`
     };
 
-    // Packaged Electron can run the backend as Node, so the desktop app does
-    // not depend on a system-wide Node.js installation.
     const fs = require('fs');
     const nodeCandidates = [
-      app.isPackaged ? process.execPath : null,
       '/usr/local/bin/node',
       '/opt/homebrew/bin/node',
       '/usr/bin/node',
       process.env.NODE_PATH,
       path.join(process.env.HOME || '', '.nvm/versions/node', 'current', 'bin', 'node'),
+      app.isPackaged ? process.execPath : null,
     ].filter(Boolean);
 
     let selectedNode = null;
@@ -167,7 +194,6 @@ function startBackend() {
       } catch {}
     }
 
-    // Fallback: use 'node' from PATH (works in --dev mode)
     if (!selectedNode) {
       selectedNode = 'node';
     }
@@ -175,30 +201,25 @@ function startBackend() {
       env.ELECTRON_RUN_AS_NODE = '1';
     }
 
-    if (verboseDesktopLogs) {
-      console.log('📍 Using node:', selectedNode);
-      console.log('📍 Backend path:', backendPath);
-      console.log('📍 Backend exists:', fs.existsSync(backendPath));
-      console.log('📍 Node exists:', fs.existsSync(selectedNode));
-      console.log('📍 CWD:', path.dirname(backendPath));
-    }
-
+    const backendLogs = [];
     backendProcess = spawn(selectedNode, [backendPath], {
       cwd: path.dirname(backendPath),
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
-      shell: !selectedNode.startsWith('/')  // Use shell only if not absolute path
+      shell: !selectedNode.startsWith('/')
     });
 
-    if (verboseDesktopLogs) {
-      backendProcess.stdout.on('data', (data) => {
-        console.log(`[backend] ${data.toString().trim()}`);
-      });
+    backendProcess.stdout.on('data', (data) => {
+      const str = data.toString().trim();
+      backendLogs.push(`[stdout] ${str}`);
+      if (verboseDesktopLogs) console.log(`[backend] ${str}`);
+    });
 
-      backendProcess.stderr.on('data', (data) => {
-        console.error(`[backend:err] ${data.toString().trim()}`);
-      });
-    }
+    backendProcess.stderr.on('data', (data) => {
+      const str = data.toString().trim();
+      backendLogs.push(`[stderr] ${str}`);
+      console.error(`[backend:err] ${str}`);
+    });
 
     backendProcess.on('error', (err) => {
       console.error('Backend process error:', err);
@@ -210,13 +231,17 @@ function startBackend() {
       backendProcess = null;
     });
 
-    // Wait for backend to be ready
-    waitForPort(BACKEND_PORT)
+    // Wait for backend port
+    waitForPort(BACKEND_PORT, 25000)
       .then(() => {
-        if (verboseDesktopLogs) console.log('✅ Backend is ready on port', BACKEND_PORT);
+        console.log('✅ Backend is ready on port', BACKEND_PORT);
         resolve();
       })
-      .catch(reject);
+      .catch((err) => {
+        const lastErrLog = backendLogs.slice(-10).join('\n');
+        const detailMsg = lastErrLog ? `\n\nLog təfərrüatları:\n${lastErrLog}` : '';
+        reject(new Error(`Backend serveri 25 saniyə ərzində başlamadı (${BACKEND_PORT}).${detailMsg}`));
+      });
   });
 }
 

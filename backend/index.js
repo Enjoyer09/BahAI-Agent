@@ -5,8 +5,49 @@
 // Utility functions are in backend/helpers.js
 // Tool execution is in backend/toolRunner.js
 
-require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
-require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
+const fs = require('fs');
+const path = require('path');
+const moduleAlias = require('module');
+
+// Extend Node module resolution paths
+const extraModulePaths = [
+  path.resolve(__dirname, 'node_modules'),
+  path.resolve(__dirname, '..', 'node_modules'),
+  path.resolve(__dirname, '..', '..', 'node_modules'),
+];
+for (const p of extraModulePaths) {
+  if (fs.existsSync(p) && !moduleAlias.globalPaths.includes(p)) {
+    moduleAlias.globalPaths.push(p);
+  }
+}
+
+// Safe dotenv loading with zero-dependency fallback
+try {
+  require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+  require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+} catch {
+  const envFiles = [
+    path.resolve(__dirname, '.env'),
+    path.resolve(__dirname, '..', '.env'),
+    process.env.DOTENV_CONFIG_PATH
+  ].filter(Boolean);
+  for (const envFile of envFiles) {
+    if (fs.existsSync(envFile)) {
+      try {
+        const lines = fs.readFileSync(envFile, 'utf-8').split('\n');
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+            const idx = trimmed.indexOf('=');
+            const k = trimmed.slice(0, idx).trim();
+            const v = trimmed.slice(idx + 1).trim();
+            if (k && !process.env[k]) process.env[k] = v;
+          }
+        }
+      } catch {}
+    }
+  }
+}
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection:', reason);
@@ -16,7 +57,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const path = require('path');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -142,6 +182,10 @@ const chatLimiter = rateLimit({
   message: { error: 'Çox chat sorğusu. Bir az sonra yenidən cəhd edin.' }
 });
 app.use('/api', (req, res, next) => {
+  // The desktop app talks exclusively to its loopback-only backend. Background
+  // capability and interaction polling can legitimately exceed the public API
+  // budget and must not block folder selection or agent tool calls.
+  if (isLocalMode()) return next();
   if (req.path === '/chat' || req.path === '/chat-stream') return chatLimiter(req, res, next);
   return apiLimiter(req, res, next);
 });

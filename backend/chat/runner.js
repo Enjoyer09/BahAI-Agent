@@ -2,12 +2,13 @@ function isRetryableProviderError(error, isResponsesSchemaMismatchError) {
   const status = error?.status || error?.code;
   const msg = String(error?.message || '').toLowerCase();
   if (error?.name === 'AbortError') return true;
-  if (status === 401) return true;
+  if (status === 401 || status === 402) return true;
   if (status === 408 || status === 409 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
   if (status === 400 || String(status) === '400') {
     if (msg.includes('upstream') || msg.includes('provider') || msg.includes('temporarily') || msg.includes('failed') || msg.includes('error') || msg.includes('content-blocked')) return true;
   }
   if (isResponsesSchemaMismatchError(error)) return true;
+  if (msg.includes('usage limit') || msg.includes('quota') || msg.includes('insufficient credits') || msg.includes('credit balance')) return true;
   if (!status && (msg.includes('network') || msg.includes('timeout') || msg.includes('fetch failed') || msg.includes('econnrefused') || msg.includes('econnreset'))) return true;
   return false;
 }

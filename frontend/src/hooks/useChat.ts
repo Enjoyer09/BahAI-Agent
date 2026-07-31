@@ -765,16 +765,40 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     };
     dispatch({ type: 'ADD_CONVERSATION', conversation: newConv });
     dispatch({ type: 'SET_ACTIVE_CONV_ID', id: newConv.id });
-    if (state.serverBacked) {
+    conversationsRef.current = [newConv, ...conversationsRef.current];
+    activeConvIdRef.current = newConv.id;
+    if (serverBackedRef.current) {
       createConversationOnServer(projectId, title)
         .then(serverConv => {
-                dispatch({ type: 'UPDATE_CONVERSATION', id: newConv.id, updates: serverConv });
-          dispatch({ type: 'SET_ACTIVE_CONV_ID', id: serverConv.id });
+          const optimistic = conversationsRef.current.find((conversation) => conversation.id === newConv.id);
+          const mergedConversation = {
+            ...serverConv,
+            title: optimistic?.title || serverConv.title,
+            messages: optimistic?.messages || serverConv.messages || [],
+          };
+          conversationsRef.current = conversationsRef.current.map((conversation) =>
+            conversation.id === newConv.id ? mergedConversation : conversation
+          );
+          const wasActive = activeConvIdRef.current === newConv.id;
+          if (wasActive) activeConvIdRef.current = serverConv.id;
+          dispatch({ type: 'UPDATE_CONVERSATION', id: newConv.id, updates: mergedConversation });
+          if (wasActive) dispatch({ type: 'SET_ACTIVE_CONV_ID', id: serverConv.id });
+          if (mergedConversation.messages.length > 0) {
+            updateConversationOnServer(serverConv.id, {
+              title: mergedConversation.title,
+              messages: mergedConversation.messages,
+            }).catch(console.error);
+          }
         })
-        .catch(console.error);
+        .catch((error) => {
+          console.warn('Server conversation creation failed; keeping the local conversation.', error);
+          persistLocalWorkspace(projectsRef.current, conversationsRef.current);
+        });
+    } else {
+      persistLocalWorkspace(projectsRef.current, conversationsRef.current);
     }
     return newConv.id;
-  }, [settings.productMode, state.serverBacked, state.abortController]);
+  }, [persistLocalWorkspace, settings.productMode, state.abortController]);
 
   const createProject = useCallback((name: string, path: string, repoUrl?: string) => {
     const newProj: Project = { id: generateId(), name, path, createdAt: Date.now(), repoUrl };
@@ -789,17 +813,45 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     dispatch({ type: 'ADD_PROJECT', project: newProj });
     dispatch({ type: 'ADD_CONVERSATION', conversation: localConv });
     dispatch({ type: 'SET_ACTIVE_CONV_ID', id: localConv.id });
-    if (state.serverBacked) {
+    projectsRef.current = [...projectsRef.current, newProj];
+    conversationsRef.current = [localConv, ...conversationsRef.current];
+    activeConvIdRef.current = localConv.id;
+    if (serverBackedRef.current) {
       createProjectOnServer({ name, path, repoUrl })
         .then(({ project, conversation }) => {
+          const optimisticConversation = conversationsRef.current.find((item) => item.id === localConv.id);
+          const mergedConversation = {
+            ...conversation,
+            title: optimisticConversation?.title || conversation.title,
+            messages: optimisticConversation?.messages || conversation.messages || [],
+          };
+          projectsRef.current = projectsRef.current.map((item) =>
+            item.id === newProj.id ? project : item
+          );
+          conversationsRef.current = conversationsRef.current.map((item) =>
+            item.id === localConv.id ? mergedConversation : item
+          );
+          const wasActive = activeConvIdRef.current === localConv.id;
+          if (wasActive) activeConvIdRef.current = conversation.id;
           dispatch({ type: 'UPDATE_PROJECT', id: newProj.id, updates: project });
-          dispatch({ type: 'UPDATE_CONVERSATION', id: localConv.id, updates: conversation });
-          dispatch({ type: 'SET_ACTIVE_CONV_ID', id: conversation.id });
+          dispatch({ type: 'UPDATE_CONVERSATION', id: localConv.id, updates: mergedConversation });
+          if (wasActive) dispatch({ type: 'SET_ACTIVE_CONV_ID', id: conversation.id });
+          if (mergedConversation.messages.length > 0) {
+            updateConversationOnServer(conversation.id, {
+              title: mergedConversation.title,
+              messages: mergedConversation.messages,
+            }).catch(console.error);
+          }
         })
-        .catch(console.error);
+        .catch((error) => {
+          console.warn('Server project creation failed; keeping the selected local repo.', error);
+          persistLocalWorkspace(projectsRef.current, conversationsRef.current);
+        });
+    } else {
+      persistLocalWorkspace(projectsRef.current, conversationsRef.current);
     }
     return localConv.id;
-  }, [state.serverBacked]);
+  }, [persistLocalWorkspace]);
 
   const updateProject = useCallback((id: string, updates: Partial<Project>) => {
     dispatch({ type: 'UPDATE_PROJECT', id, updates });
