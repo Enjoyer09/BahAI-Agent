@@ -69,6 +69,15 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   const storageTimeout = useRef<any>(null);
   const loadingOlderMessagesRef = useRef<Set<string>>(new Set());
 
+  const persistLocalWorkspace = useCallback((projects: Project[], conversations: Conversation[]) => {
+    try {
+      localStorage.setItem('projects', JSON.stringify(projects));
+      localStorage.setItem('conversations', JSON.stringify(conversations));
+    } catch (error) {
+      console.warn('Local workspace persistence failed.', error);
+    }
+  }, []);
+
   // ==========================================
   // RACE CONDITION FIX: Sync ALL refs in a SINGLE effect
   // to prevent timing gaps where one ref is updated but
@@ -600,8 +609,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     dispatch({ type: 'ADD_CONVERSATION', conversation: localConversation });
     conversationsRef.current = [localConversation, ...conversationsRef.current];
     dispatch({ type: 'SET_ACTIVE_CONV_ID', id: localConversation.id });
+    persistLocalWorkspace(projectsRef.current, conversationsRef.current);
     return { convId: localConversation.id, project };
-  }, [settings.productMode]);
+  }, [persistLocalWorkspace, settings.productMode]);
 
   // ==========================================
   // sendMessage — RACE CONDITION FIXES:
@@ -647,6 +657,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       item.id === convId ? { ...item, messages: currentMsgs, updatedAt: Date.now() } : item
     );
     dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: currentMsgs });
+    if (!serverBackedRef.current) {
+      persistLocalWorkspace(projectsRef.current, conversationsRef.current);
+    }
     if (stateRef.current.serverBacked) {
       dispatch({ type: 'UPDATE_CONVERSATION', id: convId, updates: { messagesLoaded: true } });
     }
@@ -689,7 +702,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const responseTime = Date.now() - userMsg.timestamp;
       trackChatMessage(settings.model, responseTime);
     }
-  }, [stateRef, activeProject, settings, eventSink, ensureConversationForSend]);
+  }, [stateRef, activeProject, settings, eventSink, ensureConversationForSend, persistLocalWorkspace]);
 
   // ==========================================
   // Callbacks
