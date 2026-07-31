@@ -749,6 +749,10 @@ button, a, [role="button"] {
   font-size: 11px;
 }
 
+.desktop-composer-dock {
+  padding: 0 0 12px;
+}
+
 .composer-input-row {
   display: flex;
   align-items: flex-end;

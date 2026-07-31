@@ -380,7 +380,7 @@ export default function SettingsModal({
         <div className="w-full md:w-64 bg-[var(--bg-hover)] border-b md:border-b-0 md:border-r border-[var(--border)] flex flex-col shrink-0">
           <div className="p-3 sm:p-5 flex items-center justify-between">
             <h2 className="text-lg sm:text-xl font-bold text-[var(--fg-main)]">Tənzimləmələr</h2>
-            <button aria-label="Parametrləri bağla" onClick={onClose} className="p-2 rounded-full hover:bg-[var(--bg-active)] text-[var(--fg-muted)] transition-colors active:scale-95">
+            <button aria-label="Parametrləri bağla" onClick={onClose} className="md:hidden p-2 rounded-full hover:bg-[var(--bg-active)] text-[var(--fg-muted)] transition-colors active:scale-95">
               <X size={20} />
             </button>
           </div>

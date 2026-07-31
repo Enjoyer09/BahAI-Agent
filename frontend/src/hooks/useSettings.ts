@@ -73,7 +73,7 @@ export function useSettings() {
   }, [productMode]);
 
   // Appearance & Layout Settings
-  const [language, setLanguage] = useState(() => loadSetting('language', 'en'));
+  const [language, setLanguage] = useState(() => loadSetting('language', 'az'));
   const [messageFontSize, setMessageFontSize] = useState(() => loadSetting('messageFontSize', 'medium'));
   const [chatDirection, setChatDirection] = useState<'ltr' | 'rtl'>(() => loadSetting('chatDirection', 'ltr') as 'ltr' | 'rtl');
   const [maximizeChatSpace, setMaximizeChatSpace] = useState(() => loadBoolSetting('maximizeChatSpace', false));

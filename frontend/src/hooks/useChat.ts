@@ -536,20 +536,26 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
 
     if (!project) {
       if (serverBackedRef.current) {
-        const created = await createProjectOnServer({
-          name: getDefaultWorkspaceName(settings.productMode),
-          path: 'workspace://default',
-        });
-        dispatch({ type: 'ADD_PROJECT', project: created.project });
-        projectsRef.current = [...projectsRef.current, created.project];
-        const createdConversation = { ...created.conversation, messagesLoaded: true, messagesHasMore: false };
-        dispatch({
-          type: 'ADD_CONVERSATION',
-          conversation: createdConversation
-        });
-        conversationsRef.current = [createdConversation, ...conversationsRef.current];
-        dispatch({ type: 'SET_ACTIVE_CONV_ID', id: created.conversation.id });
-        return { convId: created.conversation.id, project: created.project };
+        try {
+          const created = await createProjectOnServer({
+            name: getDefaultWorkspaceName(settings.productMode),
+            path: 'workspace://default',
+          });
+          dispatch({ type: 'ADD_PROJECT', project: created.project });
+          projectsRef.current = [...projectsRef.current, created.project];
+          const createdConversation = { ...created.conversation, messagesLoaded: true, messagesHasMore: false };
+          dispatch({
+            type: 'ADD_CONVERSATION',
+            conversation: createdConversation
+          });
+          conversationsRef.current = [createdConversation, ...conversationsRef.current];
+          dispatch({ type: 'SET_ACTIVE_CONV_ID', id: created.conversation.id });
+          return { convId: created.conversation.id, project: created.project };
+        } catch (error) {
+          console.warn('Server persistence unavailable; continuing with a local conversation.', error);
+          serverBackedRef.current = false;
+          dispatch({ type: 'SET_SERVER_BACKED', backed: false });
+        }
       }
 
       const localProject: Project = {
@@ -564,17 +570,23 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     }
 
     if (serverBackedRef.current) {
-      const createdConversation = await createConversationOnServer(project.id, getDefaultConversationTitle(settings.productMode));
-      dispatch({
-        type: 'ADD_CONVERSATION',
-        conversation: { ...createdConversation, messagesLoaded: true, messagesHasMore: false }
-      });
-      conversationsRef.current = [
-        { ...createdConversation, messagesLoaded: true, messagesHasMore: false },
-        ...conversationsRef.current,
-      ];
-      dispatch({ type: 'SET_ACTIVE_CONV_ID', id: createdConversation.id });
-      return { convId: createdConversation.id, project };
+      try {
+        const createdConversation = await createConversationOnServer(project.id, getDefaultConversationTitle(settings.productMode));
+        dispatch({
+          type: 'ADD_CONVERSATION',
+          conversation: { ...createdConversation, messagesLoaded: true, messagesHasMore: false }
+        });
+        conversationsRef.current = [
+          { ...createdConversation, messagesLoaded: true, messagesHasMore: false },
+          ...conversationsRef.current,
+        ];
+        dispatch({ type: 'SET_ACTIVE_CONV_ID', id: createdConversation.id });
+        return { convId: createdConversation.id, project };
+      } catch (error) {
+        console.warn('Server conversation creation unavailable; continuing locally.', error);
+        serverBackedRef.current = false;
+        dispatch({ type: 'SET_SERVER_BACKED', backed: false });
+      }
     }
 
     const localConversation: Conversation = {

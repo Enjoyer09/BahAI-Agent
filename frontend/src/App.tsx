@@ -360,7 +360,7 @@ function AppContent() {
         />
         <div className={isMobile
           ? 'mobile-composer-dock shrink-0 w-full'
-          : `shrink-0 w-full ${chat.messages.length === 0 && settings.centerChatInput ? 'max-w-3xl mx-auto mb-auto mt-0' : 'max-w-3xl mx-auto'} ${settings.maximizeChatSpace ? '!max-w-full !px-8' : ''}`
+          : `desktop-composer-dock shrink-0 w-full ${chat.messages.length === 0 && settings.centerChatInput ? 'max-w-3xl mx-auto mb-auto mt-0' : 'max-w-3xl mx-auto'} ${settings.maximizeChatSpace ? '!max-w-full !px-8' : ''}`
         }>
           <Composer
             onSendMessage={(text, attachments) => {
