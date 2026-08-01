@@ -95,6 +95,32 @@ describe('provider candidate routing', () => {
     expect(candidates[0].model).toBe('gpt-5.5-vision');
   });
 
+  it('web chat image requests prefer a real NVIDIA vision candidate when available', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: 'dummy',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'smart',
+      hasImageAttachment: true,
+      webTaskType: 'vision',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        OPENAI_API_KEY: 'env-key',
+        OPENAI_BASE_URL: 'https://api.freemodel.dev/v1',
+        NVIDIA_API_KEY: 'nvapi-test',
+        NVIDIA_VISION_MODEL: 'meta/llama-3.2-11b-vision-instruct'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    expect(candidates[0]).toMatchObject({
+      id: 'nvidia_vision_1',
+      model: 'meta/llama-3.2-11b-vision-instruct'
+    });
+  });
+
   it('web chat code requests prefer code model first', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: 'dummy',

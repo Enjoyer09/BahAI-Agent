@@ -342,7 +342,12 @@ router.post('/', async (req, res) => {
   const resolvedWD = productMode === 'web_chat' ? '' : resolveWorkingDirectory(workingDirectory, req.user);
   const MAX_STEPS = parseInt(process.env.MAX_AGENT_STEPS || '6', 10);
   const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '60000', 10);
-  const LLM_TIMEOUT_CHAT = parseInt(process.env.LLM_TIMEOUT_CHAT || '45000', 10);
+  // Web chat should fail over quickly. A stale Railway value such as 180s
+  // otherwise makes one failed provider feel like a frozen conversation.
+  const LLM_TIMEOUT_CHAT = Math.min(
+    parseInt(process.env.LLM_TIMEOUT_CHAT || '20000', 10),
+    20000
+  );
   const providerRuntime = require('../helpers').providerRuntime || { markProviderFailure: () => {}, canUseProviderNow: () => true, markProviderSuccess: () => {}, reorderCandidatesForSession: (items) => items };
   const providerSessionKey = `${productMode || 'desktop_code'}:${req.user?.id || 'anon'}:${conversationId || 'default'}`;
 
