@@ -49,14 +49,14 @@ function adaptMessagesForProvider(messages = [], provider = {}, model = '') {
 
   return messages.map((message) => {
     if (message?.role !== 'user' || !Array.isArray(message.content)) return message;
-    const parts = message.content.map((part) => {
-      if (part?.type === 'text') return String(part.text || '');
-      if (part?.type === 'image_url' && part.image_url?.url) {
-        return `<img src="${part.image_url.url}" />`;
-      }
-      return '';
-    }).filter(Boolean);
-    return { ...message, content: parts.join('\n\n') };
+    const images = message.content
+      .filter((part) => part?.type === 'image_url' && part.image_url?.url)
+      .map((part) => `<img src="${part.image_url.url}" />`);
+    const textParts = message.content
+      .filter((part) => part?.type === 'text')
+      .map((part) => String(part.text || ''))
+      .filter(Boolean);
+    return { ...message, content: [...images, ...textParts].join('\n\n') };
   });
 }
 

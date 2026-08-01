@@ -1088,9 +1088,9 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
           const extractedText = String(attachment.extractedText || '').trim();
           if (attachment?.type === 'image' && !isLocalOrFlakyModel) {
             if (isLikelyUsefulOcr(extractedText)) {
-              return `\n\n[Attachment OCR hint: ${attachment.name || 'image'}]\n${extractedText.slice(0, 1200)}`;
+              return `\n\n[Şəkildən çıxarılan OCR ipucu]\n${extractedText.slice(0, 1200)}`;
             }
-            return `\n\n[Attachment: ${attachment.name || 'image'} | ${attachment.mimeType || attachment.type || 'image'}]\nŞəkil əlavə olunub. Vizual analizə üstünlük ver.`;
+            return '\n\n[Şəkil əlavə olunub]\nVizual analizə üstünlük ver.';
           }
           return `\n\n[Attachment: ${attachment.name || 'attachment'} | ${attachment.mimeType || attachment.type || 'unknown'}]\n${extractedText.slice(0, 6000)}`;
         }
@@ -1102,9 +1102,9 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
         if (extracted.extractedText) {
           if (attachment?.type === 'image' && !isLocalOrFlakyModel) {
             if (isLikelyUsefulOcr(extracted.extractedText)) {
-              return `\n\n[Attachment OCR hint: ${extracted.name}]\n${String(extracted.extractedText).slice(0, 1200)}`;
+              return `\n\n[Şəkildən çıxarılan OCR ipucu]\n${String(extracted.extractedText).slice(0, 1200)}`;
             }
-            return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\nŞəkil əlavə olunub. Vizual analizə üstünlük ver.`;
+            return '\n\n[Şəkil əlavə olunub]\nVizual analizə üstünlük ver.';
           }
           return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${String(extracted.extractedText).slice(0, 6000)}`;
         }

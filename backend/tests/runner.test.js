@@ -66,6 +66,7 @@ describe('runner failover behavior', () => {
 
     expect(messages[0].content).toContain('Şəkildə nə görürsən?');
     expect(messages[0].content).toContain('<img src="data:image/png;base64,abc" />');
+    expect(messages[0].content.indexOf('<img')).toBeLessThan(messages[0].content.indexOf('Şəkildə'));
   });
 
   it('disables tools for NVIDIA vision requests', async () => {
