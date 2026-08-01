@@ -38,6 +38,28 @@ function modelDisablesTools(model = '') {
   return /(?:^|[\/_-])(embed|embedding|rerank|retriever|reward|guard|safety|moderation|parse)(?:$|[\/_-])/i.test(String(model || ''));
 }
 
+function isVisionModel(model = '') {
+  return /(?:vision|multimodal|(?:^|[\/_-])vl(?:$|[\/_-]))/i.test(String(model || ''));
+}
+
+function adaptMessagesForProvider(messages = [], provider = {}, model = '') {
+  const isNvidiaVision = /integrate\.api\.nvidia\.com/i.test(String(provider.baseURL || ''))
+    && isVisionModel(model);
+  if (!isNvidiaVision) return messages;
+
+  return messages.map((message) => {
+    if (message?.role !== 'user' || !Array.isArray(message.content)) return message;
+    const parts = message.content.map((part) => {
+      if (part?.type === 'text') return String(part.text || '');
+      if (part?.type === 'image_url' && part.image_url?.url) {
+        return `<img src="${part.image_url.url}" />`;
+      }
+      return '';
+    }).filter(Boolean);
+    return { ...message, content: parts.join('\n\n') };
+  });
+}
+
 async function primeProviderStream(stream) {
   if (!stream || typeof stream[Symbol.asyncIterator] !== 'function') {
     throw Object.assign(new Error('Provider etibarlı stream qaytarmadı'), { status: 503 });
@@ -96,8 +118,9 @@ async function openAiStreamWithFallback({
   let lastAttemptTimeoutMs = llmTimeoutMs;
 
   async function createStream(provider, providerClient, model, messages, disableTools = false) {
-    const apiInputMessages = await normalizeMessagesForModel(messages, model);
-    const shouldDisableTools = disableTools || provider.disableTools === true || modelDisablesTools(model);
+    const normalizedMessages = await normalizeMessagesForModel(messages, model);
+    const apiInputMessages = adaptMessagesForProvider(normalizedMessages, provider, model);
+    const shouldDisableTools = disableTools || provider.disableTools === true || modelDisablesTools(model) || isVisionModel(model);
     const isLocalProvider = /localhost|127\.0\.0\.1|11434|ollama/i.test(String(provider.baseURL || ''));
     const remainingRequestMs = requestDeadlineAt - Date.now();
     if (remainingRequestMs <= 0) {
@@ -178,7 +201,8 @@ async function openAiStreamWithFallback({
         };
       } catch (apiErr) {
         let currentErr = normalizeProviderStreamError(apiErr);
-        const isRetryable = isRetryableProviderError(currentErr, isResponsesSchemaMismatchError);
+        const isRetryable = isRetryableProviderError(currentErr, isResponsesSchemaMismatchError)
+          || (String(currentErr?.status || currentErr?.code || '') === '400' && isVisionModel(nextModel));
 
         if (isRetryable && providerCandidates.length > 1) {
           providerRuntime.markProviderFailure(nextProvider.id, currentErr);
@@ -380,5 +404,7 @@ async function openAiStreamWithFallback({
 module.exports = {
   openAiStreamWithFallback,
   isRetryableProviderError,
-  modelDisablesTools
+  modelDisablesTools,
+  isVisionModel,
+  adaptMessagesForProvider
 };

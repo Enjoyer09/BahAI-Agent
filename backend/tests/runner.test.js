@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { openAiStreamWithFallback, isRetryableProviderError } from '../chat/runner.js';
+import { openAiStreamWithFallback, isRetryableProviderError, adaptMessagesForProvider } from '../chat/runner.js';
 
 function createProviderRuntime() {
   const failed = new Set();
@@ -51,6 +51,77 @@ function createStreamingClient(tag = 'ok') {
 }
 
 describe('runner failover behavior', () => {
+  it('adapts NVIDIA vision image_url content to the NIM img-tag format', () => {
+    const messages = adaptMessagesForProvider([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Şəkildə nə görürsən?' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } }
+        ]
+      }
+    ], {
+      baseURL: 'https://integrate.api.nvidia.com/v1'
+    }, 'meta/llama-3.2-11b-vision-instruct');
+
+    expect(messages[0].content).toContain('Şəkildə nə görürsən?');
+    expect(messages[0].content).toContain('<img src="data:image/png;base64,abc" />');
+  });
+
+  it('disables tools for NVIDIA vision requests', async () => {
+    const runtime = createProviderRuntime();
+    const provider = {
+      id: 'nvidia_vision_1',
+      wireApi: 'chat_completions',
+      model: 'meta/llama-3.2-11b-vision-instruct',
+      baseURL: 'https://integrate.api.nvidia.com/v1',
+      apiKey: 'key'
+    };
+    const client = createStreamingClient('vision-ok');
+
+    await openAiStreamWithFallback({
+      currentMessages: [{
+        role: 'user',
+        content: 'Şəkildə nə görürsən?',
+        attachments: [{ type: 'image', mimeType: 'image/png', url: 'data:image/png;base64,abc' }]
+      }],
+      effectiveModel: provider.model,
+      activeProvider: provider,
+      client,
+      phaseTools: [{ type: 'function', function: { name: 'web_search', parameters: {} } }],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [provider],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => client,
+      normalizeMessagesForModel: async () => [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Şəkildə nə görürsən?' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } }
+        ]
+      }],
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:vision:test'
+    });
+
+    expect(client.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: undefined,
+        messages: [expect.objectContaining({
+          content: expect.stringContaining('<img src="data:image/png;base64,abc" />')
+        })]
+      }),
+      expect.any(Object)
+    );
+  });
+
   it('treats provider limits, 503 and network-style errors as retryable', () => {
     expect(isRetryableProviderError({ status: 402, message: 'Usage limit reached' }, () => false)).toBe(true);
     expect(isRetryableProviderError({ message: 'Provider quota exceeded' }, () => false)).toBe(true);
