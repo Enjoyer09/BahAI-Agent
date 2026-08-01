@@ -93,6 +93,42 @@ describe('runner failover behavior', () => {
     );
   });
 
+  it('keeps agent tools enabled for local and NVIDIA coding models', async () => {
+    const runtime = createProviderRuntime();
+    const tools = [{ type: 'function', function: { name: 'list_directory', parameters: {} } }];
+    for (const model of ['qwen2.5-coder:latest', 'nvidia/nemotron-3-super-120b-a12b']) {
+      const provider = { id: model, wireApi: 'chat_completions', model, baseURL: 'http://127.0.0.1:11434/v1', apiKey: 'key' };
+      const client = createStreamingClient('tool-capable');
+
+      await openAiStreamWithFallback({
+        currentMessages: [{ role: 'user', content: 'Reponu audit et' }],
+        effectiveModel: provider.model,
+        activeProvider: provider,
+        client,
+        phaseTools: tools,
+        isLocalOrFlakyModel: true,
+        providerCandidates: [provider],
+        providerRuntime: runtime,
+        buildOpenAIClient: () => client,
+        normalizeMessagesForModel: async (messages) => messages,
+        mapMessagesToResponsesInput: (messages) => messages,
+        mapToolsToResponsesTools: (items) => items,
+        isResponsesSchemaMismatchError: () => false,
+        buildDeepSeekRecoveryMessages: (messages) => messages,
+        writeSse: () => {},
+        shouldEmitDebugEvent: () => false,
+        llmTimeoutMs: 1000,
+        onProviderTelemetry: () => {},
+        providerSessionKey: `desktop:test:${model}`
+      });
+
+      expect(client.chat.completions.create).toHaveBeenCalledWith(
+        expect.objectContaining({ tools, stream: true }),
+        expect.any(Object),
+      );
+    }
+  });
+
   it('fails over to the next provider when the first provider returns 503', async () => {
     const runtime = createProviderRuntime();
     const primary = { id: 'primary', wireApi: 'responses', model: 'gpt-5.5', baseURL: 'https://a.example', apiKey: 'a' };

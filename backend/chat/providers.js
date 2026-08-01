@@ -221,6 +221,34 @@ function buildProviderCandidates({
     omniRouteModel || 'auto',
     ...parseModelList(env.OMNIROUTE_FALLBACK_MODELS || env.OMNIROUTE_MODELS || '')
   ]);
+  const nvidiaApiKey = String(env.NVIDIA_API_KEY || '').trim();
+  const nvidiaBaseUrl = normalizeProviderBaseUrl(env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1');
+
+  function buildNvidiaProviders(taskType = 'general') {
+    if (!nvidiaApiKey) return [];
+    const generalModel = env.NVIDIA_FAST_MODEL || env.NVIDIA_GENERAL_MODEL || '';
+    const smartModel = env.NVIDIA_SMART_MODEL || generalModel;
+    const codeModel = env.NVIDIA_CODE_MODEL || smartModel;
+    const visionModel = env.NVIDIA_VISION_MODEL || smartModel;
+    const taskModels = taskType === 'vision'
+      ? [visionModel, smartModel, generalModel]
+      : taskType === 'code'
+        ? [codeModel, smartModel, generalModel]
+        : autoIntent === 'smart'
+          ? [smartModel, generalModel, codeModel]
+          : [generalModel, smartModel, codeModel];
+    const models = uniqueModels([
+      ...taskModels,
+      ...parseModelList(env.NVIDIA_FALLBACK_MODELS || env.NVIDIA_MODELS || '')
+    ]);
+    return models.map((model, index) => ({
+      id: `nvidia_${taskType}_${index + 1}`,
+      apiKey: nvidiaApiKey,
+      baseURL: nvidiaBaseUrl,
+      model,
+      wireApi: 'chat_completions'
+    }));
+  }
 
   function buildCloudProvider({ id, apiKey, baseURL, model }) {
     if (!apiKey || !baseURL || !model) return null;
@@ -303,6 +331,14 @@ function buildProviderCandidates({
       }
     }
 
+    for (const candidate of buildNvidiaProviders(primaryTask)) {
+      const key = `${candidate.baseURL}|${candidate.model}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        candidates.push(candidate);
+      }
+    }
+
     // Cloud Fallback: OpenRouter Free Models (only if valid key is configured)
     const openRouterKey = env.OPENROUTER_API_KEY || (String(env.OPENAI_API_KEY || '').startsWith('sk-or-') ? env.OPENAI_API_KEY : '');
     if (openRouterKey && !seenKeys.has('https://openrouter.ai/api/v1|meta-llama/llama-3.3-70b-instruct:free')) {
@@ -359,12 +395,15 @@ function buildProviderCandidates({
 
       if (cloudOnly) {
         if (cloudProvider) list.push(cloudProvider);
+        list.push(...buildNvidiaProviders('code'));
       } else if (autoIntent === 'smart' && cloudProvider) {
         list.push(cloudProvider);
+        list.push(...buildNvidiaProviders('code'));
         list.push(localProvider);
       } else {
         list.push(localProvider);
         if (cloudProvider) list.push(cloudProvider);
+        list.push(...buildNvidiaProviders('code'));
       }
     }
   }

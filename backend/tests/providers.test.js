@@ -143,6 +143,61 @@ describe('provider candidate routing', () => {
     expect(candidates[0].apiKey).toBe('omni-key');
   });
 
+  it('adds task-aware NVIDIA NIM models after OmniRoute candidates', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'smart',
+      webTaskType: 'code',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        OMNIROUTE_ENABLED: 'true',
+        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
+        OMNIROUTE_API_KEY: 'omni-key',
+        OMNIROUTE_MODEL: 'auto',
+        NVIDIA_API_KEY: 'nvapi-test',
+        NVIDIA_CODE_MODEL: 'qwen/code-model',
+        NVIDIA_SMART_MODEL: 'meta/smart-model',
+        NVIDIA_GENERAL_MODEL: 'meta/fast-model'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    expect(candidates[0].id).toContain('omniroute');
+    expect(candidates.find((provider) => provider.id === 'nvidia_code_1')).toMatchObject({
+      baseURL: 'https://integrate.api.nvidia.com/v1',
+      apiKey: 'nvapi-test',
+      model: 'qwen/code-model',
+      wireApi: 'chat_completions'
+    });
+  });
+
+  it('uses NVIDIA as a desktop cloud Smart fallback', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'smart',
+      productMode: 'desktop_code',
+      executionMode: 'cloud',
+      env: {
+        NVIDIA_API_KEY: 'nvapi-test',
+        NVIDIA_CODE_MODEL: 'qwen/code-model',
+        NVIDIA_SMART_MODEL: 'meta/smart-model'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    expect(candidates[0]).toMatchObject({
+      id: 'nvidia_code_1',
+      model: 'qwen/code-model'
+    });
+  });
+
   it('expands OmniRoute fallback models for 401 model rotation', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: 'frontend-key-ignored',

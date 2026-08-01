@@ -39,6 +39,7 @@ backend/debug_messages.json
 backend/debug_*.json
 *.db-journal
 .env.*
+!.env.example
 *.env
 credentials.json
 *.pem

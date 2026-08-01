@@ -14,7 +14,7 @@ function isRetryableProviderError(error, isResponsesSchemaMismatchError) {
 }
 
 function modelDisablesTools(model = '') {
-  return /qwen|ollama|deepseek|llama|local|free|nemotron/i.test(String(model || ''));
+  return /(?:^|[\/_-])(embed|embedding|rerank|retriever|reward|guard|safety|moderation|parse)(?:$|[\/_-])/i.test(String(model || ''));
 }
 
 async function openAiStreamWithFallback({
@@ -50,7 +50,7 @@ async function openAiStreamWithFallback({
 
   async function createStream(provider, providerClient, model, messages, disableTools = false) {
     const apiInputMessages = await normalizeMessagesForModel(messages, model);
-    const shouldDisableTools = disableTools || modelDisablesTools(model);
+    const shouldDisableTools = disableTools || provider.disableTools === true || modelDisablesTools(model);
     const isLocalProvider = /localhost|127\.0\.0\.1|11434|ollama/i.test(String(provider.baseURL || ''));
     lastAttemptTimeoutMs = isLocalProvider ? Math.max(llmTimeoutMs, 90000) : llmTimeoutMs;
     const attemptController = new AbortController();
@@ -102,7 +102,7 @@ async function openAiStreamWithFallback({
           nextClient,
           nextModel,
           nextMessages,
-          forceDisableTools || isLocalOrFlakyModel
+          forceDisableTools
         );
         providerRuntime.markProviderSuccess(nextProvider.id);
         providerRuntime.markSessionProviderSuccess?.(providerSessionKey, nextProvider.id);
@@ -184,7 +184,7 @@ async function openAiStreamWithFallback({
             try {
               const downgradedProvider = { ...nextProvider, wireApi: 'chat_completions' };
               const downgradedClient = buildOpenAIClient(downgradedProvider);
-              stream = await createStream(downgradedProvider, downgradedClient, nextModel, nextMessages, forceDisableTools || isLocalOrFlakyModel);
+              stream = await createStream(downgradedProvider, downgradedClient, nextModel, nextMessages, forceDisableTools);
               nextProvider = downgradedProvider;
               nextClient = downgradedClient;
               providerRuntime.markProviderSuccess(downgradedProvider.id);

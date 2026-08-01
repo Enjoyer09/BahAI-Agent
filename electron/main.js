@@ -1,5 +1,6 @@
 const { app, BrowserWindow, shell, dialog, Menu, Tray, nativeImage, ipcMain, session } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const net = require('net');
 
@@ -79,7 +80,6 @@ function getBackendPath() {
 }
 
 function getEnvPath() {
-  const fs = require('fs');
   if (isDev) {
     return path.join(__dirname, '..', '.env');
   }
@@ -94,7 +94,7 @@ function getEnvPath() {
   if (fs.existsSync(rootEnv)) return rootEnv;
 
   try {
-    const defaultEnvContent = `PORT=3001\nLOCAL_MODE=true\nNODE_ENV=development\nOMNIROUTE_ENABLED=true\nOMNIROUTE_BASE_URL=https://api.freemodel.dev/v1\nOMNIROUTE_API_KEY=fe_oa_bf2a90d533a46282b0d87bbe00052ec79ba14a5bfb33eb29\nOMNIROUTE_MODEL=gpt-5.5\nOPENAI_BASE_URL=http://localhost:11434/v1\nOPENAI_API_KEY=ollama\nOPENAI_MODEL=qwen2.5-coder:latest\n`;
+    const defaultEnvContent = `PORT=3001\nLOCAL_MODE=true\nNODE_ENV=development\nOPENAI_BASE_URL=http://localhost:11434/v1\nOPENAI_API_KEY=ollama\nOPENAI_MODEL=qwen2.5-coder:latest\n`;
     fs.writeFileSync(userEnv, defaultEnvContent, 'utf-8');
     return userEnv;
   } catch {
@@ -144,8 +144,6 @@ async function startBackend() {
     const backendPath = getBackendPath();
     const envPath = getEnvPath();
     const localDbPath = path.join(app.getPath('userData'), 'local_db.json');
-
-    const fs = require('fs');
     const backendDir = path.dirname(backendPath);
     const backendNodeModules = path.join(backendDir, 'node_modules');
     const resourcesNodeModules = app.isPackaged ? path.join(process.resourcesPath, 'node_modules') : '';
@@ -174,7 +172,6 @@ async function startBackend() {
       PATH: `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:${process.env.PATH || ''}`
     };
 
-    const fs = require('fs');
     const nodeCandidates = [
       '/usr/local/bin/node',
       '/opt/homebrew/bin/node',
