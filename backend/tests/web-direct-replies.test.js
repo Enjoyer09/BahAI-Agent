@@ -37,6 +37,25 @@ describe('web direct replies', () => {
     expect(reply).toContain('120,360 AZN');
   });
 
+  it('calculates a simple percentage locally without a provider', async () => {
+    const reply = await getDirectWebChatReply(
+      '20-nin 15 faizi neçədir? Yalnız rəqəmi yaz.',
+      []
+    );
+
+    expect(reply).toBe('3');
+  });
+
+  it('rejects a known false named-entity premise instead of attaching a generic search result', async () => {
+    const reply = await getDirectWebChatReply(
+      'Bakı metrosunun Ay stansiyasına gediş haqqı neçədir?',
+      []
+    );
+
+    expect(reply).toContain('“Ay” adlı stansiya yoxdur');
+    expect(reply).not.toContain('60 qəpik');
+  });
+
   it('handles inflected Azerbaijani weather city names', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,

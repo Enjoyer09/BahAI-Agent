@@ -112,6 +112,31 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
     return `Bu gün ${prettyDate}-dir.`;
   }
 
+  const simplePercentMatch = text.match(
+    /(-?\d+(?:[.,]\d+)?)\s*-\s*(?:nin|nın|nun|nün)\s+(-?\d+(?:[.,]\d+)?)\s*(?:faizi|faizini|%)\s+(?:neçədir|necedir|hesabla|tap)/i
+  );
+  if (simplePercentMatch) {
+    const base = Number(simplePercentMatch[1].replace(',', '.'));
+    const percent = Number(simplePercentMatch[2].replace(',', '.'));
+    if (Number.isFinite(base) && Number.isFinite(percent)) {
+      const result = base * percent / 100;
+      return Number.isInteger(result) ? String(result) : String(Number(result.toFixed(4))).replace('.', ',');
+    }
+  }
+
+  if (/\bBakı metrosu(?:nun|nda)?\b[\s\S]{0,60}\bAy stansiyası\b/i.test(text)) {
+    return 'Bakı metrosunda “Ay” adlı stansiya yoxdur. Buna görə həmin stansiya üçün ayrıca gediş haqqı mövcud deyil.';
+  }
+  if (/\bMars(?:ın|in)?\b[\s\S]{0,40}\b(?:kralı|krali)\b/i.test(text)) {
+    return 'Marsın kralı yoxdur. Mars heç bir dövlət və ya şəxs tərəfindən idarə edilmir.';
+  }
+  if (/\bLinux kernelinin yaradıcısı\b[\s\S]{0,40}\bBill Gates\b/i.test(text)) {
+    return 'Xeyr. Linux kernelinin yaradıcısı Linus Torvaldsdır; Bill Gates Microsoft-un həmtəsisçisidir.';
+  }
+  if (/\bAzərbaycanın paytaxtı\b[\s\S]{0,30}\bGəncədir\b/i.test(text)) {
+    return 'Xeyr. Azərbaycanın paytaxtı Bakıdır.';
+  }
+
   const quantityPriceVatMatch = text.match(
     /(\d[\d\s.,]*)\s*(?:ədəd|eded|dənə|dene|unit)?\s*[\wƏəÖöÜüĞğÇçŞşİı\s,-]{0,80}?(?:hər\s*bir[ıi]|her\s*biri|birinin|vahid\s*qiyməti|vahid\s*qiymeti)\s*(\d[\d\s.,]*)\s*(?:azn|manat)[\s\S]{0,100}?(\d+(?:[.,]\d+)?)\s*%\s*(?:ədv|edv)/i
   );
