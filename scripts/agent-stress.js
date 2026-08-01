@@ -17,6 +17,10 @@ const CONCURRENCY = Number(readArg('concurrency', process.env.BAHAI_STRESS_CONCU
 const TIMEOUT_MS = Number(readArg('timeout', process.env.BAHAI_STRESS_TIMEOUT_MS || '90000'));
 const OUTPUT_DIR = path.resolve(readArg('output', process.env.BAHAI_STRESS_OUTPUT || 'artifacts'));
 const CHAT_URL = `${BASE_URL.replace(/\/$/, '')}/api/chat`;
+const AUTH_URL = `${BASE_URL.replace(/\/$/, '')}/api/auth/login`;
+const EMAIL = readArg('email', process.env.BAHAI_STRESS_EMAIL || 'demo@bahai.az');
+const PASSWORD = readArg('password', process.env.BAHAI_STRESS_PASSWORD || 'demo123');
+let authToken = '';
 
 function normalize(text) {
   return String(text || '')
@@ -474,6 +478,44 @@ function genericIssues(answer, events, expectedLanguage) {
   return { issues, critical };
 }
 
+function extractRouting(events) {
+  const routes = [];
+  for (const event of events) {
+    if (event.type === 'auto_route' && event.chosenModel) {
+      routes.push({ event: 'auto_route', model: event.chosenModel });
+    }
+    if (event.type === 'provider_telemetry') {
+      routes.push({
+        event: event.event || event.payload?.event || 'provider_telemetry',
+        providerId: event.providerId || event.payload?.providerId || null,
+        model: event.model || event.payload?.model || null,
+        status: event.status || event.payload?.status || null
+      });
+    }
+  }
+  return routes;
+}
+
+async function login() {
+  const response = await fetch(AUTH_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: EMAIL, password: PASSWORD })
+  });
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`Stress login uğursuz oldu (${response.status}): ${raw.slice(0, 300)}`);
+  }
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    throw new Error('Stress login cavabı JSON deyil');
+  }
+  authToken = payload.token || payload.accessToken || '';
+  if (!authToken) throw new Error('Stress login token qaytarmadı');
+}
+
 async function runCase(item) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -485,7 +527,8 @@ async function runCase(item) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Accept: 'text/event-stream'
+        Accept: 'text/event-stream',
+        Authorization: `Bearer ${authToken}`
       },
       body: JSON.stringify({
         messages: item.messages,
@@ -530,9 +573,10 @@ async function runCase(item) {
       status,
       statusCode,
       latencyMs,
-      answer,
-      issues,
-      eventTypes: [...new Set(events.map((event) => event.type))]
+        answer,
+        issues,
+        eventTypes: [...new Set(events.map((event) => event.type))],
+        routing: extractRouting(events)
     };
   } catch (error) {
     return {
@@ -688,6 +732,7 @@ async function main() {
 
   const corpus = buildCorpus();
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  await login();
   console.log(`BahAI stress testi başlayır: ${corpus.length} sorğu, concurrency=${CONCURRENCY}`);
   console.log(`Hədəf: ${CHAT_URL}`);
 
