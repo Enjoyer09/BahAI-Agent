@@ -26,6 +26,17 @@ describe('web direct replies', () => {
     expect(reply).toContain('2026');
   });
 
+  it('calculates quantity, unit price and VAT locally without a provider', async () => {
+    const reply = await getDirectWebChatReply(
+      '120 ədəd laptopun hər biri 850 AZN-dirsə, ümumi məbləği və 18% ƏDV-ni hesabla.',
+      []
+    );
+
+    expect(reply).toContain('102,000 AZN');
+    expect(reply).toContain('18,360 AZN');
+    expect(reply).toContain('120,360 AZN');
+  });
+
   it('handles inflected Azerbaijani weather city names', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,

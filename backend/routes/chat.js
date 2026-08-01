@@ -112,6 +112,40 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
     return `Bu gün ${prettyDate}-dir.`;
   }
 
+  const quantityPriceVatMatch = text.match(
+    /(\d[\d\s.,]*)\s*(?:ədəd|eded|dənə|dene|unit)?\s*[\wƏəÖöÜüĞğÇçŞşİı\s,-]{0,80}?(?:hər\s*bir[ıi]|her\s*biri|birinin|vahid\s*qiyməti|vahid\s*qiymeti)\s*(\d[\d\s.,]*)\s*(?:azn|manat)[\s\S]{0,100}?(\d+(?:[.,]\d+)?)\s*%\s*(?:ədv|edv)/i
+  );
+  if (quantityPriceVatMatch && /\b(hesabla|hesablayın|hesablayin|ümumi|umumi|məbləğ|mebleg)\b/i.test(text)) {
+    const parseNumber = (value) => {
+      const compact = String(value || '').replace(/\s+/g, '');
+      if (compact.includes(',') && compact.includes('.')) {
+        return Number(compact.replace(/,/g, ''));
+      }
+      return Number(compact.replace(',', '.'));
+    };
+    const quantity = parseNumber(quantityPriceVatMatch[1]);
+    const unitPrice = parseNumber(quantityPriceVatMatch[2]);
+    const vatRate = parseNumber(quantityPriceVatMatch[3]);
+    if (
+      Number.isFinite(quantity) && quantity > 0
+      && Number.isFinite(unitPrice) && unitPrice >= 0
+      && Number.isFinite(vatRate) && vatRate >= 0
+    ) {
+      const subtotal = quantity * unitPrice;
+      const vatAmount = subtotal * (vatRate / 100);
+      const totalWithVat = subtotal + vatAmount;
+      const formatMoney = (value) => value.toLocaleString('en-US', {
+        minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+        maximumFractionDigits: 2
+      });
+      return [
+        `Ümumi məbləğ: **${formatMoney(subtotal)} AZN**`,
+        `${formatMoney(vatRate)}% ƏDV: **${formatMoney(vatAmount)} AZN**`,
+        `ƏDV daxil yekun: **${formatMoney(totalWithVat)} AZN**`
+      ].join('\n\n');
+    }
+  }
+
   function formatTemperatureCelsius(rawTemp = '') {
     const normalized = String(rawTemp || '').trim();
     if (!normalized) return '';
