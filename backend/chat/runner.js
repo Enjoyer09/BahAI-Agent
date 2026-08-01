@@ -83,7 +83,8 @@ async function openAiStreamWithFallback({
   llmTimeoutMs,
   onProviderTelemetry,
   providerSessionKey,
-  forceDisableTools = false
+  forceDisableTools = false,
+  requestDeadlineAt = Number.POSITIVE_INFINITY
 }) {
   let stream;
   let nextProvider = activeProvider;
@@ -98,7 +99,12 @@ async function openAiStreamWithFallback({
     const apiInputMessages = await normalizeMessagesForModel(messages, model);
     const shouldDisableTools = disableTools || provider.disableTools === true || modelDisablesTools(model);
     const isLocalProvider = /localhost|127\.0\.0\.1|11434|ollama/i.test(String(provider.baseURL || ''));
-    lastAttemptTimeoutMs = isLocalProvider ? Math.max(llmTimeoutMs, 90000) : llmTimeoutMs;
+    const remainingRequestMs = requestDeadlineAt - Date.now();
+    if (remainingRequestMs <= 0) {
+      throw Object.assign(new Error('Request deadline exceeded'), { name: 'AbortError' });
+    }
+    const providerTimeoutMs = isLocalProvider ? Math.max(llmTimeoutMs, 90000) : llmTimeoutMs;
+    lastAttemptTimeoutMs = Math.max(1, Math.min(providerTimeoutMs, remainingRequestMs));
     const attemptController = new AbortController();
     const attemptTimer = setTimeout(() => attemptController.abort(), lastAttemptTimeoutMs);
     try {
@@ -175,7 +181,7 @@ async function openAiStreamWithFallback({
         const isRetryable = isRetryableProviderError(currentErr, isResponsesSchemaMismatchError);
 
         if (isRetryable && providerCandidates.length > 1) {
-          providerRuntime.markProviderFailure(nextProvider.id);
+          providerRuntime.markProviderFailure(nextProvider.id, currentErr);
           providerRuntime.markSessionProviderFailure?.(providerSessionKey, nextProvider.id);
           onProviderTelemetry?.({
             event: 'provider_failure',
@@ -217,7 +223,7 @@ async function openAiStreamWithFallback({
               };
             } catch (altErr) {
               currentErr = altErr;
-              providerRuntime.markProviderFailure(alt.id);
+              providerRuntime.markProviderFailure(alt.id, altErr);
               providerRuntime.markSessionProviderFailure?.(providerSessionKey, alt.id);
               onProviderTelemetry?.({
                 event: 'provider_failure',
@@ -258,7 +264,7 @@ async function openAiStreamWithFallback({
             }
           }
         } else {
-          providerRuntime.markProviderFailure(nextProvider.id);
+          providerRuntime.markProviderFailure(nextProvider.id, currentErr);
           providerRuntime.markSessionProviderFailure?.(providerSessionKey, nextProvider.id);
           onProviderTelemetry?.({
             event: 'provider_failure',

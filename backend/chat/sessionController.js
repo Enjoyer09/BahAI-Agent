@@ -23,6 +23,10 @@ function prepareWebFinalSynthesisMessages(messages = []) {
   return prepared.slice(-24);
 }
 
+function isConciseOutputRequest(text = '') {
+  return /(?:yalnız|yalniz|only|exactly|tam olaraq|başqa heç nə|basqa hec ne|rəqəmi yaz|reqemi yaz|bir söz|bir soz|bir emoji|qısa)/i.test(String(text || ''));
+}
+
 async function runChatSession({
   req,
   res,
@@ -65,8 +69,10 @@ async function runChatSession({
   let disconnectReason = '';
   const phaseRecoveryAttempts = new Map();
   const toolResultCache = new Map();
+  const requestDeadlineAt = Date.now() + (dependencies.requestTimeoutMs || 30000);
   const { createGuardrails } = require('./guardrails');
   const guardrails = createGuardrails({ maxToolCallsPerSession: 25, maxDuplicateToolThreshold: 4, maxMutationsPerFile: 6 });
+  const expectsConciseOutput = isConciseOutputRequest(latestUserText);
 
   const markClientDisconnected = (reason = 'client_disconnect') => {
     clientDisconnected = true;
@@ -151,7 +157,8 @@ async function runChatSession({
         llmTimeoutMs: dependencies.llmTimeoutMs,
         onProviderTelemetry: dependencies.onProviderTelemetry,
         providerSessionKey: dependencies.providerSessionKey,
-        forceDisableTools: forceFinalSynthesis
+        forceDisableTools: forceFinalSynthesis,
+        requestDeadlineAt
       });
 
       if (runnerResult.errorEvent) {
@@ -233,6 +240,7 @@ async function runChatSession({
       const shouldRecoverCurrentPhase = (() => {
         if (hasToolCalls) return false;
         if (artifactQuality === 'useful') return false;
+        if (productMode === 'web_chat' && expectsConciseOutput && hasTextContent) return false;
         const attempts = phaseRecoveryAttempts.get(phaseRecoveryKey) || 0;
         return attempts < 1;
       })();
@@ -428,5 +436,6 @@ async function runChatSession({
 
 module.exports = {
   runChatSession,
-  prepareWebFinalSynthesisMessages
+  prepareWebFinalSynthesisMessages,
+  isConciseOutputRequest
 };

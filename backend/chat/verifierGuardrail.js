@@ -34,6 +34,15 @@ function verifyAndCleanAssistantResponse(text = '', isWebProduct = false) {
     cleaned = cleaned.replace(/hələ keçirilməyib|keçiriləcək/gi, 'keçirilib başa çatmışdır (11 iyun - 19 iyul 2026)');
   }
 
+  // 5. Normalize common Turkish leakage from fallback models.
+  cleaned = cleaned
+    .replace(/\bHayır\b/gi, 'Xeyr')
+    .replace(/\byaprağında\b/gi, 'yarpağında')
+    .replace(/\byaprak\b/gi, 'yarpaq')
+    .replace(/\bbaşkenti\b/gi, 'paytaxtı')
+    .replace(/\bgerçekleşir\b/gi, 'baş verir')
+    .replace(/\bdolayısıyla\b/gi, 'buna görə');
+
   return cleaned.trim();
 }
 

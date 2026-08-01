@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runChatSession, prepareWebFinalSynthesisMessages } from '../chat/sessionController.js';
+import { runChatSession, prepareWebFinalSynthesisMessages, isConciseOutputRequest } from '../chat/sessionController.js';
 
 function createReq() {
   return {
@@ -28,6 +28,12 @@ function createRunManager() {
 }
 
 describe('runChatSession', () => {
+  it('recognizes exact short-output prompts that must not enter recovery loops', () => {
+    expect(isConciseOutputRequest('Cavab olaraq yalnız OK yaz.')).toBe(true);
+    expect(isConciseOutputRequest('Yalnız bir emoji ilə sevinc bildir.')).toBe(true);
+    expect(isConciseOutputRequest('Mövzunu ətraflı izah et.')).toBe(false);
+  });
+
   it('converts tool history into plain research context for final synthesis', () => {
     const prepared = prepareWebFinalSynthesisMessages([
       { role: 'user', content: 'Bazarı araşdır' },

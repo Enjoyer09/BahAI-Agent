@@ -34,6 +34,7 @@ async function collectStreamOutput({
   let sawAssistantDelta = false;
   let sawCompletedEvent = false;
   let resolvedModel = null;
+  let deferStructuredOutput = false;
 
   if (stream && stream.response && typeof stream.response.headers?.get === 'function') {
     const omniModel = stream.response.headers.get('x-omniroute-model');
@@ -91,9 +92,15 @@ async function collectStreamOutput({
     if (!delta) continue;
 
     if (delta.content) {
+      const nextContent = accumulatedContent + delta.content;
+      if (!accumulatedContent && /^\s*(?:```(?:json)?\s*)?\{/.test(nextContent)) {
+        deferStructuredOutput = true;
+      }
       accumulatedContent += delta.content;
       sawAssistantDelta = true;
-      writeSse(res, { type: 'assistant_delta', content: delta.content });
+      if (!deferStructuredOutput) {
+        writeSse(res, { type: 'assistant_delta', content: delta.content });
+      }
     }
 
     if (delta.reasoning_content) {

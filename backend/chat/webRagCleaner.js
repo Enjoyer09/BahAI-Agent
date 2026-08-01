@@ -11,8 +11,18 @@ function cleanWebAssistantResponse(text = '', isWebProduct = false) {
   let cleaned = text;
 
   // 1. Strip raw tool JSON & array invocations if leaked
+  try {
+    const parsed = JSON.parse(cleaned.trim());
+    if (parsed && typeof parsed.name === 'string' && parsed.arguments !== undefined) {
+      return '';
+    }
+  } catch {
+    // Not a standalone JSON object.
+  }
   cleaned = cleaned.replace(/```(?:json)?\s*\{\s*"name"\s*:\s*"[^"]+"[\s\S]*?\}\s*```/gi, '');
+  cleaned = cleaned.replace(/^\s*\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*\}\s*\}\s*$/gi, '');
   cleaned = cleaned.replace(/\[\s*"(?:web_search|browser_open|file_view|run_command|code_edit)"\s*,\s*(?:"[\s\S]*?"|\{[\s\S]*?\})\s*\]/gi, '');
+  cleaned = cleaned.replace(/【\d+†L\d+(?:-L\d+)?】/g, '');
 
   // 2. Strip internal agent monologues (Azerbaijani & English search filler phrases)
   const monologuePatterns = [

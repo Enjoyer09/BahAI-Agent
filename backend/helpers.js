@@ -63,21 +63,29 @@ function createProviderRuntime(opts) {
     if (Object.keys(entries).length === 0) delete sessionAvoid[sessionKey];
   }
 
+  function canUseProviderNow(providerId) {
+    if (!providerId) return true;
+    if (!cooldowns[providerId]) return true;
+    if (Date.now() <= cooldowns[providerId]) return false;
+    delete cooldowns[providerId];
+    return true;
+  }
+
   return {
-    markProviderFailure: function(providerId) {
-      cooldowns[providerId] = Date.now() + cooldownMs;
+    markProviderFailure: function(providerId, error = null) {
+      var isOmniRoute = /omniroute/i.test(String(providerId || ''));
+      var status = String(error && (error.status || error.code) || '');
+      var failureCooldown = isOmniRoute && ['429', '500', '502', '503', '504'].includes(status)
+        ? Math.max(cooldownMs, 120000)
+        : cooldownMs;
+      cooldowns[providerId] = Date.now() + failureCooldown;
       failureCounts[providerId] = (failureCounts[providerId] || 0) + 1;
     },
     markProviderSuccess: function(providerId) {
       failureCounts[providerId] = 0;
-    },
-    canUseProviderNow: function(providerId) {
-      if (!providerId) return true;
-      if (!cooldowns[providerId]) return true;
-      if (Date.now() <= cooldowns[providerId]) return false;
       delete cooldowns[providerId];
-      return true;
     },
+    canUseProviderNow,
     getFailureCount: function(providerId) {
       return failureCounts[providerId] || 0;
     },
@@ -103,7 +111,9 @@ function createProviderRuntime(opts) {
       return [...candidates].sort(function(a, b) {
         var avoidA = sessionAvoid[sessionKey] && sessionAvoid[sessionKey][a.id] ? 1 : 0;
         var avoidB = sessionAvoid[sessionKey] && sessionAvoid[sessionKey][b.id] ? 1 : 0;
-        return avoidA - avoidB;
+        var unavailableA = canUseProviderNow(a.id) ? 0 : 1;
+        var unavailableB = canUseProviderNow(b.id) ? 0 : 1;
+        return (unavailableA - unavailableB) || (avoidA - avoidB);
       });
     }
   };

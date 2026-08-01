@@ -162,7 +162,7 @@ describe('runner failover behavior', () => {
     });
 
     expect(result.activeProvider.id).toBe('fallback');
-    expect(runtime.markProviderFailure).toHaveBeenCalledWith('primary');
+    expect(runtime.markProviderFailure).toHaveBeenCalledWith('primary', expect.objectContaining({ status: 503 }));
     expect(runtime.markProviderSuccess).toHaveBeenCalledWith('fallback');
     expect(runtime.markSessionProviderFailure).toHaveBeenCalledWith('web:anon:test', 'primary');
     expect(runtime.markSessionProviderSuccess).toHaveBeenCalledWith('web:anon:test', 'fallback');
@@ -209,7 +209,7 @@ describe('runner failover behavior', () => {
     });
 
     expect(result.activeProvider.id).toBe(fallback.id);
-    expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id);
+    expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id, expect.objectContaining({ status: 503 }));
     expect(telemetry.some((item) => item.event === 'provider_failure' && item.providerId === primary.id)).toBe(true);
     expect(telemetry.some((item) => item.event === 'provider_failover' && item.providerId === fallback.id)).toBe(true);
   });
@@ -254,7 +254,7 @@ describe('runner failover behavior', () => {
     });
 
     expect(result.activeProvider.id).toBe(fallback.id);
-    expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id);
+    expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id, expect.objectContaining({ status: 502 }));
   });
 
   it('switches to the next OmniRoute model when a model returns 401', async () => {
@@ -291,7 +291,7 @@ describe('runner failover behavior', () => {
 
     expect(result.activeProvider.id).toBe(fallback.id);
     expect(result.effectiveModel).toBe('qwen/qwen3-coder:free');
-    expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id);
+    expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id, expect.objectContaining({ status: 401 }));
     expect(telemetry.some((item) => item.event === 'provider_failover' && item.providerId === fallback.id)).toBe(true);
   });
 
