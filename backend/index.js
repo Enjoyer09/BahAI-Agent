@@ -208,8 +208,9 @@ app.use('/api/auth', authRoutes);
 // Telemetry (anonymous stats from desktop apps)
 app.post('/api/telemetry', async (req, res) => {
   if (!db.hasDatabase()) return res.json({ ok: true });
-  const { event, data, deviceId, appVersion } = req.body;
-  if (!event) return res.status(400).json({ error: 'event required' });
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const { event, data, deviceId, appVersion } = body;
+  if (!event) return res.json({ ok: true, ignored: true });
   try {
     await db.query(
       'INSERT INTO telemetry (device_id, event, data, app_version, created_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)',

@@ -641,6 +641,18 @@ ${generateToolsSystemPrompt(TOOLS)}`;
             baseURL: payload?.baseURL ? '[redacted]' : undefined,
             toBaseURL: payload?.toBaseURL ? '[redacted]' : undefined
           };
+          console.log('[PROVIDER]', JSON.stringify({
+            runId,
+            event: safePayload.event,
+            providerId: safePayload.providerId,
+            fromProviderId: safePayload.fromProviderId,
+            previousProviderId: safePayload.previousProviderId,
+            toProviderId: safePayload.toProviderId,
+            model: safePayload.model,
+            toModel: safePayload.toModel,
+            status: safePayload.status,
+            wireApi: safePayload.wireApi
+          }));
           emitProviderTelemetry(res, safePayload);
         },
         buildFinalGateReceipt: ({ plannerArtifact, executionArtifacts }) => buildGateReceipt({ plannerArtifact, executionArtifacts }),
