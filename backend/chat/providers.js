@@ -232,7 +232,7 @@ function buildProviderCandidates({
     // NVIDIA's text models must not be presented as image-capable fallbacks.
     // Keep an explicit env override, otherwise use the supported NIM vision
     // model as the first candidate for image requests.
-    const visionModel = env.NVIDIA_VISION_MODEL || 'meta/llama-3.2-11b-vision-instruct';
+    const visionModel = env.NVIDIA_VISION_MODEL || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
     const taskModels = taskType === 'vision'
       ? [visionModel, smartModel, generalModel]
       : taskType === 'code'
@@ -301,7 +301,7 @@ function buildProviderCandidates({
       : (() => {
         const fastModel = env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel;
         const smartModel = env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || fastModel;
-        const visionModel = env.WEB_CHAT_VISION_MODEL || 'meta/llama-3.2-11b-vision-instruct';
+        const visionModel = env.WEB_CHAT_VISION_MODEL || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
         const codeModel = env.WEB_CHAT_CODE_MODEL || smartModel;
         return primaryTask === 'vision'
           ? [visionModel, smartModel, fastModel, codeModel]

@@ -39,13 +39,13 @@ function modelDisablesTools(model = '') {
 }
 
 function isVisionModel(model = '') {
-  return /(?:vision|multimodal|(?:^|[\/_-])vl(?:$|[\/_-]))/i.test(String(model || ''));
+  return /(?:vision|multimodal|omni|(?:^|[\/_-])vl(?:$|[\/_-]))/i.test(String(model || ''));
 }
 
 function adaptMessagesForProvider(messages = [], provider = {}, model = '') {
-  const isNvidiaVision = /integrate\.api\.nvidia\.com/i.test(String(provider.baseURL || ''))
-    && isVisionModel(model);
-  if (!isNvidiaVision) return messages;
+  const isLegacyNvidiaVision = /integrate\.api\.nvidia\.com/i.test(String(provider.baseURL || ''))
+    && /llama-3\.2-11b-vision/i.test(String(model || ''));
+  if (!isLegacyNvidiaVision) return messages;
 
   return messages.map((message) => {
     if (message?.role !== 'user' || !Array.isArray(message.content)) return message;
@@ -141,12 +141,19 @@ async function openAiStreamWithFallback({
           parallel_tool_calls: false
         }, { signal: attemptController.signal });
       } else {
+        const visionOptions = /nemotron-3-nano-omni/i.test(String(model || ''))
+          ? {
+              max_tokens: 1024,
+              chat_template_kwargs: { enable_thinking: false }
+            }
+          : {};
         rawStream = await providerClient.chat.completions.create({
           model,
           messages: apiInputMessages,
           tools: shouldDisableTools ? undefined : phaseTools,
           temperature: 0.2,
-          stream: true
+          stream: true,
+          ...visionOptions
         }, { signal: attemptController.signal });
       }
       return await primeProviderStream(rawStream);

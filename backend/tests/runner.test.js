@@ -123,6 +123,23 @@ describe('runner failover behavior', () => {
     );
   });
 
+  it('keeps OpenAI image arrays for the current NVIDIA Omni vision model', () => {
+    const original = [{
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Şəkli təsvir et' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } }
+      ]
+    }];
+    const adapted = adaptMessagesForProvider(
+      original,
+      { baseURL: 'https://integrate.api.nvidia.com/v1' },
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'
+    );
+
+    expect(adapted).toEqual(original);
+  });
+
   it('treats provider limits, 503 and network-style errors as retryable', () => {
     expect(isRetryableProviderError({ status: 402, message: 'Usage limit reached' }, () => false)).toBe(true);
     expect(isRetryableProviderError({ message: 'Provider quota exceeded' }, () => false)).toBe(true);

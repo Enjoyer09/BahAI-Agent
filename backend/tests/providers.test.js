@@ -121,6 +121,26 @@ describe('provider candidate routing', () => {
     });
   });
 
+  it('uses the current NVIDIA Omni vision model by default', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'smart',
+      hasImageAttachment: true,
+      webTaskType: 'vision',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        NVIDIA_API_KEY: 'nvapi-test'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    expect(candidates[0].model).toBe('nvidia/nemotron-3-nano-omni-30b-a3b-reasoning');
+  });
+
   it('web chat code requests prefer code model first', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: 'dummy',
