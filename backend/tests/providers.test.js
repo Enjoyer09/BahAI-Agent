@@ -175,6 +175,28 @@ describe('provider candidate routing', () => {
     });
   });
 
+  it('prefers NVIDIA_GENERAL_MODEL over the fast alias when both are configured', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'fast',
+      webTaskType: 'general',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        NVIDIA_API_KEY: 'nvapi-test',
+        NVIDIA_FAST_MODEL: 'meta/llama-3.1-8b-instruct',
+        NVIDIA_GENERAL_MODEL: 'meta/llama-3.3-70b-instruct'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    expect(candidates.find((provider) => provider.id === 'nvidia_general_1').model)
+      .toBe('meta/llama-3.3-70b-instruct');
+  });
+
   it('uses NVIDIA as a desktop cloud Smart fallback', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: '',

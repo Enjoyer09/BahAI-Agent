@@ -170,6 +170,41 @@ async function runChatSession({
       dependencies.effectiveModelRef.current = runnerResult.effectiveModel || dependencies.effectiveModelRef.current;
       currentMessages = runnerResult.currentMessages || currentMessages;
 
+      let streamOutput;
+      try {
+        streamOutput = await collectStreamOutput({
+          stream: runnerResult.stream,
+          wireApi: dependencies.activeProviderRef.current.wireApi,
+          res,
+          writeSse,
+          normalizeToolName: dependencies.normalizeToolName,
+          extractTextToolCalls: dependencies.extractTextToolCalls,
+          buildToolCallCacheKey: dependencies.buildToolCallCacheKey,
+          flattenResponseJsonText: dependencies.flattenResponseJsonText,
+          normalizeFinalAssistantReport: dependencies.normalizeFinalAssistantReport,
+          productMode,
+          auditStyleRequest,
+          plannerArtifact: runManager.getPlannerArtifact(),
+          executionArtifacts: runManager.getExecutionArtifacts(),
+          executionMemory: {
+            lastValidation: projectMemory?.lastValidation || null,
+            lastApprovalDecision: projectMemory?.lastApprovalDecision || null
+          },
+          phaseTools: phaseContext.phaseTools,
+          step
+        });
+      } catch (streamError) {
+        const streamMessage = String(streamError?.message || '').toLowerCase();
+        const providerStreamFailure = streamMessage.includes('provider stream error');
+        writeSse(res, {
+          type: 'error',
+          message: providerStreamFailure
+            ? 'AI provider cavabı yarımçıq qaytardı. Sistem bunu qeydə aldı; zəhmət olmasa bir az sonra yenidən cəhd edin.'
+            : 'Cavab hazırlanarkən əlaqə kəsildi. Zəhmət olmasa yenidən cəhd edin.'
+        });
+        break;
+      }
+
       const {
         finishReason,
         sawAssistantDelta,
@@ -177,27 +212,7 @@ async function runChatSession({
         accumulatedContent,
         normalizedToolCalls,
         message: msg
-      } = await collectStreamOutput({
-        stream: runnerResult.stream,
-        wireApi: dependencies.activeProviderRef.current.wireApi,
-        res,
-        writeSse,
-        normalizeToolName: dependencies.normalizeToolName,
-        extractTextToolCalls: dependencies.extractTextToolCalls,
-        buildToolCallCacheKey: dependencies.buildToolCallCacheKey,
-        flattenResponseJsonText: dependencies.flattenResponseJsonText,
-        normalizeFinalAssistantReport: dependencies.normalizeFinalAssistantReport,
-        productMode,
-        auditStyleRequest,
-        plannerArtifact: runManager.getPlannerArtifact(),
-        executionArtifacts: runManager.getExecutionArtifacts(),
-        executionMemory: {
-          lastValidation: projectMemory?.lastValidation || null,
-          lastApprovalDecision: projectMemory?.lastApprovalDecision || null
-        },
-        phaseTools: phaseContext.phaseTools,
-        step
-      });
+      } = streamOutput;
 
       const hasToolCalls = normalizedToolCalls.length > 0;
       const hasTextContent = accumulatedContent.trim().length > 0;

@@ -43,7 +43,8 @@ async function collectStreamOutput({
     }
   }
 
-  for await (const chunk of stream) {
+  try {
+    for await (const chunk of stream) {
     if (chunk && chunk.model && !resolvedModel) {
       resolvedModel = chunk.model;
       writeSse(res, { type: 'auto_route', chosenModel: resolvedModel, intent: 'smart' });
@@ -114,6 +115,21 @@ async function collectStreamOutput({
     if (chunk.choices[0]?.finish_reason) {
       finishReason = chunk.choices[0].finish_reason;
     }
+    }
+  } catch (error) {
+    const message = String(error?.message || error || '').toLowerCase();
+    if (
+      message.includes('could not parse message into json') ||
+      message.includes('event: error') ||
+      message.includes('unspecified error')
+    ) {
+      throw Object.assign(new Error('Provider stream error'), {
+        status: error?.status || 502,
+        code: 'PROVIDER_STREAM_ERROR',
+        cause: error
+      });
+    }
+    throw error;
   }
 
   let normalizedToolCalls = accumulatedToolCalls

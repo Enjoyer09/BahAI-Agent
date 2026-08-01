@@ -226,7 +226,7 @@ function buildProviderCandidates({
 
   function buildNvidiaProviders(taskType = 'general') {
     if (!nvidiaApiKey) return [];
-    const generalModel = env.NVIDIA_FAST_MODEL || env.NVIDIA_GENERAL_MODEL || '';
+    const generalModel = env.NVIDIA_GENERAL_MODEL || env.NVIDIA_FAST_MODEL || '';
     const smartModel = env.NVIDIA_SMART_MODEL || generalModel;
     const codeModel = env.NVIDIA_CODE_MODEL || smartModel;
     const visionModel = env.NVIDIA_VISION_MODEL || smartModel;

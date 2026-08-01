@@ -18,7 +18,9 @@ log() {
 }
 
 is_truthy() {
-  case "${1,,}" in
+  local val
+  val="$(echo "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  case "$val" in
     1|true|yes|on) return 0 ;;
     *) return 1 ;;
   esac

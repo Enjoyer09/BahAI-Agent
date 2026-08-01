@@ -13,6 +13,27 @@ function isRetryableProviderError(error, isResponsesSchemaMismatchError) {
   return false;
 }
 
+function normalizeProviderStreamError(error) {
+  const message = String(error?.message || error || '');
+  const lower = message.toLowerCase();
+  if (
+    lower.includes('could not parse message into json') ||
+    lower.includes('event: error') ||
+    lower.includes('unspecified error')
+  ) {
+    return Object.assign(new Error('Provider stream error'), {
+      status: error?.status || 502,
+      code: error?.code || 'PROVIDER_STREAM_ERROR',
+      cause: error
+    });
+  }
+  return error;
+}
+
+function isGenericFailoverCandidate(providerCandidates = []) {
+  return Array.isArray(providerCandidates) && providerCandidates.length > 1;
+}
+
 function modelDisablesTools(model = '') {
   return /(?:^|[\/_-])(embed|embedding|rerank|retriever|reward|guard|safety|moderation|parse)(?:$|[\/_-])/i.test(String(model || ''));
 }
@@ -150,7 +171,7 @@ async function openAiStreamWithFallback({
           currentMessages: nextMessages
         };
       } catch (apiErr) {
-        let currentErr = apiErr;
+        let currentErr = normalizeProviderStreamError(apiErr);
         const isRetryable = isRetryableProviderError(currentErr, isResponsesSchemaMismatchError);
 
         if (isRetryable && providerCandidates.length > 1) {
@@ -308,19 +329,21 @@ async function openAiStreamWithFallback({
 
         console.error(`❌ API Error [${status}]:`, currentErr.message);
         console.error(`❌ Full error:`, JSON.stringify({ status: currentErr.status, headers: currentErr.headers, body: currentErr.error || currentErr.body }, null, 2));
-        let userMsg = `API xətası: ${currentErr.message}`;
+        let userMsg = isGenericFailoverCandidate(providerCandidates)
+          ? 'AI provider-lər hazırda cavab qaytarmadı. Sistem alternativ modelləri avtomatik yoxladı. Bir az sonra yenidən cəhd edin.'
+          : `API xətası: ${currentErr.message}`;
         const errLower = String(currentErr.message || '').toLowerCase();
         const isOllamaUrl = String(nextProvider.baseURL || '').includes('11434') || String(nextProvider.baseURL || '').includes('ollama');
 
-        if (currentErr.status === 401) {
+        if (currentErr.status === 401 && !isGenericFailoverCandidate(providerCandidates)) {
           userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
-        } else if (currentErr.status === 429) {
+        } else if (currentErr.status === 429 && !isGenericFailoverCandidate(providerCandidates)) {
           userMsg = 'API limiti aşıldı (rate limit). 1-2 dəqiqə gözləyib yenidən cəhd edin.';
         } else if (currentErr.status === 503) {
-          userMsg = providerCandidates.length > 1
+          userMsg = isGenericFailoverCandidate(providerCandidates)
             ? 'AI servisləri hazırda müvəqqəti əlçatmaz oldu. Sistem arxa planda alternativ provider-ləri sınadı, amma cavab ala bilmədi. Bir az sonra yenidən yoxlayaq.'
             : 'AI servisi müvəqqəti əlçatmazdır. Mesajınız çox böyük ola bilər — daha qısa mesaj göndərin və ya bir neçə dəqiqə gözləyin.';
-        } else if (currentErr.status === 404) {
+        } else if (currentErr.status === 404 && !isGenericFailoverCandidate(providerCandidates)) {
           if (isOllamaUrl) {
             userMsg = `Ollama-da "${nextModel}" modeli quraşdırılmayıb. Terminal-da bunu icra edin: \`ollama pull ${nextModel}\``;
           } else {
@@ -336,7 +359,7 @@ async function openAiStreamWithFallback({
         ) {
           userMsg = `🦙 Ollama xidməti işləmir (${nextProvider.baseURL}). Terminal-da bunu icra edin:\n\n\`\`\`\nollama serve\n\`\`\`\n\nSonra modeli yükləyin: \`ollama pull ${nextModel}\`\n\nVə ya AYARLAR-dan Cloud modelinə (Claude Sonnet 4.5 və ya 'Auto') keçin.`;
         } else if (errLower.includes('connection error') || errLower.includes('fetch failed') || errLower.includes('econnrefused')) {
-          userMsg = providerCandidates.length > 1
+          userMsg = isGenericFailoverCandidate(providerCandidates)
             ? 'Şəbəkə problemi səbəbilə AI provider-lərlə əlaqə qurmaq alınmadı. Sistem alternativləri sınadı, amma bu dəfə cavab çıxmadı.'
             : `Şəbəkə xətası: ${nextProvider.baseURL}-ə qoşula bilmədim. İnternet bağlantınızı və baseURL-i yoxlayın.`;
         }

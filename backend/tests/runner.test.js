@@ -214,6 +214,49 @@ describe('runner failover behavior', () => {
     expect(telemetry.some((item) => item.event === 'provider_failover' && item.providerId === fallback.id)).toBe(true);
   });
 
+  it('fails over when a provider emits an SSE error event instead of JSON', async () => {
+    const runtime = createProviderRuntime();
+    const primary = { id: 'nvidia-8b', wireApi: 'chat_completions', model: 'meta/llama-3.1-8b-instruct', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'a' };
+    const fallback = { id: 'nvidia-70b', wireApi: 'chat_completions', model: 'meta/llama-3.3-70b-instruct', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'a' };
+    const brokenClient = {
+      chat: {
+        completions: {
+          create: vi.fn().mockResolvedValue({
+            [Symbol.asyncIterator]: async function* () {
+              throw new Error("Could not parse message into JSON\nFrom chunk: [ 'event: error', ': unspecified error' ]");
+            }
+          })
+        }
+      }
+    };
+    const fallbackClient = createStreamingClient('nvidia-fallback-ok');
+
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Bu gün oyunları tap' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: brokenClient,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => provider.id === primary.id ? brokenClient : fallbackClient,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:sse-error'
+    });
+
+    expect(result.activeProvider.id).toBe(fallback.id);
+    expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id);
+  });
+
   it('switches to the next OmniRoute model when a model returns 401', async () => {
     const runtime = createProviderRuntime();
     const primary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'omni-key' };
@@ -359,5 +402,35 @@ describe('runner failover behavior', () => {
     });
 
     expect(result.errorEvent.message).toContain('alternativ provider-ləri sınadı');
+  });
+
+  it('does not expose invalid-key text when every provider returns 401', async () => {
+    const runtime = createProviderRuntime();
+    const primary = { id: 'primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://a.example', apiKey: 'a' };
+    const fallback = { id: 'fallback', wireApi: 'chat_completions', model: 'backup', baseURL: 'https://b.example', apiKey: 'b' };
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: createClientThatFails({ status: 401, message: 'invalid api key' }),
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => createClientThatFails({ status: 401, message: 'invalid api key' }),
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:all-401'
+    });
+
+    expect(result.errorEvent.message).not.toContain('API açarı keçərsizdir');
+    expect(result.errorEvent.message).toContain('AI provider');
   });
 });
