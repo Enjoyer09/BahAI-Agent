@@ -17,6 +17,31 @@ function modelDisablesTools(model = '') {
   return /(?:^|[\/_-])(embed|embedding|rerank|retriever|reward|guard|safety|moderation|parse)(?:$|[\/_-])/i.test(String(model || ''));
 }
 
+async function primeProviderStream(stream) {
+  if (!stream || typeof stream[Symbol.asyncIterator] !== 'function') {
+    throw Object.assign(new Error('Provider etibarlı stream qaytarmadı'), { status: 503 });
+  }
+
+  const iterator = stream[Symbol.asyncIterator]();
+  const first = await iterator.next();
+  if (first.done) {
+    throw Object.assign(new Error('Provider boş stream qaytardı'), { status: 503 });
+  }
+
+  const primedStream = {
+    response: stream.response,
+    async *[Symbol.asyncIterator]() {
+      yield first.value;
+      while (true) {
+        const next = await iterator.next();
+        if (next.done) return;
+        yield next.value;
+      }
+    }
+  };
+  return primedStream;
+}
+
 async function openAiStreamWithFallback({
   currentMessages,
   effectiveModel,
@@ -56,22 +81,25 @@ async function openAiStreamWithFallback({
     const attemptController = new AbortController();
     const attemptTimer = setTimeout(() => attemptController.abort(), lastAttemptTimeoutMs);
     try {
+      let rawStream;
       if (provider.wireApi === 'responses') {
-        return await providerClient.responses.create({
+        rawStream = await providerClient.responses.create({
           model,
           input: mapMessagesToResponsesInput(apiInputMessages),
           tools: shouldDisableTools ? undefined : mapToolsToResponsesTools(phaseTools),
           stream: true,
           parallel_tool_calls: false
         }, { signal: attemptController.signal });
+      } else {
+        rawStream = await providerClient.chat.completions.create({
+          model,
+          messages: apiInputMessages,
+          tools: shouldDisableTools ? undefined : phaseTools,
+          temperature: 0.2,
+          stream: true
+        }, { signal: attemptController.signal });
       }
-      return await providerClient.chat.completions.create({
-        model,
-        messages: apiInputMessages,
-        tools: shouldDisableTools ? undefined : phaseTools,
-        temperature: 0.2,
-        stream: true
-      }, { signal: attemptController.signal });
+      return await primeProviderStream(rawStream);
     } finally {
       clearTimeout(attemptTimer);
     }

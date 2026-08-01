@@ -170,6 +170,50 @@ describe('runner failover behavior', () => {
     expect(telemetry.some((item) => item.event === 'provider_failover' && item.providerId === 'fallback')).toBe(true);
   });
 
+  it('fails over when a provider opens an empty stream without any chunks', async () => {
+    const runtime = createProviderRuntime();
+    const primary = { id: 'omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
+    const fallback = { id: 'nvidia', wireApi: 'chat_completions', model: 'meta/llama-3.3-70b-instruct', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
+    const emptyClient = {
+      chat: {
+        completions: {
+          create: vi.fn().mockResolvedValue({
+            [Symbol.asyncIterator]: async function* () {}
+          })
+        }
+      }
+    };
+    const fallbackClient = createStreamingClient('nvidia-ok');
+    const telemetry = [];
+
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: emptyClient,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => provider.id === primary.id ? emptyClient : fallbackClient,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: (event) => telemetry.push(event),
+      providerSessionKey: 'web:anon:empty-stream'
+    });
+
+    expect(result.activeProvider.id).toBe(fallback.id);
+    expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id);
+    expect(telemetry.some((item) => item.event === 'provider_failure' && item.providerId === primary.id)).toBe(true);
+    expect(telemetry.some((item) => item.event === 'provider_failover' && item.providerId === fallback.id)).toBe(true);
+  });
+
   it('switches to the next OmniRoute model when a model returns 401', async () => {
     const runtime = createProviderRuntime();
     const primary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'omni-key' };
