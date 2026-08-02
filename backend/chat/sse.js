@@ -1,9 +1,14 @@
 function writeSse(res, payload) {
+  if (!res || res.writableEnded || res.destroyed) return;
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
 function finishSse(res) {
   if (!res || res.writableEnded) return;
+  if (res._bahaiHeartbeat) {
+    clearInterval(res._bahaiHeartbeat);
+    res._bahaiHeartbeat = null;
+  }
   res.write('data: [DONE]\n\n');
 }
 
@@ -13,6 +18,22 @@ function initSse(res) {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
+  if (!res._bahaiHeartbeat) {
+    res._bahaiHeartbeat = setInterval(() => {
+      if (res.writableEnded || res.destroyed) {
+        clearInterval(res._bahaiHeartbeat);
+        res._bahaiHeartbeat = null;
+        return;
+      }
+      res.write(': heartbeat\n\n');
+    }, 8000);
+    res.on('close', () => {
+      if (res._bahaiHeartbeat) {
+        clearInterval(res._bahaiHeartbeat);
+        res._bahaiHeartbeat = null;
+      }
+    });
+  }
 }
 
 function emitOrchestrationPrelude(res, { runId, orchestration, runManager, pendingAutoRouteEvent }) {

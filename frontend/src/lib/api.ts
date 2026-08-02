@@ -193,13 +193,20 @@ export async function sendChatMessage(
   });
 
   let response: Response;
+  const requestStartedAt = Date.now();
   try {
     response = await doFetch();
   } catch (err: any) {
     const isAbort = err?.name === 'AbortError';
     if (isAbort) throw err;
 
-    // transient network errors: retry once
+    // Retrying a chat POST can duplicate a long-running generation. Mobile
+    // networks are especially prone to dropping an already accepted SSE
+    // request, so only retry when the failure happened immediately.
+    if (Date.now() - requestStartedAt > 2500) {
+      const msg = err?.message || 'Network error';
+      throw new Error(`Serverə qoşulmaq alınmadı. (${msg})`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 800));
     try {
       response = await doFetch();
