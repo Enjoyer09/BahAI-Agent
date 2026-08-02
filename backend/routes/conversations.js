@@ -55,7 +55,9 @@ function sanitizePersistedMessage(msg = {}, index = 0) {
       extractedText: trimText(attachment?.extractedText, 3000),
       imageUrl: attachment?.type === 'image' ? undefined : attachment?.imageUrl,
     })) : [],
-    timestamp: typeof msg?.timestamp === 'number' ? msg.timestamp : Date.now() + index,
+    // Floor the client timestamp so it is always an integer for the `::bigint`
+    // cast in the messages upsert (a float like 1000.5 would fail the cast).
+    timestamp: typeof msg?.timestamp === 'number' ? Math.floor(msg.timestamp) : Date.now() + index,
     tool_calls: compactToolCalls(msg?.tool_calls),
     tool_call_id: typeof msg?.tool_call_id === 'string' ? msg.tool_call_id : undefined,
   };
@@ -195,6 +197,10 @@ async function upsertConversationMessages(client, conversationId, userId, rawMes
   }
   // Scoped reconcile: drop rows of this conversation that the client no longer
   // lists (empty list means clear the conversation). Never a full DELETE-all.
+  // NOTE: PATCHes are serialized by the conversation FOR UPDATE lock, but the
+  // commit order still decides which client list wins — a stale tab committing
+  // last can remove rows a newer tab added (last-writer-wins at message-set
+  // granularity). Accepted trade-off; strictly safer than the old DELETE-all.
   await client.query(
     `DELETE FROM messages
      WHERE conversation_id = $1 AND NOT (id = ANY($2::text[]))`,

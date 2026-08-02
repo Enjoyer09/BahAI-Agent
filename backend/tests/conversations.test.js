@@ -1,16 +1,30 @@
 // ==========================================
 // Conversations — Append-only upsert tests
+//
 // Verifies the PATCH/POST message write path uses
 // INSERT ... ON CONFLICT (id) DO UPDATE (never a
 // destructive DELETE-all + INSERT-all) and only
-// reconciles rows that are absent from the
-// authoritative client list.
+// reconciles rows absent from the authoritative
+// client list (retry/edit truncation).
+//
+// NOTE: This repo's routes are loaded as external CJS,
+// so vitest's vi.mock cannot intercept their require().
+// We stub the db module via require.cache before loading
+// the router (same mechanism the runner.test.js uses for
+// dependency injection, but for a module-level require).
+// This is safe because vitest isolates each test file in its
+// own worker by default — the require.cache stub never leaks
+// into other test files (would only matter with isolate:false).
+//
 // Run with: cd backend && npx vitest run tests/conversations.test.js
 // ==========================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 const fake = vi.hoisted(() => {
   const state = {
@@ -145,19 +159,23 @@ const fake = vi.hoisted(() => {
   };
 });
 
-vi.mock('../db', () => fake.db);
+let app;
 
-import conversationsRouter from '../routes/conversations.js';
+beforeAll(() => {
+  // Stub the db module in the native require cache BEFORE loading the router so
+  // its require('../db') resolves to the in-memory fake.
+  const dbPath = require.resolve('../db.js');
+  require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: fake.db };
 
-const app = express();
-app.use(express.json());
-app.use((req, _res, next) => {
-  req.user = { id: 7 };
-  next();
+  const conversationsRouter = require('../routes/conversations.js');
+  app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = { id: 7 };
+    next();
+  });
+  app.use('/api/conversations', conversationsRouter);
 });
-app.use('/api/conversations', conversationsRouter);
-
-const norm = (sql) => sql.replace(/\s+/g, ' ').trim();
 
 const msg = (id, role, content, timestamp) => ({ id, role, content, timestamp });
 
@@ -199,7 +217,6 @@ describe('append-only upsert write path', () => {
 
     expect(fake.state.messages.size).toBe(3);
     expect(fake.state.messages.get('m1').created_at).toBe(firstCreatedAt);
-    expect(fake.state.messages.get('m2').created_at).toBe(fake.state.messages.get('m2').created_at);
     expect(fake.state.messages.get('m3')).toBeTruthy();
   });
 
