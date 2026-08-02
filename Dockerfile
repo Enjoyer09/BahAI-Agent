@@ -9,6 +9,9 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --ignore-scripts
 COPY frontend/ ./
+# Shared wire contract — the frontend resolves @bahai/shared -> ../shared/contract.js
+# (repo-root shared/ dir), so it must be present in the build context.
+COPY shared/ ../shared/
 RUN npm run build
 
 # Stage 2: Production runtime
@@ -27,6 +30,9 @@ RUN cd backend && npm ci --omit=dev --ignore-scripts
 
 # Copy backend source
 COPY backend/ ./backend/
+
+# Shared wire contract — backend/chat/sse.js requires ../../shared/contract
+COPY shared/ ./shared/
 
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist

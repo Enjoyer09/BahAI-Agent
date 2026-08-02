@@ -24,6 +24,11 @@ export default defineConfig({
     target: 'esnext',
     minify: 'esbuild',
     cssMinify: true,
+    // shared/contract.js is CJS (backend requires it via require()); make
+    // Rollup treat it as CommonJS too so named exports resolve at build time.
+    commonjsOptions: {
+      include: [/node_modules/, /[/\\]shared[/\\]contract\.js$/]
+    },
     // FUNC-FIX: split heavy vendor chunks so the initial app load stays under
     // 500KB. Previous build was 1.17MB single chunk.
     rollupOptions: {
