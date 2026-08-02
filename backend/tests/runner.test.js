@@ -123,6 +123,47 @@ describe('runner failover behavior', () => {
     );
   });
 
+  it('passes the base64 image_url array to OpenAI-compatible providers for vision requests', async () => {
+    const runtime = createProviderRuntime();
+    const provider = { id: 'web_vision_primary', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: 'https://api.freemodel.dev/v1', apiKey: 'key' };
+    const client = createStreamingClient('vision-ok');
+
+    await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Şəkildə nə var?', attachments: [{ type: 'image', mimeType: 'image/png', url: 'data:image/png;base64,aGVsbG8=' }] }],
+      effectiveModel: provider.model,
+      activeProvider: provider,
+      client,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      isVisionRequest: true,
+      providerCandidates: [provider],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => client,
+      normalizeMessagesForModel: async () => [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Şəkildə nə var?' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,aGVsbG8=', detail: 'high' } }
+        ]
+      }],
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:vision-payload'
+    });
+
+    const payload = client.chat.completions.create.mock.calls[0][0];
+    expect(payload.messages[0].content).toEqual([
+      { type: 'text', text: 'Şəkildə nə var?' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,aGVsbG8=', detail: 'high' } }
+    ]);
+  });
+
   it('keeps OpenAI image arrays for the current NVIDIA Omni vision model', () => {
     const original = [{
       role: 'user',
@@ -182,7 +223,7 @@ describe('runner failover behavior', () => {
     );
   });
 
-  it('caps a hanging OmniRoute attempt at five seconds before fallback', async () => {
+  it('gives a hanging OmniRoute text attempt a real 15s budget before fallback (no more 5s cap)', async () => {
     vi.useFakeTimers();
     const runtime = createProviderRuntime();
     const primary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
@@ -220,10 +261,138 @@ describe('runner failover behavior', () => {
       providerSessionKey: 'web:anon:omni-timeout'
     });
 
+    // A healthy provider must not be cut at 5s: nothing should settle yet.
+    let settled = false;
+    resultPromise.then(() => { settled = true; });
     await vi.advanceTimersByTimeAsync(5001);
+    expect(settled).toBe(false);
+
+    // The text attempt cap is now 15s — fallback happens after that.
+    await vi.advanceTimersByTimeAsync(10001);
     const result = await resultPromise;
     expect(result.activeProvider.id).toBe(fallback.id);
     vi.useRealTimers();
+  });
+
+  it('gives vision requests a longer OmniRoute attempt timeout (30s floor)', async () => {
+    vi.useFakeTimers();
+    const runtime = createProviderRuntime();
+    const primary = { id: 'web_vision_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
+    const fallback = { id: 'nvidia_vision_1', wireApi: 'chat_completions', model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
+    const hangingClient = {
+      chat: {
+        completions: {
+          create: vi.fn((_input, options) => new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+          }))
+        }
+      }
+    };
+    const fallbackClient = createStreamingClient('vision-fallback-ok');
+
+    let settled = false;
+    const resultPromise = openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Şəkildə nə görürsən?', attachments: [{ type: 'image', mimeType: 'image/png', url: 'data:image/png;base64,abc' }] }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: hangingClient,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      isVisionRequest: true,
+      visionTimeoutMs: 30000,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => provider.id === primary.id ? hangingClient : fallbackClient,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 20000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:omni-vision-timeout'
+    });
+    resultPromise.then(() => { settled = true; });
+
+    // Image ingestion needs time: still hanging after the 20s text budget.
+    await vi.advanceTimersByTimeAsync(20001);
+    expect(settled).toBe(false);
+
+    // Falls over once the vision floor (30s) is reached.
+    await vi.advanceTimersByTimeAsync(10001);
+    const result = await resultPromise;
+    expect(result.activeProvider.id).toBe(fallback.id);
+    vi.useRealTimers();
+  });
+
+  it('shows a request-deadline message instead of a bogus 1s model timeout', async () => {
+    const runtime = createProviderRuntime();
+    const provider = { id: 'primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://a.example', apiKey: 'a' };
+
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: provider.model,
+      activeProvider: provider,
+      client: createStreamingClient('ok'),
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [provider],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => createStreamingClient('ok'),
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      requestDeadlineAt: Date.now() - 100,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:deadline'
+    });
+
+    expect(result.errorEvent).toBeTruthy();
+    expect(result.errorEvent.message).toContain('ümumi vaxt');
+    expect(result.errorEvent.message).not.toMatch(/Model \d+s ərzində/);
+  });
+
+  it('fails over to a vision-capable model when a 400 rejects the image on a vision request', async () => {
+    const runtime = createProviderRuntime();
+    const primary = { id: 'web_vision_fallback_2', wireApi: 'chat_completions', model: 'meta-llama/llama-3.3-70b-instruct', baseURL: 'https://openrouter.ai/api/v1', apiKey: 'a' };
+    const fallback = { id: 'nvidia_vision_1', wireApi: 'chat_completions', model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
+    const clients = {
+      [primary.id]: createClientThatFails({ status: 400, message: 'image_url is not supported by this model' }),
+      [fallback.id]: createStreamingClient('vision-ok')
+    };
+
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Şəkildə nə var?', attachments: [{ type: 'image', mimeType: 'image/png', url: 'data:image/png;base64,abc' }] }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: clients[primary.id],
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      isVisionRequest: true,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => clients[provider.id],
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:vision-400'
+    });
+
+    expect(result.activeProvider.id).toBe(fallback.id);
+    expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id, expect.objectContaining({ status: 400 }));
   });
 
   it('keeps agent tools enabled for local and NVIDIA coding models', async () => {

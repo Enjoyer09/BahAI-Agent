@@ -133,6 +133,36 @@ describe('buildWebReferentSummary', () => {
 
     expect(result).toBeNull();
   });
+
+  it('carries the previous attachment for an open-ended "nə görürsən?" follow-up', () => {
+    const result = buildWebReferentSummary([
+      { id: '1', role: 'user', content: 'bu şəkil haqqında nə deyə bilərsən?', attachments: [{ id: 'a1', name: 'scan.jpg', type: 'image', mimeType: 'image/jpeg', extractedText: 'QARANTIYA SENEDI' }], timestamp: 1 },
+      { id: '2', role: 'assistant', content: 'Bu sənəd qarantiya şəhadətnaməsidir.', timestamp: 2 },
+    ] as any, 'nə görürsən?');
+
+    expect(result).toBeTruthy();
+    expect((result as any).previousAttachment.name).toBe('scan.jpg');
+    expect((result as any).previousAttachment.extractedText).toContain('QARANTIYA');
+  });
+
+  it('carries the previous attachment for "bunu izah et" style follow-ups', () => {
+    const result = buildWebReferentSummary([
+      { id: '1', role: 'user', content: 'fayla bax', attachments: [{ id: 'a1', name: 'photo.png', type: 'image', mimeType: 'image/png', extractedText: '' }], timestamp: 1 },
+      { id: '2', role: 'assistant', content: 'Şəkildə bir məhsul görünür.', timestamp: 2 },
+    ] as any, 'bunu izah et');
+
+    expect(result).toBeTruthy();
+    expect((result as any).previousAttachment.name).toBe('photo.png');
+  });
+
+  it('does not treat a non-referential follow-up as visual', () => {
+    const result = buildWebReferentSummary([
+      { id: '1', role: 'user', content: 'Salam', timestamp: 1 },
+      { id: '2', role: 'assistant', content: 'Salam! Necə kömək edim?', timestamp: 2 },
+    ] as any, 'necəsən?');
+
+    expect(result).toBeNull();
+  });
 });
 
 describe('buildConversationTitleFromInput', () => {

@@ -343,6 +343,11 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       const convId = activeConvIdRef.current;
       if (!convId) return;
       const msg: Message = { id: generateId(), role: 'system', content, timestamp: Date.now() };
+      // Keep the ref in sync with the reducer so retry/regenerate actions can
+      // always find the latest message (e.g. the "❌ Xəta" error message).
+      conversationsRef.current = conversationsRef.current.map((item) =>
+        item.id === convId ? { ...item, messages: [...item.messages, msg], updatedAt: Date.now() } : item
+      );
       dispatch({ type: 'ADD_MESSAGE_TO_CONVERSATION', id: convId, message: msg });
     },
 
@@ -735,16 +740,22 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     if (!activeConv) return;
     const msgIndex = activeConv.messages.findIndex(m => m.id === id);
     if (msgIndex <= 0) return; // Cannot regenerate if there's no previous user message
-    
-    // Find the last user message before this assistant message
-    let lastUserIndex = msgIndex - 1;
+
+    // Find the last user message at or before the target (assistant reply or
+    // error message). We rebuild from a slice that EXCLUDES that user message
+    // and everything after it (partial stream, error) and re-add a fresh user
+    // message — so a retry never duplicates the request or the conversation.
+    let lastUserIndex = msgIndex;
     while (lastUserIndex >= 0 && activeConv.messages[lastUserIndex].role !== 'user') {
       lastUserIndex--;
     }
-    
+
     if (lastUserIndex < 0) return;
-    
+
     const userMsg = activeConv.messages[lastUserIndex];
+    // slice(0, lastUserIndex) drops the failed user message, any partial
+    // assistant stream, and the error itself — the fresh user message added by
+    // sendMessageFn replaces it, so a retry never duplicates the conversation.
     const slicedMessages = activeConv.messages.slice(0, lastUserIndex);
     sendMessageFn(userMsg.content, userMsg.attachments || [], slicedMessages);
   }, [sendMessageFn]);

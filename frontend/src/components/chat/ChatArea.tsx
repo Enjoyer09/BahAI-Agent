@@ -155,7 +155,9 @@ export default function ChatArea({
 
         {(() => {
           const lastMsg = messages[messages.length - 1];
-          if (!loading && lastMsg && lastMsg.role === 'system' && lastMsg.content.includes('❌ Xəta')) {
+          // Errors arrive either as system messages (SSE path) or as assistant
+          // messages (fetch path) — offer retry for both.
+          if (!loading && lastMsg && (lastMsg.role === 'system' || lastMsg.role === 'assistant') && lastMsg.content.includes('❌ Xəta')) {
             return (
               <div className="flex justify-center mt-2 mb-6">
                 <button 

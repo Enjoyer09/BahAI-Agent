@@ -155,6 +155,8 @@ async function runChatSession({
         writeSse: (payload) => writeSse(res, payload),
         shouldEmitDebugEvent,
         llmTimeoutMs: dependencies.llmTimeoutMs,
+        visionTimeoutMs: dependencies.visionTimeoutMs || 30000,
+        isVisionRequest: Boolean(dependencies.hasImageAttachment),
         onProviderTelemetry: dependencies.onProviderTelemetry,
         providerSessionKey: dependencies.providerSessionKey,
         forceDisableTools: forceFinalSynthesis,

@@ -278,12 +278,16 @@ function resolveFollowup(latestUserText = '', dialogueState = {}) {
   if (!text) return null;
 
   const isReferential = /^(onu|bunu|el[eə] onu|orada dediyin|deqiqleshdir|dəqiqləşdir|onu dəqiqləşdir|onu deqiqleshdir|bunu dəqiqləşdir|bunu deqiqleshdir|yuxarida dedin axi|yuxarıda dedin axı|davam et|buyur|olar|hə|he|bəli|beli|ok|oke|bu sənəd|bu sened|bu şəkil|bu sekil|bu fayl|buradakı sənəd|burdaki sened)$/i.test(lower);
+  // Image referents often arrive as open-ended questions ("nə görürsən?") or
+  // requests ("təsvir et", "şərh et") without an explicit noun — treat them
+  // as referential so the previous attachment stays in the model context.
+  const isVisualReferential = /(nə görürsən|ne gorursen|şəkli izah|sekli izah|şəkli təsvir|sekli tesvir|şəkildə nə var|sekilde ne var|şəkli analiz|sekli analiz|izah et|izah ele)/i.test(lower);
   const isContextual = /(bu havada|bu qiym[eə]t[eə]?|bu model üçün|bu halda|bu vəziyyətdə|bu şertlerde|bu şəraitdə)/i.test(lower);
-  if (!isReferential && !isContextual) return null;
+  if (!isReferential && !isVisualReferential && !isContextual) return null;
 
   return {
     latestUserText: text,
-    kind: isReferential ? 'referential' : 'contextual',
+    kind: (isReferential || isVisualReferential) ? 'referential' : 'contextual',
     domain: dialogueState.domain || 'general',
     previousUser: String(dialogueState.previousUser || ''),
     previousAssistant: String(dialogueState.previousAssistant || ''),

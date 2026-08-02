@@ -103,6 +103,8 @@ async function openAiStreamWithFallback({
   writeSse,
   shouldEmitDebugEvent,
   llmTimeoutMs,
+  visionTimeoutMs = 30000,
+  isVisionRequest = false,
   onProviderTelemetry,
   providerSessionKey,
   forceDisableTools = false,
@@ -126,14 +128,19 @@ async function openAiStreamWithFallback({
     if (remainingRequestMs <= 0) {
       throw Object.assign(new Error('Request deadline exceeded'), { name: 'AbortError' });
     }
+    // Vision requests (image attachments or vision-flavored models) get their
+    // own, longer attempt budget. The old hard 5s OmniRoute cap made healthy
+    // providers — and any image ingestion — time out on simple text questions.
+    const requestIsVision = Boolean(isVisionRequest) || isVisionModel(model);
+    const attemptBudget = requestIsVision ? Math.max(llmTimeoutMs, visionTimeoutMs) : llmTimeoutMs;
     const isOmniRouteProvider = /omniroute/i.test(String(provider.id || ''));
     const providerTimeoutMs = isLocalProvider
-      ? Math.max(llmTimeoutMs, 90000)
+      ? Math.max(attemptBudget, 90000)
       : isOmniRouteProvider
-        // Vision models need time to ingest image tokens. The old 5s cap
-        // made image follow-ups fail even when the provider was healthy.
-        ? (isVisionModel(nextModel) ? Math.max(Math.min(llmTimeoutMs, 15000), 12000) : Math.min(llmTimeoutMs, 5000))
-        : llmTimeoutMs;
+        // Keep OmniRoute attempts short enough to fail over quickly, but never
+        // so short that a healthy provider misses the deadline.
+        ? (requestIsVision ? Math.min(attemptBudget, 45000) : Math.min(attemptBudget, 15000))
+        : attemptBudget;
     lastAttemptTimeoutMs = Math.max(1, Math.min(providerTimeoutMs, remainingRequestMs));
     const attemptController = new AbortController();
     const attemptTimer = setTimeout(() => attemptController.abort(), lastAttemptTimeoutMs);
@@ -216,7 +223,9 @@ async function openAiStreamWithFallback({
       } catch (apiErr) {
         let currentErr = normalizeProviderStreamError(apiErr);
         const isRetryable = isRetryableProviderError(currentErr, isResponsesSchemaMismatchError)
-          || (String(currentErr?.status || currentErr?.code || '') === '400' && isVisionModel(nextModel));
+          // A 400 on an image-bearing request usually means the current model
+          // does not support images — fail over to a vision-capable candidate.
+          || (String(currentErr?.status || currentErr?.code || '') === '400' && (isVisionModel(nextModel) || isVisionRequest));
 
         if (isRetryable && providerCandidates.length > 1) {
           providerRuntime.markProviderFailure(nextProvider.id, currentErr);
@@ -315,9 +324,16 @@ async function openAiStreamWithFallback({
         }
 
         if (currentErr.name === 'AbortError') {
-          const sec = Math.round(lastAttemptTimeoutMs / 1000);
+          const deadlineExceeded = Date.now() >= requestDeadlineAt;
+          console.warn(`[LLM_TIMEOUT] ${deadlineExceeded ? 'request deadline reached' : 'provider attempt timed out'} provider=${nextProvider.id} model=${nextModel} attemptTimeoutMs=${lastAttemptTimeoutMs}`);
+          if (deadlineExceeded) {
+            return {
+              errorEvent: { type: 'error', message: 'Sorğu üçün ayrılmış ümumi vaxt bitdi. Sistem əlçatan provider və modelləri yoxladı; zəhmət olmasa bir neçə saniyə sonra yenidən cəhd edin.' }
+            };
+          }
+          const sec = Math.max(1, Math.round(lastAttemptTimeoutMs / 1000));
           return {
-            errorEvent: { type: 'error', message: `Model ${sec}s ərzində cavab vermədi. Daha kiçik model (məs. Qwen 2.5 Coder 7B) sınayın və ya \`LLM_TIMEOUT_MS\` env-i artırın.` }
+            errorEvent: { type: 'error', message: `Model ${sec}s ərzində cavab vermədi. Zəhmət olmasa bir neçə saniyə sonra yenidən cəhd edin; problem davam edərsə daha kiçik model seçin.` }
           };
         }
 

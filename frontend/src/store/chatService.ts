@@ -126,7 +126,10 @@ function buildWebReferentSummary(messages: Message[], latestInput: string): Reco
   if (history.length < 2) return null;
   const latestNormalized = String(latestInput || '').trim().toLowerCase();
   if (!latestNormalized) return null;
-  const isReferentialFollowup = /^(onu|bunu|el[eə] onu|orada dediyin|deqiqleshdir|dəqiqləşdir|onu dəqiqləşdir|onu deqiqleshdir|bunu dəqiqləşdir|bunu deqiqleshdir|yuxarida dedin axi|yuxarıda dedin axı|bu sənəd|bu sened|bu şəkil|bu sekil|bu fayl|bu file|buradakı sənəd|burdaki sened)$/i.test(latestNormalized);
+  const isReferentialFollowup = /^(onu|bunu|el[eə] onu|orada dediyin|deqiqleshdir|dəqiqləşdir|onu dəqiqləşdir|onu deqiqleshdir|bunu dəqiqləşdir|bunu deqiqleshdir|yuxarida dedin axi|yuxarıda dedin axı|bu sənəd|bu sened|bu şəkil|bu sekil|bu fayl|bu file|buradakı sənəd|burdaki sened)$/i.test(latestNormalized)
+    // Image referents arrive as open-ended questions or "describe this"
+    // requests without an explicit noun — still carry the previous attachment.
+    || /(nə görürsən|ne gorursen|şəkli izah|sekli izah|şəkli təsvir|sekli tesvir|şəkildə nə var|sekilde ne var|şəkli analiz|sekli analiz|təsvir et|tesvir et|şərh et|sherh et|izah et|izah ele)/i.test(latestNormalized);
   if (!isReferentialFollowup) return null;
 
   const previousAssistant = [...history].reverse().find((item) => item.role === 'assistant' && String(item.content || '').trim());
@@ -427,6 +430,9 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
     if (isWebChat && bufferedAssistant && /cavabın görünən hissəsi saxlanıldı|gələn hissə göstərildi/i.test(normalizedError)) {
       return;
     }
+    // Terminal error: drop the partial buffer so no assistant message gets
+    // finalized after the error — keeps the retry button on the error itself.
+    streamBufferRef.current = '';
     sink.addSystemMessage(`❌ Xəta: ${normalizedError}`);
     return;
   }

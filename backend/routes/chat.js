@@ -367,7 +367,14 @@ router.post('/', async (req, res) => {
       : Array.isArray(lastUserMessage?.attachments)
         ? lastUserMessage.attachments
         : [];
-  const isVisualFollowup = /\b(bu|bunu|buradak[iı]|şəkil|sekil|sənəd|sened|fayl|attachment)\b/i.test(latestUserText);
+  // Follow-ups that refer to an earlier uploaded image/document. Open-ended
+  // questions like "nə görürsən?" carry no explicit noun but still need the
+  // previous image reattached to the model payload. Word boundaries on the
+  // noun alternatives avoid matching "bu" inside words like "bulud".
+  const isVisualFollowup = (
+    /\b(bu|bunu|buradak[iı]|burdak[iı]|şəkil|sekil|şəkli|sekli|foto|image|sənəd|sened|fayl|file|attachment)\b/i.test(latestUserText)
+    || /(nə görürsən|ne gorursen|nə var|ne var|təsvir et|tesvir et|şərh et|sherh et|izah et|izah ele|analiz et|görürsən|gorursen)/i.test(latestUserText)
+  );
   const historicalVisualMessage = isVisualFollowup
     ? [...normalizedMessages].reverse().find((item) => (
         item?.role === 'user' && Array.isArray(item.attachments) && item.attachments.some((att) => (
@@ -420,6 +427,12 @@ router.post('/', async (req, res) => {
     parseInt(process.env.LLM_TIMEOUT_CHAT || '20000', 10),
     20000
   );
+  // Guard against a stale/garbage Railway env value: NaN would propagate into
+  // setTimeout and abort attempts instantly (the exact bug class being fixed).
+  const configuredVisionTimeoutMs = parseInt(process.env.VISION_LLM_TIMEOUT_MS || '', 10);
+  const visionTimeoutMs = Number.isFinite(configuredVisionTimeoutMs) && configuredVisionTimeoutMs > 0
+    ? configuredVisionTimeoutMs
+    : 30000;
   const providerRuntime = require('../helpers').providerRuntime || { markProviderFailure: () => {}, canUseProviderNow: () => true, markProviderSuccess: () => {}, reorderCandidatesForSession: (items) => items };
   const providerSessionKey = `${productMode || 'desktop_code'}:${req.user?.id || 'anon'}:${conversationId || 'default'}`;
 
@@ -706,6 +719,10 @@ ${generateToolsSystemPrompt(TOOLS)}`;
         mapMessagesToResponsesInput, mapToolsToResponsesTools,
         isResponsesSchemaMismatchError, buildDeepSeekRecoveryMessages,
         llmTimeoutMs: productMode === 'web_chat' ? LLM_TIMEOUT_CHAT : LLM_TIMEOUT_MS,
+        // Vision queries get a separate, longer attempt budget (and their own
+        // request deadline) so image ingestion and vision-model failover fit.
+        visionTimeoutMs,
+        hasImageAttachment,
         handleToolCall, normalizeToolName, extractTextToolCalls,
         buildToolCallCacheKey, flattenResponseJsonText,
         normalizeFinalAssistantReport, isSensitiveTool,
@@ -714,8 +731,11 @@ ${generateToolsSystemPrompt(TOOLS)}`;
         crypto, hasAttachmentInRequest, safeMode, runId,
         entryPath, initialGateReceipt,
         providerSessionKey,
+        // A single text request should survive an OmniRoute attempt (15s) plus
+        // a healthy provider fallback without burning the whole budget; the old
+        // 30s/45s deadlines made late fallbacks fail with a bogus 1s "timeout".
         requestTimeoutMs: productMode === 'web_chat'
-          ? (hasImageAttachment ? 45000 : 30000)
+          ? (hasImageAttachment ? 60000 : 45000)
           : Math.max(LLM_TIMEOUT_MS, 90000),
         onProviderTelemetry: (payload) => {
           const safePayload = {
