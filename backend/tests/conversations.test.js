@@ -141,6 +141,33 @@ const fake = vi.hoisted(() => {
       return { rows: [] };
     }
 
+    if (t.startsWith('SELECT id FROM conversations')) {
+      // Ownership check for GET /:id/messages: $1 = conversation id, $2 = user id
+      const conv = state.conversations.get(params[0]);
+      if (conv && conv.user_id === params[1]) return { rows: [{ id: conv.id }] };
+      return { rows: [] };
+    }
+
+    if (t.startsWith('SELECT id, role, content, attachments, tool_calls, tool_call_id, timestamp, created_at')) {
+      // loadMessagesPageForConversation: $1 conversation_id, optional $2 before
+      // (ISO created_at), last param = LIMIT (safeLimit + 1 probe row). Mirrors
+      // ORDER BY created_at DESC, id DESC so hasMore and page boundaries behave
+      // exactly like Postgres.
+      const convId = params[0];
+      const hasBefore = params.length > 2;
+      const before = hasBefore ? params[1] : null;
+      const limit = params[params.length - 1];
+      let rows = [...state.messages.values()].filter((m) => m.conversation_id === convId);
+      if (before) rows = rows.filter((m) => m.created_at < before);
+      rows = rows
+        .sort((a, b) => {
+          if (a.created_at !== b.created_at) return a.created_at < b.created_at ? 1 : -1;
+          return a.id < b.id ? 1 : -1;
+        })
+        .slice(0, limit);
+      return { rows: rows.map((r) => ({ ...r })) };
+    }
+
     return { rows: [] };
   }
 
@@ -341,5 +368,167 @@ describe('append-only upsert write path', () => {
     expect(fake.state.messages.size).toBe(before.size);
     expect(fake.state.messages.get('m1').created_at).toBe(before.m1);
     expect(fake.state.messages.get('m1').content).toBe('a');
+  });
+});
+
+describe('GET /api/conversations/:id/messages pagination', () => {
+  const ts = (n) => 1600000000000 + n * 1000;
+
+  async function seedMessages(convId, count) {
+    const messages = [];
+    for (let i = 1; i <= count; i += 1) {
+      messages.push(msg(`m${i}`, i % 2 === 0 ? 'assistant' : 'user', `mesaj-${i}`, ts(i)));
+    }
+    await request(app).patch(`/api/conversations/${convId}`).send({ messages });
+  }
+
+  it('returns the newest page in ascending order with hasMore=false when everything fits', async () => {
+    const convId = await createConversation('Page');
+    await seedMessages(convId, 5);
+
+    const r = await request(app).get(`/api/conversations/${convId}/messages`);
+    expect(r.status).toBe(200);
+    expect(r.body.messages.map((m) => m.id)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5']);
+    expect(r.body.pagination.hasMore).toBe(false);
+    // timestamps round-trip as numbers (created_at is preserved, not regenerated)
+    expect(r.body.messages[0].timestamp).toBe(ts(1));
+    expect(r.body.messages[4].timestamp).toBe(ts(5));
+
+    // The emitted query must keep the deterministic ordering (created_at DESC,
+    // id DESC tie-break) and probe safeLimit+1 rows to compute hasMore.
+    const pageQuery = fake.state.queries
+      .filter((q) => q.text.startsWith('SELECT id, role, content'))
+      .pop();
+    expect(pageQuery.text).toContain('ORDER BY created_at DESC, id DESC');
+    expect(pageQuery.params[pageQuery.params.length - 1]).toBe(121); // 120 + 1 probe row
+  });
+
+  it('returns a trimmed page with hasMore=true when messages exceed the limit', async () => {
+    const convId = await createConversation('Page');
+    await seedMessages(convId, 5);
+
+    const r = await request(app).get(`/api/conversations/${convId}/messages?limit=2`);
+    expect(r.status).toBe(200);
+    // newest 2 messages, oldest-first within the page
+    expect(r.body.messages.map((m) => m.id)).toEqual(['m4', 'm5']);
+    expect(r.body.pagination.hasMore).toBe(true);
+  });
+
+  it('walks backward with before without gaps or duplicates', async () => {
+    const convId = await createConversation('Page');
+    await seedMessages(convId, 5);
+
+    const page1 = await request(app).get(`/api/conversations/${convId}/messages?limit=2`);
+    expect(page1.body.messages.map((m) => m.id)).toEqual(['m4', 'm5']);
+    expect(page1.body.pagination.hasMore).toBe(true);
+
+    const before4 = new Date(ts(4)).toISOString();
+    const page2 = await request(app)
+      .get(`/api/conversations/${convId}/messages?limit=2&before=${encodeURIComponent(before4)}`);
+    expect(page2.body.messages.map((m) => m.id)).toEqual(['m2', 'm3']);
+    expect(page2.body.pagination.hasMore).toBe(true);
+
+    const before2 = new Date(ts(2)).toISOString();
+    const page3 = await request(app)
+      .get(`/api/conversations/${convId}/messages?limit=2&before=${encodeURIComponent(before2)}`);
+    expect(page3.body.messages.map((m) => m.id)).toEqual(['m1']);
+    expect(page3.body.pagination.hasMore).toBe(false);
+
+    const all = [...page1.body.messages, ...page2.body.messages, ...page3.body.messages].map((m) => m.id);
+    expect(all).toEqual(['m4', 'm5', 'm2', 'm3', 'm1']);
+    expect(new Set(all).size).toBe(5);
+  });
+
+  it('clamps safeLimit to 1 when the requested limit is <= 0', async () => {
+    const convId = await createConversation('Page');
+    await seedMessages(convId, 3);
+
+    const r = await request(app).get(`/api/conversations/${convId}/messages?limit=-5`);
+    expect(r.status).toBe(200);
+    expect(r.body.messages.map((m) => m.id)).toEqual(['m3']);
+    expect(r.body.pagination.hasMore).toBe(true);
+
+    const pageQuery = fake.state.queries
+      .filter((q) => q.text.startsWith('SELECT id, role, content'))
+      .pop();
+    expect(pageQuery.params[pageQuery.params.length - 1]).toBe(2); // safeLimit + 1 probe row
+  });
+
+  it('clamps safeLimit to 200 and never fetches more than 200 messages', async () => {
+    const convId = await createConversation('Page');
+    await seedMessages(convId, 250);
+
+    const r = await request(app).get(`/api/conversations/${convId}/messages?limit=500`);
+    expect(r.status).toBe(200);
+    expect(r.body.messages).toHaveLength(200);
+    expect(r.body.pagination.hasMore).toBe(true);
+    expect(r.body.messages[0].id).toBe('m51'); // oldest of the returned window
+    expect(r.body.messages[199].id).toBe('m250'); // newest
+
+    const pageQuery = fake.state.queries
+      .filter((q) => q.text.startsWith('SELECT id, role, content'))
+      .pop();
+    expect(pageQuery.params[pageQuery.params.length - 1]).toBe(201); // 200 + 1 probe row
+  });
+
+  it('applies the default limit of 120', async () => {
+    const convId = await createConversation('Page');
+    await seedMessages(convId, 125);
+
+    const r = await request(app).get(`/api/conversations/${convId}/messages`);
+    expect(r.status).toBe(200);
+    expect(r.body.messages).toHaveLength(120);
+    expect(r.body.pagination.hasMore).toBe(true);
+    expect(r.body.messages[0].id).toBe('m6'); // oldest of the newest-120 window
+    expect(r.body.messages[119].id).toBe('m125'); // newest
+  });
+
+  it('returns an empty page with hasMore=false when before precedes all messages', async () => {
+    const convId = await createConversation('Page');
+    await seedMessages(convId, 3);
+
+    const before = new Date(ts(1) - 1000).toISOString();
+    const r = await request(app)
+      .get(`/api/conversations/${convId}/messages?before=${encodeURIComponent(before)}`);
+    expect(r.body.messages).toEqual([]);
+    expect(r.body.pagination.hasMore).toBe(false);
+  });
+
+  it('orders messages with identical created_at by id descending (stable tie-break)', async () => {
+    const convId = await createConversation('Page');
+    // Same client timestamp → same created_at for all three
+    await request(app).patch(`/api/conversations/${convId}`).send({
+      messages: [msg('m1', 'user', 'a', 1000), msg('m2', 'assistant', 'b', 1000), msg('m3', 'user', 'c', 1000)]
+    });
+
+    const r = await request(app).get(`/api/conversations/${convId}/messages?limit=1`);
+    // id DESC wins: newest single message is m3
+    expect(r.body.messages.map((m) => m.id)).toEqual(['m3']);
+    expect(r.body.pagination.hasMore).toBe(true);
+  });
+
+  it('returns 404 for an unknown conversation', async () => {
+    const r = await request(app).get('/api/conversations/unknown-id/messages');
+    expect(r.status).toBe(404);
+  });
+
+  it('returns 404 when the conversation belongs to another user', async () => {
+    // Simulate a row owned by a different user: ownership check must reject it
+    // even though the conversation exists.
+    fake.state.conversations.set('others-conv', {
+      id: 'others-conv',
+      project_id: null,
+      user_id: 99,
+      title: 'Başqa istifadəçinin chat-ı',
+      messages: [],
+      summary_text: '',
+      archived: false,
+      last_message_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    const r = await request(app).get('/api/conversations/others-conv/messages');
+    expect(r.status).toBe(404);
   });
 });

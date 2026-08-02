@@ -309,14 +309,16 @@ export function mergeProviderTelemetryIntoMemory(memory: Record<string, unknown>
 }
 
 // Keys that must never reach web chat project memory: provider routing
-// telemetry and token usage are desktop ops-panel details (see OpsPanel).
-const WEB_PRIVACY_MEMORY_KEYS = ['providerTelemetry', 'lastProviderTelemetry', 'tokenUsage'] as const;
+// telemetry, token usage and GUI/browser capability status are desktop
+// ops-panel details (see OpsPanel).
+const WEB_PRIVACY_MEMORY_KEYS = ['providerTelemetry', 'lastProviderTelemetry', 'tokenUsage', 'guiCapabilities', 'guiCapabilitiesUpdatedAt'] as const;
 
 /**
  * Strip provider/model internals from a project-memory payload. Used on every
- * web-chat memory write (and on web-chat memory load) so provider telemetry
- * and token usage are completely excluded from web project memory, even if a
- * value was persisted by an older session.
+ * web-chat memory write (and on web-chat memory load) so provider telemetry,
+ * token usage and GUI capability status are completely excluded from web
+ * project memory, even if a value was persisted by an older session.
+ * Desktop (OpsPanel) never calls this — GUI capabilities stay available there.
  */
 export function stripProviderDetailsFromMemory(memory: Record<string, unknown>): Record<string, unknown> {
   if (!memory || typeof memory !== 'object') return memory;

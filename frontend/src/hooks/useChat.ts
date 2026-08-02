@@ -304,6 +304,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   // GUI Capabilities Loading
   // ==========================================
   useEffect(() => {
+    // GUI/browser capabilities are a desktop-only concern (OpsPanel). Web chat
+    // never uses them, so skip loading them into web project memory entirely.
+    if (settings.productMode === 'web_chat') return;
     let cancelled = false;
     const loadGuiCapabilities = async () => {
       try {
@@ -319,7 +322,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     };
     loadGuiCapabilities();
     return () => { cancelled = true; };
-  }, [settings.guiBrowserMode, settings.guiBrowserPath, settings.guiBrowserCdpUrl]);
+  }, [settings.productMode, settings.guiBrowserMode, settings.guiBrowserPath, settings.guiBrowserCdpUrl]);
 
   // ==========================================
   // Interactions Polling

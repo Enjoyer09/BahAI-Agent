@@ -21,6 +21,7 @@ import {
   buildEvidenceSummary,
   mergeEvidenceSummaryIntoMemory,
   mergeGuiCapabilitiesIntoMemory,
+  stripProviderDetailsFromMemory,
   mergeGovernanceIntoMemory,
   mergeHumanCheckpointIntoMemory,
   mergeGuiObservationIntoMemory,
@@ -463,6 +464,55 @@ describe('mergeGuiCapabilitiesIntoMemory', () => {
     } as GuiCapabilityStatus;
     const result = mergeGuiCapabilitiesIntoMemory({}, caps);
     expect(result.guiCapabilities).toBe(caps);
+  });
+});
+
+// ==========================================
+// stripProviderDetailsFromMemory
+// ==========================================
+describe('stripProviderDetailsFromMemory', () => {
+  it('strips provider telemetry + token usage + guiCapabilities (web scrub)', () => {
+    const memory = {
+      providerTelemetry: [{ event: 'provider_failure', providerId: 'web_omniroute' }],
+      lastProviderTelemetry: { event: 'provider_failover' },
+      tokenUsage: { promptTokens: 1, completionTokens: 2 },
+      guiCapabilities: { summary: { status: 'ok' } },
+      guiCapabilitiesUpdatedAt: 1234567890,
+      latestPrompt: 'salam',
+      lastValidation: { status: 'passed' },
+    };
+    const result = stripProviderDetailsFromMemory(memory);
+    expect(result.providerTelemetry).toBeUndefined();
+    expect(result.lastProviderTelemetry).toBeUndefined();
+    expect(result.tokenUsage).toBeUndefined();
+    expect(result.guiCapabilities).toBeUndefined();
+    expect(result.guiCapabilitiesUpdatedAt).toBeUndefined();
+    // Non-privacy keys survive untouched.
+    expect(result.latestPrompt).toBe('salam');
+    expect(result.lastValidation).toEqual({ status: 'passed' });
+  });
+
+  it('web scrub removes guiCapabilities but keeps other session state (activeGuiSession)', () => {
+    const memory = {
+      guiCapabilities: { summary: { status: 'ok' } },
+      activeGuiSession: { sessionId: 's1', status: 'running' },
+      latestGoal: 'kod yaz',
+    };
+    const result = stripProviderDetailsFromMemory(memory);
+    // activeGuiSession is desktop session state — still present after scrub;
+    // only guiCapabilities + timestamps are web-scrubbed.
+    expect(result.guiCapabilities).toBeUndefined();
+    expect(result.activeGuiSession).toEqual({ sessionId: 's1', status: 'running' });
+    expect(result.latestGoal).toBe('kod yaz');
+  });
+
+  it('does not mutate the input and tolerates non-objects', () => {
+    const memory = { guiCapabilities: { x: 1 }, providerTelemetry: [] };
+    const result = stripProviderDetailsFromMemory(memory);
+    expect(memory.guiCapabilities).toEqual({ x: 1 }); // original untouched
+    expect(result).not.toBe(memory);
+    expect(stripProviderDetailsFromMemory(null as any)).toBeNull();
+    expect(stripProviderDetailsFromMemory(undefined as any)).toBeUndefined();
   });
 });
 

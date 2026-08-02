@@ -19,6 +19,7 @@
 //   node scripts/provider-failover-smoke.js                # local (deterministic)
 //   node scripts/provider-failover-smoke.js --remote       # against Railway URL
 //   node scripts/provider-failover-smoke.js --remote --check-logs
+//   node scripts/provider-failover-smoke.js --remote --check-logs --log-cmd-extra "--limit 2000"
 //
 // Local mode (default):
 //   - Spawns the real backend locally with OMNIROUTE_ENABLED=true and an
@@ -38,7 +39,13 @@
 //     request succeeded. Failover itself can only be observed, not forced, on
 //     a healthy production gateway.
 //   - With --check-logs it runs $FAILOVER_LOG_CMD (default "railway logs") and
-//     greps the output for the [PROVIDER] failover markers.
+//     greps the output for the [PROVIDER] failover markers. The output is
+//     filtered for THIS run's runId inside the shell (grep -F), so there is no
+//     fixed byte cap: $FAILOVER_LOG_CMD may already carry flags (e.g.
+//     "railway logs --limit 2000") and extra ones can be appended with
+//     --log-cmd-extra (or FAILOVER_LOG_CMD_EXTRA). When the runId cannot be
+//     scoped (unreliable extraction), the caller is responsible for bounding
+//     the output (e.g. --limit) since there is no byte cap.
 //
 // Manual Railway verification after a run:
 //   railway logs | grep -E '"event":"provider_failover"'
@@ -65,6 +72,19 @@ const PASSWORD = process.env.BAHAI_SMOKE_PASSWORD || 'demo123';
 const EXPECT_PROVIDER = (process.env.FAILOVER_SMOKE_EXPECT_PROVIDER || 'nvidia').toLowerCase();
 const LOG_CMD = process.env.FAILOVER_LOG_CMD || 'railway logs';
 
+// Read a CLI flag value: `--name value` or `--name=value`. Returns null when
+// the flag is absent.
+function argValue(name) {
+  const prefix = `${name}=`;
+  const inline = process.argv.find((flag) => flag.startsWith(prefix));
+  if (inline) return inline.slice(prefix.length);
+  const index = process.argv.indexOf(name);
+  return index !== -1 && index + 1 < process.argv.length ? process.argv[index + 1] : null;
+}
+// Extra flags appended to the log command, e.g. "--limit 2000". Prefer the CLI
+// flag over the env var so ad-hoc invocations do not need new env plumbing.
+const LOG_CMD_EXTRA = (argValue('--log-cmd-extra') || process.env.FAILOVER_LOG_CMD_EXTRA || '').trim();
+
 const PROMPT = 'Bu bir failover yoxlama sorğusudur. Zəhmət olmasa bir cümlə ilə cavab ver.';
 
 function assert(condition, message) {
@@ -82,6 +102,8 @@ Usage:
 Flags:
   --remote                  Hit the deployed backend (Railway) instead of a local spawn
   --check-logs              (with --remote) grep $FAILOVER_LOG_CMD output for failover markers
+  --log-cmd-extra ARGS      (with --check-logs) append ARGS to $FAILOVER_LOG_CMD, e.g.
+                            --log-cmd-extra "--limit 2000" (env: FAILOVER_LOG_CMD_EXTRA)
   --require-real-nvidia     Local mode: fail instead of using the built-in fake NVIDIA stub
   -h, --help                Show this help
 
@@ -94,6 +116,7 @@ Env:
   NVIDIA_GENERAL_MODEL      NVIDIA model id (or NVIDIA_FAST_MODEL)
   FAILOVER_SMOKE_EXPECT_PROVIDER   Assert failover to this provider prefix (default nvidia)
   FAILOVER_LOG_CMD          (--check-logs) command whose output is grepped (default "railway logs")
+  FAILOVER_LOG_CMD_EXTRA    (--check-logs) extra flags appended to $FAILOVER_LOG_CMD (e.g. "--limit 2000")
 
 Exit codes: 0 pass, 1 assertion failed, 2 config missing, 3 log check unavailable.`);
 }
@@ -390,22 +413,67 @@ async function runLocalMode() {
 // Remote (Railway) mode
 // ------------------------------------------------------------
 
+// RunIds produced by the backend are crypto.randomUUID() values (hex + dashes),
+// so the grep pattern is always shell-safe in practice. The whitelist below is
+// defense in depth: the `[^"]+` capture excludes double quotes but a stray
+// single quote or other metacharacter would otherwise break out of the
+// single-quoted grep pattern.
+const SAFE_RUN_ID = /^[A-Za-z0-9_-]+$/;
+
+// Build the shell command that collects deploy logs. The caller controls the
+// log window with extra flags (--log-cmd-extra / FAILOVER_LOG_CMD_EXTRA), so
+// commands like "railway logs --limit 2000" work. There is deliberately no
+// fixed byte cap: the old `| head -c 262144` could silently drop the very
+// runId-scoped lines this check needs.
+function buildScopedLogCommand(runId) {
+  let command = LOG_CMD;
+  if (LOG_CMD_EXTRA) command += ` ${LOG_CMD_EXTRA}`;
+  if (runId && SAFE_RUN_ID.test(runId)) {
+    // Filter in the shell so only THIS run's lines cross the pipe: bounded
+    // buffering, no truncation, and unrelated traffic cannot false-pass.
+    command += ` | grep -F '"runId":"${runId}"'`;
+  }
+  return command;
+}
+
 async function checkRailwayLogs(runId) {
-  console.log(`\nChecking deploy logs via: ${LOG_CMD}`);
+  // Only shell-grep when the runId is whitelist-safe; otherwise fall back to
+  // scanning the whole output (same behavior as when no runId was extracted).
+  const safeRunId = runId && SAFE_RUN_ID.test(runId) ? runId : null;
+  const scopedCommand = buildScopedLogCommand(safeRunId);
+  console.log(`\nChecking deploy logs via: ${scopedCommand}`);
   return new Promise((resolve) => {
-    const child = execFile('bash', ['-c', `${LOG_CMD} 2>&1 | head -c 262144`], { timeout: 30000 }, (error, stdout) => {
-      if (error || !stdout) {
-        console.error('Log check not available:', error ? error.message : 'empty output');
+    const child = execFile('bash', ['-c', scopedCommand], { timeout: 30000 }, (error, stdout, stderr) => {
+      const out = String(stdout || '');
+      const errText = String(stderr || '').trim();
+      // `grep -F` exits 1 when nothing matched this run — that is a valid
+      // "no logs for this runId" result, not a broken check.
+      const grepNoMatch = Boolean(error && error.code === 1 && safeRunId);
+      // A broken railway CLI (not linked / unauthenticated) also exits
+      // non-zero, and bash reports the pipeline's last command (grep) as the
+      // status — so grepNoMatch would otherwise swallow it. Detect the
+      // failure in stderr and report the check as unavailable instead of a
+      // misleading "no lines for this run".
+      const railwayFailure = grepNoMatch && /not linked|log\s*in|unauthor|401|invalid token|no such project|project not found/i.test(errText);
+      if (error && !grepNoMatch) {
+        console.error('Log check not available:', error.message);
+        if (errText) console.error(errText);
         console.error('Run the check manually: railway logs | grep -E \'"event":"provider_failover"\'');
         resolve(3);
         return;
       }
-      // Only consider lines belonging to THIS request's run — otherwise a
-      // failover from unrelated traffic in the log window would false-pass.
-      const scoped = runId
-        ? String(stdout || '').split('\n').filter((line) => line.includes(`"runId":"${runId}"`)).join('\n')
-        : stdout;
-      const analysis = analyzeLogs(scoped, EXPECT_PROVIDER);
+      if (railwayFailure) {
+        console.error('Log check not available — the log command reported an error:');
+        if (errText) console.error(errText);
+        console.error('Run the check manually: railway logs | grep -E \'"event":"provider_failover"\'');
+        resolve(3);
+        return;
+      }
+      if (grepNoMatch && errText) {
+        // Surface e.g. a railway CLI auth/link error instead of hiding it.
+        console.error(`Log command stderr:\n${errText}`);
+      }
+      const analysis = analyzeLogs(out, EXPECT_PROVIDER);
       if (analysis.omniFailure) {
         console.log('\n--- [PROVIDER] failover trail found in deploy logs ---');
         for (const line of [...analysis.trail.failure, ...analysis.trail.failover, ...analysis.trail.switched].slice(0, 9)) {
@@ -418,14 +486,23 @@ async function checkRailwayLogs(runId) {
       } else if (analysis.omniFailure) {
         console.log(`\nℹ️  Deploy logs show provider failures/failovers but none to "${EXPECT_PROVIDER}". This is normal when the live OmniRoute gateway was healthy for this run.`);
         resolve(0);
+      } else if (safeRunId) {
+        console.log(`\nℹ️  No [PROVIDER] telemetry lines for runId "${safeRunId}" in the deploy-log window.`);
+        console.log('     The window may not cover this request — widen it, e.g. --log-cmd-extra "--limit 5000", or Railway may not retain these logs.');
+        console.log('Verify manually: railway logs | grep -E \'"event":"provider_failover"\'');
+        resolve(0);
       } else {
-        console.log('\nℹ️  No [PROVIDER] telemetry lines in the recent deploy-log window (may be outside log retention or a different deployment).');
+        console.log('\nℹ️  No [PROVIDER] telemetry lines in the recent deploy-log window (no scoped runId available for this check).');
         console.log('Verify manually: railway logs | grep -E \'"event":"provider_failover"\'');
         resolve(0);
       }
     });
-    // Belt-and-braces kill in case head does not terminate the pipe.
-    setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* done */ } }, 32000);
+    // Belt-and-braces kill in case the log stream does not terminate. The
+    // timer is unref'd: a completed check must not keep the process alive
+    // ~32s after the callback fires (that delayed every --check-logs exit and
+    // made sequential runs appear to hang).
+    const killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* done */ } }, 32000);
+    killTimer.unref();
   });
 }
 

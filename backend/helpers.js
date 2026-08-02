@@ -1578,8 +1578,13 @@ function buildExecutionMemoryHint(projectMemory = {}) {
   return `Execution yaddaşı:\n${lines.join('\n')}`;
 }
 
-function buildCompactProjectMemory(projectMemory = {}) {
+function buildCompactProjectMemory(projectMemory = {}, opts = {}) {
   if (!projectMemory || typeof projectMemory !== 'object') return {};
+  // GUI/browser capability status is a desktop ops-panel detail (see
+  // OpsPanel.tsx). Web chat must never receive it in the model context, so
+  // exclude it whenever the compact memory is built for a web_chat session.
+  const productMode = String(opts?.productMode || 'desktop_code');
+  const includeGuiCapabilities = productMode !== 'web_chat';
   return {
     latestPrompt: projectMemory.latestPrompt || '',
     latestGoal: projectMemory.latestGoal || '',
@@ -1593,7 +1598,9 @@ function buildCompactProjectMemory(projectMemory = {}) {
     } : undefined,
     lastValidation: projectMemory.lastValidation || undefined,
     activeGuiSession: projectMemory.activeGuiSession || undefined,
-    guiCapabilities: projectMemory.guiCapabilities ? { summary: projectMemory.guiCapabilities.summary || {}, warnings: projectMemory.guiCapabilities.warnings || [] } : undefined
+    ...(includeGuiCapabilities && projectMemory.guiCapabilities
+      ? { guiCapabilities: { summary: projectMemory.guiCapabilities.summary || {}, warnings: projectMemory.guiCapabilities.warnings || [] } }
+      : {})
   };
 }
 
