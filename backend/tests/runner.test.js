@@ -182,6 +182,50 @@ describe('runner failover behavior', () => {
     );
   });
 
+  it('caps a hanging OmniRoute attempt at five seconds before fallback', async () => {
+    vi.useFakeTimers();
+    const runtime = createProviderRuntime();
+    const primary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
+    const fallback = { id: 'nvidia_general_1', wireApi: 'chat_completions', model: 'meta/llama-3.3-70b-instruct', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
+    const hangingClient = {
+      chat: {
+        completions: {
+          create: vi.fn((_input, options) => new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+          }))
+        }
+      }
+    };
+    const fallbackClient = createStreamingClient('fallback-ok');
+
+    const resultPromise = openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: hangingClient,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => provider.id === primary.id ? hangingClient : fallbackClient,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 20000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:omni-timeout'
+    });
+
+    await vi.advanceTimersByTimeAsync(5001);
+    const result = await resultPromise;
+    expect(result.activeProvider.id).toBe(fallback.id);
+    vi.useRealTimers();
+  });
+
   it('keeps agent tools enabled for local and NVIDIA coding models', async () => {
     const runtime = createProviderRuntime();
     const tools = [{ type: 'function', function: { name: 'list_directory', parameters: {} } }];

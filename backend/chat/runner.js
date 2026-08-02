@@ -126,7 +126,12 @@ async function openAiStreamWithFallback({
     if (remainingRequestMs <= 0) {
       throw Object.assign(new Error('Request deadline exceeded'), { name: 'AbortError' });
     }
-    const providerTimeoutMs = isLocalProvider ? Math.max(llmTimeoutMs, 90000) : llmTimeoutMs;
+    const isOmniRouteProvider = /omniroute/i.test(String(provider.id || ''));
+    const providerTimeoutMs = isLocalProvider
+      ? Math.max(llmTimeoutMs, 90000)
+      : isOmniRouteProvider
+        ? Math.min(llmTimeoutMs, 5000)
+        : llmTimeoutMs;
     lastAttemptTimeoutMs = Math.max(1, Math.min(providerTimeoutMs, remainingRequestMs));
     const attemptController = new AbortController();
     const attemptTimer = setTimeout(() => attemptController.abort(), lastAttemptTimeoutMs);
