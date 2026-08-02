@@ -1081,10 +1081,12 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
     if (message.attachments?.length) {
       const textParts = [content, '[Sistem qeydi: İstifadəçi artıq attachment göndərib. Yenidən upload/drag-drop/link istəmədən mövcud attachment məzmununu analiz et.]'];
       if (!isLocalOrFlakyModel && imageAttachments.length > 0) {
-        textParts.push('[Sistem qeydi: Şəkil əlavə olunub. Əsas cavabı birbaşa görünən obyektlərə, səhnəyə, rənglərə və yerləşimə əsaslandır. OCR mətni səs-küylü və qeyri-dəqiq ola bilər.]');
-        textParts.push('[Sistem qaydası - image: Əvvəl şəkildə görünən əsas obyektləri qısa təsvir et. Yalnız açıq və aydın görünən yazını qeyd et. Oxuna bilməyən və ya qeyri-müəyyən mətni təxmin etmə, uydurma, bərpa etmə. Əgər yazı aydın deyilsə sadəcə "yazı seçilmir" və ya "mətn aydın oxunmur" de. Captcha, poster, qiymət etiketi, sitat və s. kimi nəticələri yalnız şəkildə həqiqətən görünürsə yaz.]');
+        // Keep this instruction compact and unquoted: earlier verbose variants
+        // leaked into model answers verbatim ("Əmin olmadığım hissələr",
+        // "yazı seçilmir demək yeterli"), which users saw as garbled replies.
+        textParts.push('[Sistem qeydi: Şəkil əlavə olunub. Şəkildə gördüklərini təsvir et: obyektlər, mətn, rənglər, yerləşim. Yalnız aydın görünən mətni qeyd et; qeyri-müəyyən detalları uydurma. OCR mətni yalnız ipucudur, təkbaşına etibar etmə.]');
         if (isImageInspectionPrompt(content)) {
-          textParts.push('[Sistem formatı - image reply: Cavabı 3 hissə ilə qur: 1) Şəkildə görünən əsas obyektlər/səhnə. 2) Oxunan mətn varsa yalnız aydın görünən qısa parçalar. 3) Əmin olmadığın hissələr üçün bunu açıq de. Kiçik detallar uydurma.]');
+          textParts.push('[Sistem formatı - image reply: Təbii dildə birbaşa cavab ver. Siyahı, başlıq və ya təlimat mətnini cavaba köçürmə.]');
         }
       }
       const results = await Promise.all(message.attachments.map(async (attachment) => {

@@ -296,12 +296,23 @@ function buildProviderCandidates({
     }
 
     const primaryTask = hasImageAttachment ? 'vision' : webTaskType;
+    // The web vision model must stay in the candidate list even when the
+    // OmniRoute gateway owns routing. A vision request sent as 'auto' can be
+    // resolved by the gateway to a text-only model, which then hallucinates a
+    // description from OCR hints and prompt fragments (observed: model echoing
+    // the injected image rules instead of describing pixels). Only prepend an
+    // explicit WEB_CHAT_VISION_MODEL though: the NVIDIA default id belongs to
+    // the NVIDIA endpoint, not the gateway, so it must not be forced onto the
+    // OmniRoute base URL (that would guarantee a failed first attempt).
+    const webVisionModel = env.WEB_CHAT_VISION_MODEL || '';
     const orderedModels = useOmniRoute
-      ? omniRouteFallbackModels
+      ? (primaryTask === 'vision' && webVisionModel
+          ? uniqueModels([webVisionModel, ...omniRouteFallbackModels])
+          : omniRouteFallbackModels)
       : (() => {
         const fastModel = env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel;
         const smartModel = env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || fastModel;
-        const visionModel = env.WEB_CHAT_VISION_MODEL || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+        const visionModel = webVisionModel || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
         const codeModel = env.WEB_CHAT_CODE_MODEL || smartModel;
         return primaryTask === 'vision'
           ? [visionModel, smartModel, fastModel, codeModel]
