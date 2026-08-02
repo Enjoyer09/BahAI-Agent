@@ -62,6 +62,18 @@ async function ensureDebugChrome(cdpUrl, userDataDir) {
   if (!cdpUrl) return { launched: false };
   if (await isCdpReachable(cdpUrl)) return { launched: false };
 
+  // Test/CI guard: never auto-launch a real browser from a headless test or
+  // CI environment. Fail fast with a deterministic cdp_unreachable error
+  // instead of spawning visible Chrome with a profile dir (which can lock the
+  // user's real profile and race the CDP reachability deadline).
+  if (process.env.GUI_BROWSER_NO_AUTO_LAUNCH === 'true') {
+    throw createBrowserLaunchError(
+      'cdp_unreachable',
+      `Chrome CDP is not reachable at ${cdpUrl} and auto-launch is disabled (GUI_BROWSER_NO_AUTO_LAUNCH=true).`,
+      { cdpUrl }
+    );
+  }
+
   const chromePath = findInstalledChromePath();
   if (!chromePath) {
     throw createBrowserLaunchError('chrome_missing', 'No installed Chrome found for CDP mode', {

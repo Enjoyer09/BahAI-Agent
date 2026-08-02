@@ -6,52 +6,31 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import { spawn } from 'node:child_process';
 import { setTimeout as wait } from 'node:timers/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { spawnTestServer, stopTestServer } from './testServer.js';
 
-const PORT = 41738;
 let server;
-const testDir = path.dirname(fileURLToPath(import.meta.url));
-const backendRoot = path.resolve(testDir, '..');
+let base;
 
 beforeAll(async () => {
-  process.env.LOCAL_MODE = 'true';
-  process.env.JWT_SECRET = 'auth_test_secret_key_for_ci';
-  process.env.PORT = String(PORT);
-  process.env.NODE_ENV = 'test';
-  process.env.WORKSPACE_ROOT = '/tmp/bahai_auth_test';
-  process.env.ALLOWED_DIRECTORIES = '/tmp';
-  process.env.ACCESS_TOKEN_EXPIRY = '2s'; // short for testing
-
-  server = spawn(process.execPath, ['index.js'], {
-    cwd: backendRoot,
-    env: process.env,
-    stdio: 'pipe'
+  const booted = await spawnTestServer({
+    base: 41500,
+    envOverrides: {
+      LOCAL_MODE: 'true',
+      JWT_SECRET: 'auth_test_secret_key_for_ci',
+      NODE_ENV: 'test',
+      WORKSPACE_ROOT: '/tmp/bahai_auth_test',
+      ALLOWED_DIRECTORIES: '/tmp',
+      ACCESS_TOKEN_EXPIRY: '2s' // short for testing
+    }
   });
-
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Server boot timeout')), 12000);
-    server.stdout.on('data', (chunk) => {
-      if (chunk.toString().includes('server running')) {
-        clearTimeout(timer);
-        resolve();
-      }
-    });
-    server.stderr.on('data', (chunk) => process.stderr.write(chunk));
-  });
-  await wait(200);
-}, 15000);
+  server = booted.child;
+  base = `http://127.0.0.1:${booted.port}`;
+}, 20000);
 
 afterAll(async () => {
-  if (server) {
-    server.kill('SIGTERM');
-    await wait(300);
-  }
+  await stopTestServer(server);
 });
-
-const base = `http://127.0.0.1:${PORT}`;
 
 describe('Refresh Token Flow', () => {
   let accessToken;

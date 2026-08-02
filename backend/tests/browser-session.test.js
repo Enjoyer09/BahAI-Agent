@@ -85,6 +85,47 @@ describe('browserSession env precedence', () => {
   });
 });
 
+describe('browserSession no-auto-launch guard', () => {
+  it('fails fast with cdp_unreachable instead of spawning Chrome when GUI_BROWSER_NO_AUTO_LAUNCH is set', async () => {
+    process.env.GUI_BROWSER_NO_AUTO_LAUNCH = 'true';
+    delete process.env.GUI_BROWSER_CDP_URL;
+    const originalCreateConnection = net.createConnection;
+
+    // Make isCdpReachable() fail fast (CDP unreachable) without touching the
+    // network: emit an error on the next tick, before the 800ms timeout.
+    net.createConnection = () => {
+      const handlers = {};
+      const socket = {
+        setTimeout() {},
+        on(event, handler) {
+          handlers[event] = handler;
+          return this;
+        },
+        destroy() {}
+      };
+      process.nextTick(() => {
+        if (handlers.error) handlers.error(new Error('ECONNREFUSED'));
+      });
+      return socket;
+    };
+
+    try {
+      const error = await getSession('test-no-auto-launch', {
+        cdpUrl: 'http://127.0.0.1:9',
+        visible: true
+      }).then(
+        () => { throw new Error('expected getSession to throw'); },
+        (err) => err
+      );
+      expect(error.browserLaunchCode).toBe('cdp_unreachable');
+      expect(error.message).toContain('GUI_BROWSER_NO_AUTO_LAUNCH');
+    } finally {
+      net.createConnection = originalCreateConnection;
+      delete process.env.GUI_BROWSER_NO_AUTO_LAUNCH;
+    }
+  });
+});
+
 describe('browserSession helpers', () => {
   it('builds a dedicated BahAI chrome profile path', () => {
     const profileDir = buildDefaultBahaiChromeProfileDir();

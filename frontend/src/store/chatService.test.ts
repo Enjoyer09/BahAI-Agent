@@ -19,6 +19,7 @@ import {
   normalizeUiErrorMessage,
   handleSSEEvent,
 } from './chatService';
+import { stripProviderDetailsFromMemory } from '../lib/chatRuntime';
 
 // ==========================================
 // Helper Function Tests
@@ -226,8 +227,8 @@ describe('normalizeUiErrorMessage', () => {
 });
 
 describe('handleSSEEvent', () => {
-  it('suppresses noisy partial-stream disconnect error in web chat when text is already visible', () => {
-    const sink = {
+  function createSink() {
+    return {
       setTaskPlan: vi.fn(),
       addSystemMessage: vi.fn(),
       updateAssistantMessage: vi.fn(),
@@ -243,18 +244,100 @@ describe('handleSSEEvent', () => {
       updateProjectPort: vi.fn(),
       incrementPreviewKey: vi.fn(),
     };
+  }
 
-    handleSSEEvent({ type: 'error', message: 'Cavabın görünən hissəsi saxlanıldı. Qalan hissə yarımçıq kəsildi; davamı üçün yenidən göndərin.' } as any, {
+  function createCtx(sink: any, productMode: string, streamBufferRef = { current: '' }) {
+    return {
       convId: 'c1',
       projectMemory: {},
       activeProject: null,
       serverBacked: false,
-      settings: { productMode: 'web_chat', model: 'gpt-4o', workflow: 'quick' } as any,
+      settings: { productMode, model: 'gpt-4o', workflow: 'quick' } as any,
       sink: sink as any,
       currentMsgs: { current: [] },
-      streamBufferRef: { current: 'Bakıda bu gün hava təxminən 30°C-dir.' },
-    });
+      streamBufferRef,
+    };
+  }
+
+  it('does not show provider/model routing pills in web chat', () => {
+    const sink = createSink();
+    handleSSEEvent({ type: 'auto_route', chosenModel: 'auto-gpt-5.5', providerId: 'web_general_primary_omniroute' } as any, createCtx(sink, 'web_chat'));
+    expect(sink.addSystemMessage).not.toHaveBeenCalled();
+  });
+
+  it('shows the routing pill in desktop mode', () => {
+    const sink = createSink();
+    handleSSEEvent({ type: 'auto_route', chosenModel: 'qwen2.5-coder:7b', providerId: 'auto_ollama_fast' } as any, createCtx(sink, 'desktop_code'));
+    expect(sink.addSystemMessage).toHaveBeenCalledWith(expect.stringContaining('Auto → **qwen2.5-coder:7b**'));
+  });
+
+  it('suppresses noisy partial-stream disconnect error in web chat when text is already visible', () => {
+    const sink = createSink();
+
+    handleSSEEvent({ type: 'error', message: 'Cavabın görünən hissəsi saxlanıldı. Qalan hissə yarımçıq kəsildi; davamı üçün yenidən göndərin.' } as any, createCtx(sink, 'web_chat', { current: 'Bakıda bu gün hava təxminən 30°C-dir.' }));
 
     expect(sink.addSystemMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not persist provider telemetry into project memory for web chat', () => {
+    const sink = createSink();
+    handleSSEEvent(
+      { type: 'provider_telemetry', event: 'provider_failover', providerId: 'omniroute', toProviderId: 'nvidia', model: 'gpt-5.5', toModel: 'meta/llama-4', status: 429 } as any,
+      { ...createCtx(sink, 'web_chat'), activeProject: { id: 'p1' } }
+    );
+    expect(sink.mergeProjectMemory).not.toHaveBeenCalled();
+  });
+
+  it('persists provider telemetry into project memory for desktop', () => {
+    const sink = createSink();
+    handleSSEEvent(
+      { type: 'provider_telemetry', event: 'provider_failover', providerId: 'omniroute', toProviderId: 'nvidia', model: 'gpt-5.5', toModel: 'meta/llama-4', status: 429 } as any,
+      { ...createCtx(sink, 'desktop_code'), activeProject: { id: 'p1' } }
+    );
+    expect(sink.mergeProjectMemory).toHaveBeenCalledTimes(1);
+    expect(sink.mergeProjectMemory.mock.calls[0][0].lastProviderTelemetry).toBeTruthy();
+    expect(sink.mergeProjectMemory.mock.calls[0][0].providerTelemetry).toHaveLength(1);
+  });
+
+  it('does not persist token usage into project memory for web chat', () => {
+    const sink = createSink();
+    handleSSEEvent(
+      { type: 'token_usage', promptTokens: 100, completionTokens: 50, totalTokens: 150, estimatedCostUSD: '0.0004', model: 'auto' } as any,
+      { ...createCtx(sink, 'web_chat'), activeProject: { id: 'p1' } }
+    );
+    expect(sink.mergeProjectMemory).not.toHaveBeenCalled();
+  });
+
+  it('persists token usage into project memory for desktop', () => {
+    const sink = createSink();
+    handleSSEEvent(
+      { type: 'token_usage', promptTokens: 100, completionTokens: 50, totalTokens: 150, estimatedCostUSD: '0.0004', model: 'gpt-5.5' } as any,
+      { ...createCtx(sink, 'desktop_code'), activeProject: { id: 'p1' } }
+    );
+    expect(sink.mergeProjectMemory).toHaveBeenCalledTimes(1);
+    expect(sink.mergeProjectMemory.mock.calls[0][0].tokenUsage.model).toBe('gpt-5.5');
+  });
+});
+
+describe('stripProviderDetailsFromMemory', () => {
+  it('removes provider telemetry and token usage keys for web chat saves', () => {
+    const dirty = {
+      language: 'az',
+      providerTelemetry: [{ event: 'provider_failover' }],
+      lastProviderTelemetry: { event: 'provider_failover' },
+      tokenUsage: { totalTokens: 10 },
+    };
+    const clean = stripProviderDetailsFromMemory(dirty as any);
+    expect(clean.providerTelemetry).toBeUndefined();
+    expect(clean.lastProviderTelemetry).toBeUndefined();
+    expect(clean.tokenUsage).toBeUndefined();
+    expect(clean.language).toBe('az');
+  });
+
+  it('does not mutate the original memory object', () => {
+    const dirty = { tokenUsage: { totalTokens: 10 }, language: 'az' };
+    stripProviderDetailsFromMemory(dirty as any);
+    expect((dirty as any).tokenUsage).toBeTruthy();
+    expect((dirty as any).language).toBe('az');
   });
 });

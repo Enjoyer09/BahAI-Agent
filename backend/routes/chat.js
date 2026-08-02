@@ -743,6 +743,9 @@ ${generateToolsSystemPrompt(TOOLS)}`;
             baseURL: payload?.baseURL ? '[redacted]' : undefined,
             toBaseURL: payload?.toBaseURL ? '[redacted]' : undefined
           };
+          // Keep provider routing observable in server logs, but never stream
+          // provider/model internals to web clients or persist them into web
+          // project memory (web users must not see provider names).
           console.log('[PROVIDER]', JSON.stringify({
             runId,
             event: safePayload.event,
@@ -755,7 +758,9 @@ ${generateToolsSystemPrompt(TOOLS)}`;
             status: safePayload.status,
             wireApi: safePayload.wireApi
           }));
-          emitProviderTelemetry(res, safePayload);
+          if (productMode !== 'web_chat') {
+            emitProviderTelemetry(res, safePayload);
+          }
         },
         buildFinalGateReceipt: ({ plannerArtifact, executionArtifacts }) => buildGateReceipt({ plannerArtifact, executionArtifacts }),
         finishSse

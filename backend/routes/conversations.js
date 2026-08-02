@@ -152,14 +152,34 @@ async function loadMessagesPageForConversation(conversationId, limit = 100, befo
   };
 }
 
-async function replaceConversationMessages(client, conversationId, userId, rawMessages = []) {
+// Append-only upsert: INSERT ... ON CONFLICT (id) DO UPDATE instead of the old
+// destructive DELETE-all + INSERT-all. Surviving rows keep their original
+// created_at/order (fixes the within-transaction timestamp-collision scramble),
+// new rows derive created_at from the client timestamp so batch order is stable,
+// and a scoped reconcile DELETE removes only rows of THIS conversation that are
+// no longer in the authoritative client list (retry/edit truncation). Rows of
+// other conversations are never touched or moved.
+async function upsertConversationMessages(client, conversationId, userId, rawMessages = []) {
   const messages = normalizeMessages(rawMessages);
   const summaryText = buildConversationSummary(messages);
-  await client.query('DELETE FROM messages WHERE conversation_id = $1', [conversationId]);
+  const messageIds = messages.map((message) => message.id);
   for (const message of messages) {
     await client.query(
-      `INSERT INTO messages (id, conversation_id, user_id, role, content, attachments, tool_calls, tool_call_id, timestamp)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `INSERT INTO messages (id, conversation_id, user_id, role, content, attachments, tool_calls, tool_call_id, timestamp, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+               CASE WHEN $9::bigint IS NOT NULL AND $9::bigint > 0
+                    THEN to_timestamp($9::bigint / 1000.0)
+                    ELSE CURRENT_TIMESTAMP END)
+       ON CONFLICT (id) DO UPDATE SET
+         conversation_id = EXCLUDED.conversation_id,
+         user_id = EXCLUDED.user_id,
+         role = EXCLUDED.role,
+         content = EXCLUDED.content,
+         attachments = EXCLUDED.attachments,
+         tool_calls = EXCLUDED.tool_calls,
+         tool_call_id = EXCLUDED.tool_call_id,
+         timestamp = EXCLUDED.timestamp
+       WHERE messages.conversation_id = EXCLUDED.conversation_id`,
       [
         message.id,
         conversationId,
@@ -169,10 +189,17 @@ async function replaceConversationMessages(client, conversationId, userId, rawMe
         JSON.stringify(message.attachments || []),
         JSON.stringify(message.tool_calls || []),
         message.tool_call_id || null,
-        message.timestamp || Date.now()
+        message.timestamp || null
       ]
     );
   }
+  // Scoped reconcile: drop rows of this conversation that the client no longer
+  // lists (empty list means clear the conversation). Never a full DELETE-all.
+  await client.query(
+    `DELETE FROM messages
+     WHERE conversation_id = $1 AND NOT (id = ANY($2::text[]))`,
+    [conversationId, messageIds]
+  );
   await client.query(
     `UPDATE conversations
      SET messages = $1,
@@ -302,7 +329,7 @@ router.post('/', async (req, res) => {
         [id, projectId || null, req.user.id, convTitle, JSON.stringify(buildConversationSnapshot(seedMessages)), summaryText]
       );
       if (seedMessages.length > 0) {
-        await replaceConversationMessages(client, id, req.user.id, seedMessages);
+        await upsertConversationMessages(client, id, req.user.id, seedMessages);
       }
       await client.query('COMMIT');
       const row = result.rows[0];
@@ -361,7 +388,7 @@ async function patchConversation(req, res) {
       let normalized = Array.isArray(existing.messages) ? existing.messages : [];
       let summaryText = existing.summary_text || '';
       if (messages) {
-        normalized = await replaceConversationMessages(client, req.params.id, req.user.id, messages);
+        normalized = await upsertConversationMessages(client, req.params.id, req.user.id, messages);
         summaryText = buildConversationSummary(normalized);
       }
       const updateResult = await client.query(

@@ -45,6 +45,7 @@ import {
   mergeHumanCheckpointIntoMemory,
   mergeGuiObservationIntoMemory,
   mergeProviderTelemetryIntoMemory,
+  stripProviderDetailsFromMemory,
 } from '../lib/chatRuntime';
 
 // ==========================================
@@ -344,7 +345,10 @@ export async function handleSendMessage(
       streamBufferRef.current = '';
     }
 
-    // Save project memory after successful completion
+    // Save project memory after successful completion. Web chat must never
+    // persist provider/model internals (routing telemetry, token usage) — scrub
+    // them on every web save so even values loaded from an older session are
+    // not re-persisted.
     if (activeProject?.id && serverBacked) {
       const inferredMemory = {
         ...projectMemory,
@@ -353,8 +357,9 @@ export async function handleSendMessage(
         latestPrompt: input,
         workspace: activeProject.path,
       };
-      sink.mergeProjectMemory(inferredMemory);
-      saveProjectMemory(activeProject.id, inferredMemory).catch(console.error);
+      const memoryToSave = isWebChat ? stripProviderDetailsFromMemory(inferredMemory) : inferredMemory;
+      sink.mergeProjectMemory(memoryToSave);
+      saveProjectMemory(activeProject.id, memoryToSave).catch(console.error);
     }
   } catch (err: any) {
     if (err.name !== 'AbortError') {
@@ -416,6 +421,8 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'auto_route') {
+    // Web users never see provider/model routing details.
+    if (isWebChat) return;
     const isCloud = event.providerId?.includes('cloud') || /\//.test(event.chosenModel || '');
     const icon = isCloud ? '☁️' : '🦙';
     const tier = event.intent === 'smart' ? 'Mürəkkəb iş' : 'Sürətli sual';
@@ -438,6 +445,9 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'provider_telemetry') {
+    // Web chat must never persist provider routing telemetry into project
+    // memory (desktop ops-panel detail only).
+    if (isWebChat) return;
     if (!activeProject?.id) return;
     const mergedMemory = mergeProviderTelemetryIntoMemory(projectMemory, event);
     sink.mergeProjectMemory(mergedMemory);
@@ -446,6 +456,8 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'token_usage') {
+    // Web chat must never persist token usage into project memory.
+    if (isWebChat) return;
     if (!activeProject?.id) return;
     const mergedMemory = {
       ...projectMemory,

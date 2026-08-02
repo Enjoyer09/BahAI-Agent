@@ -36,11 +36,17 @@ async function collectStreamOutput({
   let resolvedModel = null;
   let deferStructuredOutput = false;
 
+  // Web chat must never receive provider/model names — auto_route is a
+  // desktop-only routing indicator. Track the resolved model internally for
+  // token_usage/logs, but only emit the SSE event for non-web products.
+  const canEmitAutoRoute = productMode !== 'web_chat';
   if (stream && stream.response && typeof stream.response.headers?.get === 'function') {
     const omniModel = stream.response.headers.get('x-omniroute-model');
     if (omniModel) {
       resolvedModel = omniModel;
-      writeSse(res, { type: 'auto_route', chosenModel: resolvedModel, intent: 'smart' });
+      if (canEmitAutoRoute) {
+        writeSse(res, { type: 'auto_route', chosenModel: resolvedModel, intent: 'smart' });
+      }
     }
   }
 
@@ -48,7 +54,9 @@ async function collectStreamOutput({
     for await (const chunk of stream) {
     if (chunk && chunk.model && !resolvedModel) {
       resolvedModel = chunk.model;
-      writeSse(res, { type: 'auto_route', chosenModel: resolvedModel, intent: 'smart' });
+      if (canEmitAutoRoute) {
+        writeSse(res, { type: 'auto_route', chosenModel: resolvedModel, intent: 'smart' });
+      }
     }
     if (wireApi === 'responses') {
       if (chunk.type === 'response.output_text.delta') {
@@ -201,9 +209,15 @@ async function collectStreamOutput({
     });
   }
 
-  const promptTokens = Math.ceil((step + 1) * 350);
-  const completionTokens = Math.ceil((accumulatedContent.length + JSON.stringify(normalizedToolCalls).length) / 4);
-  writeSse(res, { type: 'token_usage', promptTokens, completionTokens, model: resolvedModel || 'auto' });
+  // Web chat never receives provider/model internals: token usage is a desktop
+  // ops-panel detail and must not reach web clients at all (it would otherwise
+  // be persisted into web project memory). Resolve the model name internally
+  // for server logs, but do not emit the SSE event for web products.
+  if (productMode !== 'web_chat') {
+    const promptTokens = Math.ceil((step + 1) * 350);
+    const completionTokens = Math.ceil((accumulatedContent.length + JSON.stringify(normalizedToolCalls).length) / 4);
+    writeSse(res, { type: 'token_usage', promptTokens, completionTokens, model: resolvedModel || 'auto' });
+  }
 
   return {
     finishReason,

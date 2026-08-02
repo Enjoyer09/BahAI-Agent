@@ -17,6 +17,8 @@
     "smoke:desktop": "node scripts/desktop-smoke.js",
     "smoke:electron": "node scripts/electron-smoke.js",
     "smoke:prod:checkpoint": "node scripts/prod-smoke.js --checkpoint",
+    "smoke:failover": "node scripts/provider-failover-smoke.js",
+    "smoke:failover:remote": "node scripts/provider-failover-smoke.js --remote",
     "stress:agent": "node scripts/agent-stress.js",
     "check:harness": "node scripts/check-harness.js",
     "chrome:debug": "bash scripts/start-debug-chrome.sh",

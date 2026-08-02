@@ -44,6 +44,7 @@ import {
   mergeEvidenceSummaryIntoMemory,
   mergeGuiCapabilitiesIntoMemory,
   resolveActiveGuiSessionInMemory,
+  stripProviderDetailsFromMemory,
   isToolCallLikeText,
   simplifyAssistantTextForDedupe,
 } from '../lib/chatRuntime';
@@ -221,7 +222,13 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         return;
       }
       try {
-        const memory = await getProjectMemory(activeProject.id);
+        const loadedMemory = await getProjectMemory(activeProject.id);
+        // Web chat never keeps provider/model internals (routing telemetry,
+        // token usage) in project memory — strip them even if an older session
+        // persisted them, so they are not held in memory or re-saved.
+        const memory = settings.productMode === 'web_chat'
+          ? stripProviderDetailsFromMemory(loadedMemory)
+          : loadedMemory;
         dispatch({ type: 'SET_PROJECT_MEMORY', memory });
         const savedArtifact = memory?.plannerArtifact;
         if (savedArtifact && typeof savedArtifact === 'object') {
@@ -238,7 +245,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       }
     };
     loadMemory();
-  }, [activeProject?.id, state.serverBacked]);
+    // productMode is a dependency because web chat strips provider/model
+    // details from the loaded memory while desktop keeps them.
+  }, [activeProject?.id, state.serverBacked, settings.productMode]);
 
   useEffect(() => {
     if (!state.serverBacked || !state.activeConvId) return;
