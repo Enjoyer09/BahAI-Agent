@@ -1064,14 +1064,14 @@ let lastMcpConfigDir = '';
  * The gateway keeps its own client state, so re-loading the same dir is a
  * no-op (avoids respawning MCP server processes on every tool call).
  */
-async function loadMcpConfigForWorkingDirectory(workingDirectory) {
+async function loadMcpConfigForWorkingDirectory(workingDirectory, options = {}) {
   const { mcpGateway } = require('./chat/mcpGateway');
   const dir = String(workingDirectory || '').trim() || process.cwd();
-  if (lastMcpConfigDir === dir && mcpGateway.getTools().length > 0) {
+  if (lastMcpConfigDir === dir && mcpGateway.getTools().length > 0 && Object.keys(options).length === 0) {
     return mcpGateway.getTools();
   }
   lastMcpConfigDir = dir;
-  return mcpGateway.loadConfig(dir);
+  return mcpGateway.loadConfig(dir, options);
 }
 
 function resetMcpConfigCache() {

@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CodeBlock from './CodeBlock';
+import ArtifactBlock from '../chat/ArtifactBlock';
 import type { Components } from 'react-markdown';
 
 interface MarkdownRendererProps {
@@ -14,7 +15,13 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
       const match = /language-(\w+)/.exec(className || '');
       const isInline = !match && !String(children).includes('\n');
       if (isInline) return <CodeBlock inline>{String(children)}</CodeBlock>;
-      return <CodeBlock language={match?.[1]}>{String(children).replace(/\n$/, '')}</CodeBlock>;
+      const language = (match?.[1] || '').toLowerCase();
+      const code = String(children).replace(/\n$/, '');
+      // HTML/SVG blocks render as interactive artifacts (Preview ⇄ Code).
+      if (language === 'html' || language === 'htm' || language === 'svg' || language === 'html+svg') {
+        return <ArtifactBlock language={language} code={code} />;
+      }
+      return <CodeBlock language={language}>{code}</CodeBlock>;
     },
     table({ children }) {
       return (

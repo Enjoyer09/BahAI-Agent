@@ -235,7 +235,7 @@ const protectedPaths = [
   '/api/browsers', '/api/gui-capabilities', '/api/computer-use-status',
   '/api/runtime-status', '/api/interactions', '/api/tts',
   '/api/conversation-token', '/api/signed-url', '/api/admin/stats',
-  '/api/admin/users'
+  '/api/admin/users', '/api/mcp'
 ];
 protectedPaths.forEach(function(p) { app.use(p, verifyToken); });
 

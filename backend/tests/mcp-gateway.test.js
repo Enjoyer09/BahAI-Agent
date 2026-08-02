@@ -151,6 +151,35 @@ describe('MCPGateway', () => {
     expect(await gateway.callTool('mcp_nope_x', {})).toContain('MCP server not found');
     expect(await gateway.callTool('browser_open', {})).toContain('Unknown MCP tool');
   });
+
+  it('getStatus reports per-server connection state without leaking internals', async () => {
+    writeConfig([
+      { name: 'mock', command: process.execPath, args: [MOCK_SERVER] },
+      {
+        name: 'static',
+        tools: [{ name: 'hello', description: 'Static greeting', parameters: { type: 'object', properties: {} } }],
+      },
+    ]);
+    gateway = new MCPGateway({ initTimeoutMs: 5000, toolsTimeoutMs: 5000 });
+    await gateway.loadConfig(TEST_DIR);
+
+    const status = gateway.getStatus();
+    expect(status).toHaveLength(2);
+
+    const mockEntry = status.find((s) => s.name === 'mock');
+    expect(mockEntry.type).toBe('stdio');
+    expect(mockEntry.connected).toBe(true);
+    expect(mockEntry.toolCount).toBe(2);
+    expect(mockEntry.tools).toContain('mcp_mock_echo');
+    // No secrets/process handles leak into the status payload.
+    expect(JSON.stringify(mockEntry)).not.toContain('process');
+    expect(JSON.stringify(mockEntry)).not.toContain('pending');
+
+    const staticEntry = status.find((s) => s.name === 'static');
+    expect(staticEntry.type).toBe('static');
+    expect(staticEntry.connected).toBe(false);
+    expect(staticEntry.toolCount).toBe(1);
+  });
 });
 
 describe('mcpGateway singleton + helpers wiring', () => {

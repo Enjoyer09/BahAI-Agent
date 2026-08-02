@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react';
-import { ArrowDownToLine } from 'lucide-react';
+import { useRef, useEffect, useState } from 'react';
+import { ArrowDownToLine, PenLine, ListChecks, Lightbulb, ShieldCheck, SearchCode, Bug, Hammer, RefreshCcw } from 'lucide-react';
 import type { Message } from '../../lib/types';
 import ChatMessage from './ChatMessage';
 import { ErrorBoundary } from '../common/ErrorBoundary';
@@ -33,20 +33,20 @@ export default function ChatArea({
   onRegenerate
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const isAtBottom = useRef(true);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   useEffect(() => {
     if (settings?.autoScroll !== false) {
-      if (isAtBottom.current && scrollRef.current) {
+      if (isAtBottom && scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }
     }
-  }, [messages, settings?.autoScroll]);
+  }, [messages, settings?.autoScroll, isAtBottom]);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    isAtBottom.current = scrollHeight - scrollTop - clientHeight < 80;
+    setIsAtBottom(scrollHeight - scrollTop - clientHeight < 80);
   };
 
   if (messages.length === 0 && !loading) {
@@ -72,21 +72,21 @@ export default function ChatArea({
         <div className="flex overflow-x-auto sm:grid sm:grid-cols-2 gap-2 sm:gap-3 max-w-2xl w-full no-scrollbar pb-2">
           {(productMode === 'web_chat'
             ? [
-                { label: 'Yazını yaxşılaşdır', prompt: 'Bu mətni daha aydın, peşəkar və axıcı formada yenidən yaz' },
-                { label: 'Qısa plan qur', prompt: 'Bu iş üçün mənə qısa, praktik və prioritetləşdirilmiş plan hazırla' },
-                { label: 'Məlumatı izah et', prompt: 'Bu mövzunu sadə dildə, qısa və anlaşılan formada izah et' },
-                { label: 'Sürətli audit', prompt: 'Bu ideyanın və ya mətnin zəif tərəflərini qısa audit et və yaxşılaşdırma təklif et' },
+                { label: 'Yazını yaxşılaşdır', prompt: 'Bu mətni daha aydın, peşəkar və axıcı formada yenidən yaz', icon: PenLine },
+                { label: 'Qısa plan qur', prompt: 'Bu iş üçün mənə qısa, praktik və prioritetləşdirilmiş plan hazırla', icon: ListChecks },
+                { label: 'Məlumatı izah et', prompt: 'Bu mövzunu sadə dildə, qısa və anlaşılan formada izah et', icon: Lightbulb },
+                { label: 'Sürətli audit', prompt: 'Bu ideyanın və ya mətnin zəif tərəflərini qısa audit et və yaxşılaşdırma təklif et', icon: ShieldCheck },
               ]
             : [
-                { label: 'Repo audit et', prompt: 'Bu layihəni senior engineer kimi audit et, əsas riskləri və prioritet düzəlişləri çıxart' },
-                { label: 'Səhv düzəlt', prompt: 'Bu layihədəki bug-u tap və düzəlt, sonra yoxla' },
-                { label: 'Feature qur', prompt: 'Bu layihəyə yeni bir funksiya əlavə et və uyğun faylları yenilə' },
-                { label: 'Refactor et', prompt: 'Bu kod hissəsini daha təmiz və maintainable şəkildə refactor et' },
+                { label: 'Repo audit et', prompt: 'Bu layihəni senior engineer kimi audit et, əsas riskləri və prioritet düzəlişləri çıxart', icon: SearchCode },
+                { label: 'Səhv düzəlt', prompt: 'Bu layihədəki bug-u tap və düzəlt, sonra yoxla', icon: Bug },
+                { label: 'Feature qur', prompt: 'Bu layihəyə yeni bir funksiya əlavə et və uyğun faylları yenilə', icon: Hammer },
+                { label: 'Refactor et', prompt: 'Bu kod hissəsini daha təmiz və maintainable şəkildə refactor et', icon: RefreshCcw },
               ]).map((item) => (
             <button
               key={item.label}
               onClick={() => onSend(item.prompt)}
-              className="px-4 py-2.5 sm:py-3.5 rounded-full sm:rounded-2xl text-sm transition-all text-left whitespace-nowrap sm:whitespace-normal shrink-0"
+              className="flex items-center gap-2 px-4 py-2.5 sm:py-3.5 rounded-full sm:rounded-2xl text-sm transition-all text-left whitespace-nowrap sm:whitespace-normal shrink-0"
               style={{
                 border: '1px solid var(--border)',
                 color: 'var(--fg-secondary)',
@@ -103,6 +103,7 @@ export default function ChatArea({
                 e.currentTarget.style.transform = 'translateY(0)';
               }}
             >
+              <item.icon size={14} style={{ color: 'var(--color-accent)', opacity: 0.9 }} className="shrink-0" />
               {item.label}
             </button>
           ))}
@@ -214,17 +215,18 @@ export default function ChatArea({
         )}
       </div>
 
-      {/* Scroll to End Button */}
-      {settings?.scrollToEndButton && (
+      {/* Scroll to End Button — auto-hides when already at the bottom */}
+      {settings?.scrollToEndButton && messages.length > 0 && !isAtBottom && (
         <button
           onClick={() => {
             if (scrollRef.current) {
               scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-              isAtBottom.current = true;
+              setIsAtBottom(true);
             }
           }}
-          className="fixed bottom-[140px] right-8 p-2 rounded-full bg-[var(--bg-surface-elevated)] border border-[var(--border)] text-[var(--fg-secondary)] hover:text-[var(--fg-main)] shadow-lg hover:shadow-xl transition-all z-20"
+          className="fixed bottom-[140px] right-8 p-2 rounded-full bg-[var(--bg-surface-elevated)] border border-[var(--border)] text-[var(--fg-secondary)] hover:text-[var(--fg-main)] shadow-lg hover:shadow-xl transition-all z-20 animate-in"
           title="Scroll to End"
+          aria-label="Scroll to end"
         >
           <ArrowDownToLine size={20} />
         </button>

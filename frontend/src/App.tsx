@@ -1,6 +1,7 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
-import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen } from 'lucide-react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen, Keyboard as KeyboardIcon } from 'lucide-react';
 import ChatArea from './components/chat/ChatArea';
+import KeyboardShortcutsDialog from './components/chat/KeyboardShortcutsDialog';
 import { Composer } from './components/chat/Composer';
 import ActionCenterModal from './components/chat/ActionCenterModal';
 import AuthModal from './components/auth/AuthModal';
@@ -45,6 +46,7 @@ function AppContent() {
   const [showTerminal, setShowTerminal] = useState(false);
   const [showOps, setShowOps] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -52,6 +54,11 @@ function AppContent() {
   const { ConfirmDialog } = useConfirm();
 
   const chat = useChat(settings.settings, auth.user?.id);
+
+  // Keep the latest chat handle in a ref so the global keydown listener (which
+  // is registered once) never reads a stale createConversation/projects value.
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
 
   useEffect(() => { 
     trackAppOpen(); 
@@ -71,10 +78,28 @@ function AppContent() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isEditable = Boolean(
+        target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      );
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === 'b') { e.preventDefault(); setSidebarOpen(p => !p); }
       if (mod && e.key === '`') { e.preventDefault(); setShowTerminal(p => !p); }
       if (mod && e.key === 'j') { e.preventDefault(); setShowEditor(p => !p); }
+      if (mod && e.key === '/') { e.preventDefault(); setShowShortcuts(p => !p); }
+      if (e.key === '?' && !mod && !isEditable) { setShowShortcuts(p => !p); }
+      // Focus the message composer
+      if (mod && e.key.toLowerCase() === 'k' && !isEditable) {
+        e.preventDefault();
+        document.querySelector<HTMLTextAreaElement>('.composer-textarea')?.focus();
+      }
+      // New chat
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        const current = chatRef.current;
+        const projectId = current.activeProject?.id || current.projects?.[0]?.id;
+        if (projectId) current.createConversation(projectId);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -264,6 +289,17 @@ function AppContent() {
                 <PanelRight size={16} />
               </button>
             )}
+            <button
+              onClick={() => setShowShortcuts(p => !p)}
+              className="p-2.5 rounded-lg transition-colors"
+              style={{
+                color: showShortcuts ? 'var(--color-accent)' : 'var(--fg-muted)',
+                background: showShortcuts ? 'var(--color-accent-muted)' : 'var(--bg-surface)',
+              }}
+              title="Klaviatura qısayolları (Ctrl+/)"
+            >
+              <KeyboardIcon size={16} />
+            </button>
             {allowDesktopAuxPanels && (
               <>
                 <button
@@ -510,6 +546,7 @@ function AppContent() {
       )}
 
       {/* MODALS */}
+      <KeyboardShortcutsDialog isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
       <ActionCenterModal
         interactions={chat.actionCenterInteractions}
         history={chat.actionCenterHistory}

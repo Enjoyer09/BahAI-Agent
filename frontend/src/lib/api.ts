@@ -772,6 +772,43 @@ export async function saveProjectMemory(projectId: string, memory: Record<string
   if (!response.ok) throw new Error('Project memory yazılmadı');
 }
 
+export interface McpServerStatus {
+  name: string;
+  type: 'stdio' | 'static';
+  connected: boolean;
+  toolCount: number;
+  tools: string[];
+}
+
+export interface McpStatus {
+  workingDirectory: string;
+  servers: McpServerStatus[];
+  toolCount: number;
+  tools: string[];
+}
+
+export async function getMcpStatus(workingDirectory: string): Promise<McpStatus> {
+  const response = await apiFetch(`${API_BASE_URL}/api/mcp/status?workingDirectory=${encodeURIComponent(workingDirectory || '')}`);
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.error || 'MCP status alınmadı');
+  }
+  return await response.json();
+}
+
+export async function reloadMcp(workingDirectory: string): Promise<McpStatus> {
+  const response = await apiFetch(`${API_BASE_URL}/api/mcp/reload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workingDirectory })
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.error || 'MCP yenidən yüklənə bilmədi');
+  }
+  return await response.json();
+}
+
 export async function submitApproval(approvalId: string, decision: 'approve' | 'reject'): Promise<void> {
   const response = await apiFetch(`${API_BASE_URL}/api/approvals/${encodeURIComponent(approvalId)}`, {
     method: 'POST',

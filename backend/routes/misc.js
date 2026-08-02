@@ -231,4 +231,51 @@ router.post('/attachments/extract', async (req, res) => {
   }
 });
 
+// NOTE: mcpGateway is a process-global singleton. Reloading (or status-triggered
+// config loads for a different workspace) swaps the gateway to that workspace,
+// so a concurrently running chat session that is mid-call on MCP tools from a
+// different project can have its server processes torn down. This is an accepted
+// trade-off for a single-workspace desktop session; status/reload use short
+// timeouts so a hung server never blocks the panel for long.
+const MCP_PANEL_TIMEOUTS = { initTimeoutMs: 3000, toolsTimeoutMs: 3000 };
+
+// POST /api/mcp/reload — Reset MCP gateway cache and reload config for a workspace
+router.post('/mcp/reload', requireWorkspaceAccess, async (req, res) => {
+  try {
+    const resolvedWD = resolveWorkingDirectory(req.body.workingDirectory, req.user);
+    const { mcpGateway } = require('../chat/mcpGateway');
+    const { resetMcpConfigCache } = require('../helpers');
+    mcpGateway.closeAll();
+    resetMcpConfigCache();
+    const { loadMcpConfigForWorkingDirectory } = require('../helpers');
+    const tools = await loadMcpConfigForWorkingDirectory(resolvedWD, MCP_PANEL_TIMEOUTS);
+    res.json({
+      workingDirectory: resolvedWD,
+      servers: mcpGateway.getStatus(),
+      toolCount: tools.length,
+      tools: tools.map((t) => t.function?.name || '').filter(Boolean),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/mcp/status — MCP server status for the MCP panel (desktop)
+router.get('/mcp/status', requireWorkspaceAccess, async (req, res) => {
+  try {
+    const resolvedWD = resolveWorkingDirectory(req.query.workingDirectory, req.user);
+    const { mcpGateway } = require('../chat/mcpGateway');
+    const { loadMcpConfigForWorkingDirectory } = require('../helpers');
+    const tools = await loadMcpConfigForWorkingDirectory(resolvedWD, MCP_PANEL_TIMEOUTS);
+    res.json({
+      workingDirectory: resolvedWD,
+      servers: mcpGateway.getStatus(),
+      toolCount: tools.length,
+      tools: tools.map((t) => t.function?.name || '').filter(Boolean),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

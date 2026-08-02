@@ -15,6 +15,7 @@ import {
   Sun,
   Moon,
   User,
+  Cable,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
@@ -23,6 +24,7 @@ import { API_BASE_URL } from '../../lib/constants';
 import { connectGithub, disconnectGithub, getGithubStatus, listGithubRepos } from '../../lib/api';
 import SettingsModal from './SettingsModal';
 import AdminPanel from './AdminPanel';
+import McpPanel from '../chat/McpPanel';
 import { useToast, useConfirm } from '../common/Toast';
 import { Button } from '../common/UI';
 
@@ -123,6 +125,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
 
   const [showSettings, setShowSettings] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showMcpPanel, setShowMcpPanel] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addMode, setAddMode] = useState<'local' | 'remote'>('local');
   const [newProjName, setNewProjName] = useState('');
@@ -679,6 +682,19 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
             </button>
           )}
 
+          {!isMobile && !isWebProduct && (
+            <button
+              onClick={() => setShowMcpPanel(true)}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
+              style={{ color: 'var(--fg-secondary)', minHeight: '44px' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              title="MCP Serverlər"
+            >
+              <Cable size={16} /> MCP Serverlər
+            </button>
+          )}
+
           {!isMobile && (
             <button
               onClick={() => setShowSettings(true)}
@@ -811,6 +827,11 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
       />
 
       <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} />
+      <McpPanel
+        isOpen={showMcpPanel}
+        onClose={() => setShowMcpPanel(false)}
+        workingDirectory={chat.activeProject?.path || ''}
+      />
       {ConfirmDialog}
     </>
   );

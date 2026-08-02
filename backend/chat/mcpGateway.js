@@ -294,7 +294,7 @@ class MCPGateway {
       if (server.command) {
         let client = null;
         try {
-          client = new MCPStdioClient(server, this.options);
+          client = new MCPStdioClient(server, { ...this.options, ...options });
           const tools = await client.connect();
           entry.client = client;
           entry.staticTools = entry.staticTools.concat(tools);
@@ -315,6 +315,22 @@ class MCPGateway {
 
   getTools() {
     return this.mcpTools;
+  }
+
+  /**
+   * Per-server status for the MCP panel UI. Never leaks env vars or secrets —
+   * only the server name, connection state and tool counts.
+   */
+  getStatus() {
+    return this.clients.map((entry) => ({
+      name: entry.name,
+      type: entry.client ? 'stdio' : 'static',
+      connected: Boolean(entry.client && entry.client.isConnected),
+      toolCount: Array.isArray(entry.staticTools) ? entry.staticTools.length : 0,
+      tools: Array.isArray(entry.staticTools)
+        ? entry.staticTools.map((tool) => tool.function?.name || '').filter(Boolean)
+        : [],
+    }));
   }
 
   hasTool(toolName) {
