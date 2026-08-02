@@ -564,6 +564,17 @@ async function handleToolCall(toolCall, workingDirectory, user) {
       }
 
       default:
+        // MCP tools (mcp_<server>_<tool>) are executed through the MCP gateway
+        if (name.startsWith('mcp_')) {
+          try {
+            const { mcpGateway } = require('./chat/mcpGateway');
+            const { loadMcpConfigForWorkingDirectory } = require('./helpers');
+            await loadMcpConfigForWorkingDirectory(workingDirectory);
+            return await mcpGateway.callTool(name, args);
+          } catch (error) {
+            return `MCP tool xətası: ${error.message}`;
+          }
+        }
         return `Unknown tool: ${name}`;
     }
   } catch (error) {

@@ -1,4 +1,6 @@
 import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GateReceipt, GovernanceEntryPath, GuiCapabilityStatus, HumanCheckpoint, PlannerArtifact, ProviderTelemetryEvent, RuntimeArtifact } from './types';
+// Single source of truth for web privacy keys (shared/contract.js).
+import { WEB_PRIVACY_MEMORY_KEYS } from '@bahai/shared';
 
 export function isToolCallLikeText(content: string): boolean {
   const text = String(content || '').trim();
@@ -310,9 +312,8 @@ export function mergeProviderTelemetryIntoMemory(memory: Record<string, unknown>
 
 // Keys that must never reach web chat project memory: provider routing
 // telemetry, token usage and GUI/browser capability status are desktop
-// ops-panel details (see OpsPanel).
-const WEB_PRIVACY_MEMORY_KEYS = ['providerTelemetry', 'lastProviderTelemetry', 'tokenUsage', 'guiCapabilities', 'guiCapabilitiesUpdatedAt'] as const;
-
+// ops-panel details (see OpsPanel). WEB_PRIVACY_MEMORY_KEYS is imported from
+// the shared wire contract (shared/contract.js) at the top of this file.
 /**
  * Strip provider/model internals from a project-memory payload. Used on every
  * web-chat memory write (and on web-chat memory load) so provider telemetry,

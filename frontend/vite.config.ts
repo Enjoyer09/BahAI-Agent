@@ -1,10 +1,18 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'node:path'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      // Shared wire contract (see shared/contract.js) — single source of
+      // truth for SSE event types, message roles and web privacy keys.
+      '@bahai/shared': path.resolve(__dirname, '../shared/contract.js'),
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,

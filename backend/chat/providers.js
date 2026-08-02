@@ -2,6 +2,7 @@ const { OpenAI } = require('openai');
 const BaseProvider = require('../providers/BaseProvider');
 const dns = require('dns/promises');
 const net = require('net');
+const { NVIDIA_SPEC, WEB_SPEC, resolveTaskModels, buildProviderFromSpec } = require('./providerSpecs');
 
 function isPrivateAddress(address) {
   const normalized = String(address || '').toLowerCase();
@@ -226,25 +227,11 @@ function buildProviderCandidates({
 
   function buildNvidiaProviders(taskType = 'general') {
     if (!nvidiaApiKey) return [];
-    const generalModel = env.NVIDIA_GENERAL_MODEL || env.NVIDIA_FAST_MODEL || '';
-    const smartModel = env.NVIDIA_SMART_MODEL || generalModel;
-    const codeModel = env.NVIDIA_CODE_MODEL || smartModel;
-    // NVIDIA's text models must not be presented as image-capable fallbacks.
-    // Keep an explicit env override, otherwise use the supported NIM vision
-    // model as the first candidate for image requests.
-    const visionModel = env.NVIDIA_VISION_MODEL || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
-    const taskModels = taskType === 'vision'
-      ? [visionModel, smartModel, generalModel]
-      : taskType === 'code'
-        ? [codeModel, smartModel, generalModel]
-        : autoIntent === 'smart'
-          ? [smartModel, generalModel, codeModel]
-          : [generalModel, smartModel, codeModel];
-    const models = uniqueModels([
-      ...taskModels,
-      ...parseModelList(env.NVIDIA_FALLBACK_MODELS || env.NVIDIA_MODELS || '')
-    ]);
-    return models.map((model, index) => ({
+    // Spec-driven model resolution (providerSpecs.js) — identical output to the
+    // previous hardcoded alias chains (general=GENERAL||FAST, smart=SMART||general,
+    // code=CODE||smart, vision=env||default Omni NIM, fallback list appended).
+    const models = resolveTaskModels(NVIDIA_SPEC, { taskType, autoIntent, env });
+    return models.map((model, index) => buildProviderFromSpec(NVIDIA_SPEC, {
       id: `nvidia_${taskType}_${index + 1}`,
       apiKey: nvidiaApiKey,
       baseURL: nvidiaBaseUrl,
@@ -309,19 +296,17 @@ function buildProviderCandidates({
       ? (primaryTask === 'vision' && webVisionModel
           ? uniqueModels([webVisionModel, ...omniRouteFallbackModels])
           : omniRouteFallbackModels)
-      : (() => {
-        const fastModel = env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel;
-        const smartModel = env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || fastModel;
-        const visionModel = webVisionModel || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
-        const codeModel = env.WEB_CHAT_CODE_MODEL || smartModel;
-        return primaryTask === 'vision'
-          ? [visionModel, smartModel, fastModel, codeModel]
-          : primaryTask === 'code'
-            ? [codeModel, smartModel, fastModel, visionModel]
-            : autoIntent === 'smart'
-              ? [smartModel, fastModel, codeModel, visionModel]
-              : [fastModel, smartModel, codeModel, visionModel];
-      })();
+      : resolveTaskModels(WEB_SPEC, {
+        taskType: primaryTask,
+        autoIntent,
+        env,
+        // Mirror the old chain smart = SMART || AUTO_SMART || fastModel, where
+        // fastModel = FAST || AUTO_FAST || defaultModel was computed first.
+        defaults: {
+          fast: env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel,
+          smart: env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel,
+        },
+      });
 
     const cloudCandidates = orderedModels
       .filter(Boolean)

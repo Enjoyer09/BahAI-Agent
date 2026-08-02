@@ -1,5 +1,15 @@
+// Single source of truth for the SSE wire contract (shared/contract.js).
+const { SSE_EVENT_TYPES } = require('../../shared/contract');
+
 function writeSse(res, payload) {
   if (!res || res.writableEnded || res.destroyed) return;
+  const type = payload && payload.type;
+  if (typeof type === 'string' && !SSE_EVENT_TYPES.includes(type)) {
+    // Unknown event type would break the frontend dispatcher — surface it in
+    // server logs so drift between backend emits and the shared contract is
+    // caught early instead of silently producing dead events.
+    console.error(`[SSE] Unknown event type sent to client: ${type}`);
+  }
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 

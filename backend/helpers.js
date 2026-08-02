@@ -1054,6 +1054,31 @@ async function extractAttachment(attachment) {
 }
 
 // ==========================================
+// MCP config loading
+// ==========================================
+
+let lastMcpConfigDir = '';
+
+/**
+ * Loads the MCP gateway config for a working directory once per directory.
+ * The gateway keeps its own client state, so re-loading the same dir is a
+ * no-op (avoids respawning MCP server processes on every tool call).
+ */
+async function loadMcpConfigForWorkingDirectory(workingDirectory) {
+  const { mcpGateway } = require('./chat/mcpGateway');
+  const dir = String(workingDirectory || '').trim() || process.cwd();
+  if (lastMcpConfigDir === dir && mcpGateway.getTools().length > 0) {
+    return mcpGateway.getTools();
+  }
+  lastMcpConfigDir = dir;
+  return mcpGateway.loadConfig(dir);
+}
+
+function resetMcpConfigCache() {
+  lastMcpConfigDir = '';
+}
+
+// ==========================================
 // Message normalization helpers
 // ==========================================
 
@@ -1651,6 +1676,9 @@ module.exports = {
   readPdfFile, extractDocxText, extractSpreadsheetText,
   extractImageText, decodeDataUrl, extractAttachment,
   attachmentPipeline, visionContext,
+
+  // MCP
+  loadMcpConfigForWorkingDirectory, resetMcpConfigCache,
 
   // Message normalization
   normalizeMessagesForModel, generateToolsSystemPrompt,
