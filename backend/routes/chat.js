@@ -367,10 +367,23 @@ router.post('/', async (req, res) => {
       : Array.isArray(lastUserMessage?.attachments)
         ? lastUserMessage.attachments
         : [];
-  const requestAttachment = requestAttachments[0] || null;
-  const hasAttachment = requestAttachments.length > 0;
+  const isVisualFollowup = /\b(bu|bunu|buradak[iı]|şəkil|sekil|sənəd|sened|fayl|attachment)\b/i.test(latestUserText);
+  const historicalVisualMessage = isVisualFollowup
+    ? [...normalizedMessages].reverse().find((item) => (
+        item?.role === 'user' && Array.isArray(item.attachments) && item.attachments.some((att) => (
+          att?.type === 'image' || /^image\//i.test(String(att?.mimeType || att?.mimetype || ''))
+        ))
+      ))
+    : null;
+  // A visual follow-up commonly has no new upload. Reattach the most recent
+  // image from this conversation so the model receives the actual pixels again.
+  const effectiveAttachments = requestAttachments.length > 0
+    ? requestAttachments
+    : (historicalVisualMessage?.attachments || []);
+  const requestAttachment = effectiveAttachments[0] || null;
+  const hasAttachment = effectiveAttachments.length > 0;
   const hasAttachmentInRequest = hasAttachment && !latestUserText;
-  const hasImageAttachment = requestAttachments.some((att) => (
+  const hasImageAttachment = effectiveAttachments.some((att) => (
     att?.type === 'image' || /^image\//i.test(String(att?.mimeType || att?.mimetype || att?.type || ''))
   ));
 
@@ -646,7 +659,7 @@ ${generateToolsSystemPrompt(TOOLS)}`;
     {
       role: 'user',
       content: latestUserText || '[İstifadəçi fayl/attachment göndərdi]',
-      attachments: requestAttachments
+      attachments: effectiveAttachments
     }
   ];
 
@@ -701,7 +714,9 @@ ${generateToolsSystemPrompt(TOOLS)}`;
         crypto, hasAttachmentInRequest, safeMode, runId,
         entryPath, initialGateReceipt,
         providerSessionKey,
-        requestTimeoutMs: productMode === 'web_chat' ? 30000 : Math.max(LLM_TIMEOUT_MS, 90000),
+        requestTimeoutMs: productMode === 'web_chat'
+          ? (hasImageAttachment ? 45000 : 30000)
+          : Math.max(LLM_TIMEOUT_MS, 90000),
         onProviderTelemetry: (payload) => {
           const safePayload = {
             ...payload,

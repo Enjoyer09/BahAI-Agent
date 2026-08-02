@@ -130,7 +130,9 @@ async function openAiStreamWithFallback({
     const providerTimeoutMs = isLocalProvider
       ? Math.max(llmTimeoutMs, 90000)
       : isOmniRouteProvider
-        ? Math.min(llmTimeoutMs, 5000)
+        // Vision models need time to ingest image tokens. The old 5s cap
+        // made image follow-ups fail even when the provider was healthy.
+        ? (isVisionModel(nextModel) ? Math.max(Math.min(llmTimeoutMs, 15000), 12000) : Math.min(llmTimeoutMs, 5000))
         : llmTimeoutMs;
     lastAttemptTimeoutMs = Math.max(1, Math.min(providerTimeoutMs, remainingRequestMs));
     const attemptController = new AbortController();
