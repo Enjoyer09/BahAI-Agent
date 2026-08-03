@@ -160,7 +160,12 @@ function classifyTaskComplexity({ userMessage, messageHistoryLen, hasAttachments
   const text = String(userMessage || '');
   const len = text.length;
   const hasCodeBlock = /```/.test(text);
-  const complexKeywords = /(refactor|architecture|design|plan|optimize|analyze|audit|review|debug|migrate|test plan|integration|scalab|security|performance)/i;
+  // Research/analysis triggers are language-aware: Azerbaijani research verbs
+  // (araşdır, analiz, tədqiqat, təhlil, müqayisə...) must route to the smart
+  // model just like their English counterparts. English-only keywords used to
+  // send complex Azerbaijani research questions to the fast model, which then
+  // degenerated into a repetition loop (observed: "fəlsəfə və təcrübə...").
+  const complexKeywords = /(refactor|architecture|design|plan|optimize|analyze|audit|review|debug|migrate|test plan|integration|scalab|security|performance|araşdır|araşdir|araşdırma|analiz|tədqiqat|tedqiqat|təhlil|tehlil|müqayisə|muqayise|bazar|market|roi|mənbə|menbe|mənbələr|menbeler|risk|risklər|strateji|strategiya|proqnoz|hesabat|şarj|infrastruktur|rəqib|reqib)/i;
   const trivialKeywords = /^(salam|hi|hello|how|necə|nədir|sağol|thanks|teşekkür|test|hə|yox)\b/i;
 
   if (hasAttachments) return 'smart';

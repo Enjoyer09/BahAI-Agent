@@ -220,8 +220,21 @@ async function runChatSession({
         sawCompletedEvent,
         accumulatedContent,
         normalizedToolCalls,
+        degenerateLoop,
         message: msg
       } = streamOutput;
+
+      // The model fell into a degenerate repetition loop (same sentence
+      // repeated many times). Never finalize that garbage into the
+      // conversation; drop it and hand the user a clean retry instead.
+      if (degenerateLoop) {
+        console.warn(`[REPETITION_LOOP] Cavab finalizasiya edilmədi (${String(degenerateLoop.phrase || '').slice(0, 100)})`);
+        writeSse(res, {
+          type: 'error',
+          message: 'Cavab hazırlanarkən problem yarandı (təkrarlanma aşkar edildi). Zəhmət olmasa bir az sonra yenidən cəhd edin.'
+        });
+        break;
+      }
 
       const hasToolCalls = normalizedToolCalls.length > 0;
       const hasTextContent = accumulatedContent.trim().length > 0;

@@ -107,4 +107,19 @@ describe('classifyTaskComplexity (Auto router)', () => {
   it('uses fast for unknown short messages', () => {
     expect(classifyTaskComplexity({ userMessage: 'README oxu', messageHistoryLen: 1, hasAttachments: false })).toBe('fast');
   });
+
+  it('treats Azerbaijani research questions as smart (not the fast model)', () => {
+    // This exact style of question used to be misrouted to the fast model and
+    // degenerated into a repetition loop ("fəlsəfə və təcrübə...").
+    expect(classifyTaskComplexity({
+      userMessage: 'Azərbaycanda 2026-cı ildə elektrik avtomobilləri bazarını araşdır: əsas rəqiblər, dövlət güzəştləri, şarj infrastrukturu, risklər və təxmini ROI-ni mənbələrlə analiz et.',
+      messageHistoryLen: 1,
+      hasAttachments: false
+    })).toBe('smart');
+  });
+
+  it('treats Azerbaijani analysis/comparison words as smart', () => {
+    expect(classifyTaskComplexity({ userMessage: 'Bu iki laptop modelini müqayisə et və təhlil hazırla', messageHistoryLen: 1, hasAttachments: false })).toBe('smart');
+    expect(classifyTaskComplexity({ userMessage: 'Şirkətimiz üçün strateji plan və bazar proqnozu ver', messageHistoryLen: 1, hasAttachments: false })).toBe('smart');
+  });
 });

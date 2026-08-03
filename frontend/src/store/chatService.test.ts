@@ -233,6 +233,7 @@ describe('handleSSEEvent', () => {
       addSystemMessage: vi.fn(),
       updateAssistantMessage: vi.fn(),
       finalizeAssistantMessage: vi.fn(),
+      discardStreamingAssistant: vi.fn(),
       updateToolExecution: vi.fn(),
       addToolResult: vi.fn(),
       addApproval: vi.fn(),
@@ -277,6 +278,17 @@ describe('handleSSEEvent', () => {
     handleSSEEvent({ type: 'error', message: 'Cavabın görünən hissəsi saxlanıldı. Qalan hissə yarımçıq kəsildi; davamı üçün yenidən göndərin.' } as any, createCtx(sink, 'web_chat', { current: 'Bakıda bu gün hava təxminən 30°C-dir.' }));
 
     expect(sink.addSystemMessage).not.toHaveBeenCalled();
+  });
+
+  it('discards the live-streamed assistant message on a terminal error', () => {
+    const sink = createSink();
+    // Simulate a degenerate-repetition loop that was already painted to the UI
+    // via assistant_delta, then terminated by the backend with an error.
+    handleSSEEvent({ type: 'assistant_delta', content: 'fəlsəfə və təcrübə ilə suala baxmaqdır. ' } as any, createCtx(sink, 'web_chat'));
+    handleSSEEvent({ type: 'error', message: 'Cavab hazırlanarkən problem yarandı (təkrarlanma aşkar edildi). Zəhmət olmasa bir az sonra yenidən cəhd edin.' } as any, createCtx(sink, 'web_chat', { current: 'fəlsəfə və təcrübə ilə suala baxmaqdır. ' }));
+
+    expect(sink.discardStreamingAssistant).toHaveBeenCalled();
+    expect(sink.addSystemMessage).toHaveBeenCalledWith(expect.stringContaining('❌ Xəta'));
   });
 
   it('does not persist provider telemetry into project memory for web chat', () => {

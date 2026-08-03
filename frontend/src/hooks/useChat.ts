@@ -386,6 +386,22 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       }
     },
 
+    discardStreamingAssistant: () => {
+      const convId = activeConvIdRef.current;
+      if (!convId) return;
+      const conv = conversationsRef.current.find(c => c.id === convId);
+      if (!conv) return;
+      const msgs = [...conv.messages];
+      const lastMsg = msgs[msgs.length - 1];
+      if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id?.startsWith('streaming_')) {
+        msgs.pop();
+        conversationsRef.current = conversationsRef.current.map((item) =>
+          item.id === convId ? { ...item, messages: msgs, updatedAt: Date.now() } : item
+        );
+        dispatch({ type: 'SET_CONVERSATION_MESSAGES', id: convId, messages: msgs });
+      }
+    },
+
     finalizeAssistantMessage: (msg: Message) => {
       const convId = activeConvIdRef.current;
       if (!convId) return;

@@ -178,6 +178,7 @@ interface EventSink {
   addSystemMessage(content: string): void;
   updateAssistantMessage(content: string): void;
   finalizeAssistantMessage(msg: Message): void;
+  discardStreamingAssistant(): void;
   updateToolExecution(toolCallId: string | undefined, tool: string): void;
   addToolResult(toolMsg: Message, updatedToolCallId: string): void;
   addApproval(approval: ApprovalRequest): void;
@@ -437,9 +438,11 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
     if (isWebChat && bufferedAssistant && /cavabın görünən hissəsi saxlanıldı|gələn hissə göstərildi/i.test(normalizedError)) {
       return;
     }
-    // Terminal error: drop the partial buffer so no assistant message gets
-    // finalized after the error — keeps the retry button on the error itself.
+    // Terminal error: drop the partial buffer AND any live-streamed assistant
+    // message (e.g. a degenerate repetition loop that was already painted to
+    // the UI via assistant_delta) so only the error + retry button remain.
     streamBufferRef.current = '';
+    sink.discardStreamingAssistant();
     sink.addSystemMessage(`❌ Xəta: ${normalizedError}`);
     return;
   }

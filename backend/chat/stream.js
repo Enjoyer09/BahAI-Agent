@@ -1,3 +1,55 @@
+/**
+ * Detects a degenerate repetition loop in streaming assistant output — the
+ * failure mode where a (typically small/fast) model repeats the same sentence
+ * over and over instead of answering (observed with Azerbaijani research
+ * questions routed to the fast model: "...fəlsəfə və təcrübə ilə suala
+ * baxmaqdır." × 30). Returns the repeated phrase + count, or null.
+ */
+function detectRepetitionLoop(content = '', { minPhraseLength = 24, maxRepeats = 4 } = {}) {
+  const text = String(content || '');
+  if (text.length < minPhraseLength * maxRepeats) return null;
+  const normalized = text
+    .replace(/\s+/g, ' ')
+    // Token streams can concatenate sentence boundaries without whitespace
+    // ("...baxmaqdır.Bu, ..."). Insert a break after sentence punctuation
+    // followed by a capital letter so repetition stays detectable.
+    .replace(/([.!?…])(?=[A-ZƏİÖÜĞÇŞ"'«(])/g, '$1 ')
+    .trim();
+  // Split into sentences on [.!?…] followed by whitespace.
+  const sentences = normalized.split(/(?<=[.!?…])\s+/);
+  const counts = new Map();
+  for (const raw of sentences) {
+    const sentence = String(raw || '').trim();
+    if (sentence.length < minPhraseLength) continue;
+    const key = sentence.toLowerCase();
+    const count = (counts.get(key) || 0) + 1;
+    counts.set(key, count);
+    if (count >= maxRepeats) {
+      return { phrase: sentence, count };
+    }
+  }
+  return null;
+}
+
+/**
+ * Cuts repeated content at the start of the second occurrence of the detected
+ * phrase, so the user sees the (useful) prefix instead of the infinite loop.
+ * Search is case-insensitive to match detectRepetitionLoop's lowercased keys:
+ * degenerate loops often vary capitalization between repeats.
+ */
+function truncateAtRepetition(content = '', detection = null) {
+  if (!detection || !detection.phrase) return content;
+  const text = String(content || '');
+  const phrase = detection.phrase;
+  const lowerText = text.toLowerCase();
+  const lowerPhrase = phrase.toLowerCase();
+  const firstIdx = lowerText.indexOf(lowerPhrase);
+  if (firstIdx === -1) return text;
+  const secondIdx = lowerText.indexOf(lowerPhrase, firstIdx + lowerPhrase.length);
+  if (secondIdx === -1) return text;
+  return text.slice(0, secondIdx).trim();
+}
+
 function filterToolCallsByPhase(toolCalls = [], phaseTools = [], normalizeToolName = (name) => name) {
   const allowedToolNames = new Set(
     phaseTools
@@ -35,6 +87,22 @@ async function collectStreamOutput({
   let sawCompletedEvent = false;
   let resolvedModel = null;
   let deferStructuredOutput = false;
+  let degenerateLoop = null;
+  // Only re-run the (slightly costly) repetition scan when the buffer has
+  // grown by ~160 chars since the last check — every-chunk scanning is wasted
+  // work on long healthy answers.
+  let lastRepetitionCheckLen = 0;
+
+  const maybeDetectRepetition = () => {
+    if (degenerateLoop) return;
+    if (accumulatedContent.length - lastRepetitionCheckLen < 160) return;
+    lastRepetitionCheckLen = accumulatedContent.length;
+    const detection = detectRepetitionLoop(accumulatedContent);
+    if (detection) {
+      degenerateLoop = detection;
+      accumulatedContent = truncateAtRepetition(accumulatedContent, detection);
+    }
+  };
 
   // Web chat must never receive provider/model names — auto_route is a
   // desktop-only routing indicator. Track the resolved model internally for
@@ -62,6 +130,8 @@ async function collectStreamOutput({
       if (chunk.type === 'response.output_text.delta') {
         accumulatedContent += chunk.delta;
         sawAssistantDelta = true;
+        maybeDetectRepetition();
+        if (degenerateLoop) break;
         writeSse(res, { type: 'assistant_delta', content: chunk.delta });
       }
 
@@ -106,6 +176,8 @@ async function collectStreamOutput({
       }
       accumulatedContent += delta.content;
       sawAssistantDelta = true;
+      maybeDetectRepetition();
+      if (degenerateLoop) break;
       if (!deferStructuredOutput) {
         writeSse(res, { type: 'assistant_delta', content: delta.content });
       }
@@ -145,6 +217,10 @@ async function collectStreamOutput({
       });
     }
     throw error;
+  }
+
+  if (degenerateLoop) {
+    console.warn(`[REPETITION_LOOP] Model loop-a düşdü (${degenerateLoop.count}× təkrarlanan cümlə): ${JSON.stringify(String(degenerateLoop.phrase).slice(0, 120))}`);
   }
 
   let normalizedToolCalls = accumulatedToolCalls
@@ -226,6 +302,7 @@ async function collectStreamOutput({
     accumulatedContent,
     accumulatedReasoning,
     normalizedToolCalls,
+    degenerateLoop,
     message: {
       role: 'assistant',
       content: accumulatedContent || null,
@@ -237,5 +314,7 @@ async function collectStreamOutput({
 
 module.exports = {
   collectStreamOutput,
-  filterToolCallsByPhase
+  filterToolCallsByPhase,
+  detectRepetitionLoop,
+  truncateAtRepetition
 };
