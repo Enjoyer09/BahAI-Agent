@@ -177,16 +177,31 @@ app.use(helmet({
   contentSecurityPolicy: disableCsp ? false : {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://elevenlabs.io", "https://js.puter.com"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://oauth2.googleapis.com", "https://openrouter.ai", "http://localhost:*"],
+      connectSrc: [
+        "'self'",
+        "https://oauth2.googleapis.com",
+        "https://openrouter.ai",
+        "http://localhost:*",
+        // Web Speech API (Chrome) connects to Google's speech service
+        "https://www.google.com",
+        "wss://www.google.com",
+        // Fish Audio TTS (proxied through /api/tts, but just in case)
+        "https://api.fish.audio",
+      ],
+      mediaSrc: ["'self'", "blob:"],
       fontSrc: ["'self'", "https:", "data:"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
     }
   },
   crossOriginEmbedderPolicy: false,
+  // Allow microphone access for Voice Mode (Web Speech API STT)
+  permissionsPolicy: {
+    microphone: ['self'],
+  },
 }));
 
 // ==========================================

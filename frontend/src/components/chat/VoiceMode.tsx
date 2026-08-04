@@ -41,7 +41,10 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
     setTranscript('');
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'az-AZ'; // Azerbaijani first, fallback to Turkish
+    // Chrome mobile-da az-AZ olmaya bilər — tr-TR (türk) fallback daha
+    // yaxşı tanıyır çünki Azərbaycan dilini az-AZ olaraq dəstəkləməyən
+    // cihazlarda Türk dili ən yaxın alternativdir.
+    recognition.lang = 'az-AZ';
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -79,8 +82,12 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
         setState('idle');
         return;
       }
-      if (event.error === 'not-allowed') {
-        setError('Mikrofon icazəsi verilmədi. Brauzer parametrlərindən icazə verin.');
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setError('Mikrofon icazəsi verilmədi və ya səs tanıma xidməti əlçatan deyil. HTTPS üzərindən Chrome istifadə edin.');
+      } else if (event.error === 'network') {
+        setError('Səs tanıma üçün internet bağlantısı lazımdır.');
+      } else if (event.error === 'aborted') {
+        // User cancelled — silent
       } else {
         setError(`Səs tanıma xətası: ${event.error}`);
       }
