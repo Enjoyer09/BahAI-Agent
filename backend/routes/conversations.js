@@ -197,10 +197,30 @@ async function upsertConversationMessages(client, conversationId, userId, rawMes
   }
   // Scoped reconcile: drop rows of this conversation that the client no longer
   // lists (empty list means clear the conversation). Never a full DELETE-all.
-  // NOTE: PATCHes are serialized by the conversation FOR UPDATE lock, but the
-  // commit order still decides which client list wins — a stale tab committing
-  // last can remove rows a newer tab added (last-writer-wins at message-set
-  // granularity). Accepted trade-off; strictly safer than the old DELETE-all.
+  //
+  // ── Concurrency model (last-writer-wins) ──
+  // PATCHes are serialized by `SELECT ... FOR UPDATE` on the conversations row,
+  // so within a single transaction no two writers can interleave message upserts.
+  // However the *commit order* still determines whose message-set survives: if
+  // Tab A sends [m1,m2,m3] and Tab B sends [m1,m2] at the same time, whichever
+  // commits last sets the authoritative list — a stale tab committing after a
+  // fresh one can reconcile-delete the newer messages (last-writer-wins at
+  // message-set granularity).
+  //
+  // Why this is acceptable:
+  //  • It is strictly safer than the old DELETE-all + INSERT-all: no data loss
+  //    across conversations, and surviving rows keep their created_at/order.
+  //  • Real-world contention is rare — a single user rarely has two active tabs
+  //    racing PATCHes on the same conversation within the same second.
+  //  • The frontend reconciles optimistically on load (latest wins visually).
+  //
+  // Future improvement (if needed):
+  //  • Add an `updated_at`-based optimistic lock: include the conversation's
+  //    `updated_at` in the PATCH request; if it differs from the DB value when
+  //    the FOR UPDATE lock is acquired, return 409 Conflict and let the client
+  //    re-fetch + retry. This would prevent stale-tab overwrites entirely.
+  //  • Alternatively, add a monotonic `version` column (integer, incremented on
+  //    each PATCH) and use `WHERE version = $expected` as the CAS guard.
   await client.query(
     `DELETE FROM messages
      WHERE conversation_id = $1 AND NOT (id = ANY($2::text[]))`,

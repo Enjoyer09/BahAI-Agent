@@ -19,7 +19,7 @@
 //   node scripts/provider-failover-smoke.js                # local (deterministic)
 //   node scripts/provider-failover-smoke.js --remote       # against Railway URL
 //   node scripts/provider-failover-smoke.js --remote --check-logs
-//   node scripts/provider-failover-smoke.js --remote --check-logs --log-cmd-extra "--limit 2000"
+//   node scripts/provider-failover-smoke.js --remote --check-logs --log-cmd-extra "-n 2000"
 //
 // Local mode (default):
 //   - Spawns the real backend locally with OMNIROUTE_ENABLED=true and an
@@ -42,10 +42,10 @@
 //     greps the output for the [PROVIDER] failover markers. The output is
 //     filtered for THIS run's runId inside the shell (grep -F), so there is no
 //     fixed byte cap: $FAILOVER_LOG_CMD may already carry flags (e.g.
-//     "railway logs --limit 2000") and extra ones can be appended with
+//     "railway logs -n 2000") and extra ones can be appended with
 //     --log-cmd-extra (or FAILOVER_LOG_CMD_EXTRA). When the runId cannot be
 //     scoped (unreliable extraction), the caller is responsible for bounding
-//     the output (e.g. --limit) since there is no byte cap.
+//     the output (e.g. -n) since there is no byte cap.
 //
 // Manual Railway verification after a run:
 //   railway logs | grep -E '"event":"provider_failover"'
@@ -81,7 +81,7 @@ function argValue(name) {
   const index = process.argv.indexOf(name);
   return index !== -1 && index + 1 < process.argv.length ? process.argv[index + 1] : null;
 }
-// Extra flags appended to the log command, e.g. "--limit 2000". Prefer the CLI
+// Extra flags appended to the log command, e.g. "-n 2000". Prefer the CLI
 // flag over the env var so ad-hoc invocations do not need new env plumbing.
 const LOG_CMD_EXTRA = (argValue('--log-cmd-extra') || process.env.FAILOVER_LOG_CMD_EXTRA || '').trim();
 
@@ -103,7 +103,7 @@ Flags:
   --remote                  Hit the deployed backend (Railway) instead of a local spawn
   --check-logs              (with --remote) grep $FAILOVER_LOG_CMD output for failover markers
   --log-cmd-extra ARGS      (with --check-logs) append ARGS to $FAILOVER_LOG_CMD, e.g.
-                            --log-cmd-extra "--limit 2000" (env: FAILOVER_LOG_CMD_EXTRA)
+                            --log-cmd-extra "-n 2000" (env: FAILOVER_LOG_CMD_EXTRA)
   --require-real-nvidia     Local mode: fail instead of using the built-in fake NVIDIA stub
   -h, --help                Show this help
 
@@ -116,7 +116,7 @@ Env:
   NVIDIA_GENERAL_MODEL      NVIDIA model id (or NVIDIA_FAST_MODEL)
   FAILOVER_SMOKE_EXPECT_PROVIDER   Assert failover to this provider prefix (default nvidia)
   FAILOVER_LOG_CMD          (--check-logs) command whose output is grepped (default "railway logs")
-  FAILOVER_LOG_CMD_EXTRA    (--check-logs) extra flags appended to $FAILOVER_LOG_CMD (e.g. "--limit 2000")
+  FAILOVER_LOG_CMD_EXTRA    (--check-logs) extra flags appended to $FAILOVER_LOG_CMD (e.g. "-n 2000")
 
 Exit codes: 0 pass, 1 assertion failed, 2 config missing, 3 log check unavailable.`);
 }
@@ -422,9 +422,10 @@ const SAFE_RUN_ID = /^[A-Za-z0-9_-]+$/;
 
 // Build the shell command that collects deploy logs. The caller controls the
 // log window with extra flags (--log-cmd-extra / FAILOVER_LOG_CMD_EXTRA), so
-// commands like "railway logs --limit 2000" work. There is deliberately no
-// fixed byte cap: the old `| head -c 262144` could silently drop the very
-// runId-scoped lines this check needs.
+// commands like "railway logs -n 2000" work (Railway CLI v5 uses -n/--lines,
+// NOT --limit). There is deliberately no fixed byte cap: the old
+// `| head -c 262144` could silently drop the very runId-scoped lines this
+// check needs.
 function buildScopedLogCommand(runId) {
   let command = LOG_CMD;
   if (LOG_CMD_EXTRA) command += ` ${LOG_CMD_EXTRA}`;
@@ -488,7 +489,7 @@ async function checkRailwayLogs(runId) {
         resolve(0);
       } else if (safeRunId) {
         console.log(`\nℹ️  No [PROVIDER] telemetry lines for runId "${safeRunId}" in the deploy-log window.`);
-        console.log('     The window may not cover this request — widen it, e.g. --log-cmd-extra "--limit 5000", or Railway may not retain these logs.');
+        console.log('     The window may not cover this request — widen it, e.g. --log-cmd-extra "-n 5000", or Railway may not retain these logs.');
         console.log('Verify manually: railway logs | grep -E \'"event":"provider_failover"\'');
         resolve(0);
       } else {
