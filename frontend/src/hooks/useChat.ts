@@ -368,7 +368,9 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       if (!convId) return;
       if (isToolCallLikeText(content)) return;
       const now = Date.now();
-      if (!streamThrottleRef.current || now - streamThrottleRef.current > 33) {
+      // PERF: 50ms throttle (~20fps) is smooth enough for streaming text while
+      // cutting re-renders nearly in half vs 33ms. Mobile devices benefit most.
+      if (!streamThrottleRef.current || now - streamThrottleRef.current > 50) {
         streamThrottleRef.current = now;
         const conv = conversationsRef.current.find(c => c.id === convId);
         if (!conv) return;

@@ -57,6 +57,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const compression = require('compression');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -137,12 +138,35 @@ const corsConfig = allowedOrigins.length > 0
   : cors({ origin: true });
 
 app.use(corsConfig);
+// PERF: gzip/deflate all non-SSE responses. Mobile networks benefit heavily
+// from compressed JSON, HTML and static JS/CSS. SSE (text/event-stream) is
+// excluded because compression buffers chunks, which defeats real-time streaming.
+app.use(compression({
+  filter: (req, res) => {
+    if (req.headers.accept === 'text/event-stream') return false;
+    if (res.getHeader('Content-Type') === 'text/event-stream') return false;
+    return compression.filter(req, res);
+  },
+  threshold: 1024, // only compress responses > 1KB
+}));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '25mb' }));
 
 // ==========================================
 // Frontend Static App (Railway/Web)
 // ==========================================
-app.use(express.static(FRONTEND_DIST));
+// PERF: Vite outputs content-hashed filenames (assets/*.js, assets/*.css).
+// Set aggressive cache for those; short cache for index.html and non-hashed.
+app.use(express.static(FRONTEND_DIST, {
+  maxAge: '7d',
+  immutable: true,
+  setHeaders(res, filePath) {
+    // index.html must not be aggressively cached — new deploys change its
+    // script references. Hashed assets can be cached indefinitely.
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    }
+  }
+}));
 
 // ==========================================
 // Helmet / CSP

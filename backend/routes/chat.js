@@ -214,7 +214,7 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
         try {
           // Fetch tomorrow's forecast format (%C|%t|%w|%h for day 2) from wttr.in/Baku?format=j1
           const forecastUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=j1`;
-          const fRes = await fetch(forecastUrl, { timeout: 10000, headers: { 'User-Agent': 'BahAI/1.0' } });
+          const fRes = await fetch(forecastUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } });
           if (fRes.ok) {
             const data = await fRes.json();
             const tomorrowData = data?.weather?.[1];
@@ -231,7 +231,7 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
       } else {
         try {
           const wttrUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=%C|%t|%w|%h`;
-          const wttrRes = await fetch(wttrUrl, { timeout: 10000, headers: { 'User-Agent': 'BahAI/1.0' } });
+          const wttrRes = await fetch(wttrUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } });
           if (wttrRes.ok) {
             const raw = (await wttrRes.text()).trim();
             const [conditionRaw = '', tempRaw = '', windRaw = '', humidityRaw = ''] = raw.split('|');
