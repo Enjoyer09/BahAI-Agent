@@ -1,0 +1,32 @@
+{
+  "name": "BahAI — Ağıllı AI Köməkçi",
+  "short_name": "BahAI",
+  "description": "Ağıllı AI köməkçi — sual verin, yazı yaxşılaşdırın, plan qurun",
+  "start_url": "/chat",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#10a37f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/assets/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/icon-192.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "lang": "az",
+  "dir": "ltr"
+}

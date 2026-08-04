@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { ArrowDownToLine, PenLine, ListChecks, Lightbulb, ShieldCheck, SearchCode, Bug, Hammer, RefreshCcw } from 'lucide-react';
 import type { Message } from '../../lib/types';
 import ChatMessage from './ChatMessage';
+import FollowUpSuggestions from './FollowUpSuggestions';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { Spinner } from '../common/UI';
 
@@ -172,6 +173,14 @@ export default function ChatArea({
           }
           return null;
         })()}
+
+        {/* Follow-up suggestions — appears after assistant response (web_chat only) */}
+        <FollowUpSuggestions
+          messages={messages}
+          loading={loading}
+          onSend={onSend}
+          productMode={productMode}
+        />
 
         {loading && !messages.some((msg) => msg.role === 'assistant' && /Düşünürəm/i.test(msg.content || '')) && (
           <div className="flex items-start gap-3 sm:gap-4 animate-in">
