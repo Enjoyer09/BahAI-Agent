@@ -35,8 +35,15 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   useEffect(() => { speakerOffRef.current = isSpeakerOff; }, [isSpeakerOff]);
 
   // ── STT ──
+  const failCountRef = useRef(0);
   const startListening = useCallback(() => {
     if (!speechSupported || isMuted) return;
+    // Prevent infinite restart loop
+    if (failCountRef.current > 3) {
+      setError('Səs tanıma xidməti əlçatan deyil. Səhifəni yeniləyin və ya Chrome mobil istifadə edin.');
+      setState('idle');
+      return;
+    }
     setError(null);
     setTranscript('');
 
@@ -46,7 +53,10 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
-    recognition.onstart = () => setState('listening');
+    recognition.onstart = () => {
+      setState('listening');
+      failCountRef.current = 0; // Reset on successful start
+    };
 
     recognition.onresult = (event: any) => {
       let interim = '';
@@ -68,36 +78,49 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
         setState('processing');
         onSend(text);
       } else if (activeRef.current && !isMuted) {
-        // No speech detected — restart
         setTimeout(() => {
           if (activeRef.current) startListening();
-        }, 300);
+        }, 500);
       } else {
         setState('idle');
       }
     };
 
     recognition.onerror = (event: any) => {
-      if (event.error === 'no-speech' || event.error === 'aborted') {
+      if (event.error === 'no-speech') {
         if (activeRef.current && !isMuted) {
-          setTimeout(() => { if (activeRef.current) startListening(); }, 500);
+          setTimeout(() => { if (activeRef.current) startListening(); }, 800);
         } else {
           setState('idle');
         }
         return;
       }
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        setError('Mikrofon icazəsi verilmədi. Brauzer parametrlərindən icazə verin və HTTPS istifadə edin.');
-      } else if (event.error === 'network') {
-        setError('İnternet bağlantısı lazımdır.');
-      } else {
-        setError(`Xəta: ${event.error}`);
+      if (event.error === 'aborted') {
+        return;
       }
-      setState('idle');
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        failCountRef.current += 1;
+        setError('Mikrofon icazəsi yoxdur. Brauzer ayarlarından icazə verin.');
+        setState('idle');
+      } else if (event.error === 'network') {
+        failCountRef.current += 1;
+        setError('İnternet bağlantısı lazımdır.');
+        setState('idle');
+      } else {
+        failCountRef.current += 1;
+        setError(`Xəta: ${event.error}`);
+        setState('idle');
+      }
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (e: any) {
+      failCountRef.current += 1;
+      setError(`Mikrofon başlada bilmədi: ${e?.message || 'unknown'}`);
+      setState('idle');
+    }
   }, [onSend, isMuted]);
 
   const stopListening = useCallback(() => {
