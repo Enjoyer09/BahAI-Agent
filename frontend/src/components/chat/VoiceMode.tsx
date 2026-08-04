@@ -29,27 +29,31 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   const [isSpeakerOff, setIsSpeakerOff] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const prevAssistantRef = useRef<string>('');
   const activeRef = useRef(true);
   const speakerOffRef = useRef(false);
 
   useEffect(() => { speakerOffRef.current = isSpeakerOff; }, [isSpeakerOff]);
 
+  // ── Shared audio element (reused across all TTS plays) ──
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const getAudioEl = useCallback(() => {
+    if (!audioElRef.current) {
+      audioElRef.current = new Audio();
+    }
+    return audioElRef.current;
+  }, []);
+
   // ── Audio unlock (mobile autoplay policy) ──
-  // Mobile Chrome blocks audio.play() without a recent user gesture. We play a
-  // silent clip on the first orb tap to "warm" the audio pipeline — after that,
-  // programmatic play() calls succeed for the life of the page.
   const audioUnlockedRef = useRef(false);
   const unlockAudio = useCallback(() => {
     if (audioUnlockedRef.current) return;
     audioUnlockedRef.current = true;
-    // Play a tiny silent WAV to unlock the audio output
-    const silence = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-    const a = new Audio(silence);
-    a.volume = 0;
-    a.play().catch(() => {});
-  }, []);
+    const audio = getAudioEl();
+    audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+    audio.volume = 0.01;
+    audio.play().then(() => { audio.volume = 1; }).catch(() => { audio.volume = 1; });
+  }, [getAudioEl]);
 
   // ── Start listening (called on orb tap) ──
   const startListening = useCallback(() => {
@@ -125,6 +129,9 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   }, [onSend]);
 
   // ── TTS ──
+  // Use a SINGLE audio element for the lifetime of VoiceMode. Mobile browsers
+  // allow .play() on an element that was previously played via user gesture —
+  // creating a new Audio() each time loses that "trusted" status.
   const speak = useCallback(async (text: string) => {
     if (!text || speakerOffRef.current) {
       setState('idle');
@@ -147,21 +154,18 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
 
-      if (audioRef.current) {
-        audioRef.current.pause();
-        URL.revokeObjectURL(audioRef.current.src);
+      const audio = getAudioEl();
+      // Revoke previous blob URL if any
+      if (audio.src && audio.src.startsWith('blob:')) {
+        URL.revokeObjectURL(audio.src);
       }
-
-      const audio = new Audio(url);
-      audioRef.current = audio;
+      audio.src = url;
 
       audio.onended = () => {
-        URL.revokeObjectURL(url);
         setState('idle');
       };
 
       audio.onerror = () => {
-        URL.revokeObjectURL(url);
         setState('idle');
       };
 
@@ -170,7 +174,7 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       console.error('[VoiceMode] TTS error:', err);
       setState('idle');
     }
-  }, []);
+  }, [getAudioEl]);
 
   // ── Watch for assistant response → speak it ──
   // On mount, snapshot the current assistant message so we only speak NEW ones.
@@ -212,7 +216,8 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
     return () => {
       activeRef.current = false;
       if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch {} }
-      if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
+      const audio = audioElRef.current;
+      if (audio) { audio.pause(); if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src); }
     };
   }, []);
 
@@ -232,8 +237,8 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
     } else if (state === 'listening') {
       stopAndSend();
     } else if (state === 'speaking') {
-      // Interrupt playback
-      if (audioRef.current) audioRef.current.pause();
+      const audio = audioElRef.current;
+      if (audio) audio.pause();
       setState('idle');
     }
   };
@@ -244,8 +249,9 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       setIsSpeakerOff(false);
     } else {
       setIsSpeakerOff(true);
-      if (audioRef.current && state === 'speaking') {
-        audioRef.current.pause();
+      const audio = audioElRef.current;
+      if (audio && state === 'speaking') {
+        audio.pause();
         setState('idle');
       }
     }
@@ -255,7 +261,8 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   const handleClose = () => {
     activeRef.current = false;
     if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch {} }
-    if (audioRef.current) audioRef.current.pause();
+    const audio = audioElRef.current;
+    if (audio) audio.pause();
     onClose();
   };
 
