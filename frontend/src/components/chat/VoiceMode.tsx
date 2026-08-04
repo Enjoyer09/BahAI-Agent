@@ -171,7 +171,9 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          // BahAI auth stores the access token under auth_token. Using the
+          // old `token` key made every Fish Audio request return 401.
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
         },
         body: JSON.stringify({ text: text.slice(0, 4000) }),
       });
