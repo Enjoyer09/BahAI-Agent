@@ -3,6 +3,7 @@ import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen, K
 import ChatArea from './components/chat/ChatArea';
 import KeyboardShortcutsDialog from './components/chat/KeyboardShortcutsDialog';
 import { Composer } from './components/chat/Composer';
+import VoiceMode, { speechSupported } from './components/chat/VoiceMode';
 import ActionCenterModal from './components/chat/ActionCenterModal';
 import AuthModal from './components/auth/AuthModal';
 import Sidebar from './components/sidebar/Sidebar';
@@ -47,6 +48,7 @@ function AppContent() {
   const [showOps, setShowOps] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showVoiceMode, setShowVoiceMode] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -407,7 +409,41 @@ function AppContent() {
             onStop={chat.stop}
             settings={settings}
           />
+          {/* Voice Mode button — web_chat only, when Speech API is available */}
+          {settings.productMode === 'web_chat' && speechSupported && (
+            <button
+              onClick={() => setShowVoiceMode(true)}
+              className="absolute right-4 bottom-4 p-2.5 rounded-full transition-all hover:scale-105"
+              style={{
+                background: 'var(--color-accent)',
+                color: 'white',
+                boxShadow: '0 4px 16px rgba(16,163,127,0.3)',
+              }}
+              title="Səs rejimi"
+              aria-label="Səs rejimini aç"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" x2="12" y1="19" y2="22"/>
+              </svg>
+            </button>
+          )}
         </div>
+
+        {/* Voice Mode overlay */}
+        {showVoiceMode && (
+          <VoiceMode
+            onSend={(text) => chat.sendMessage(text)}
+            onClose={() => setShowVoiceMode(false)}
+            lastAssistantMessage={
+              chat.messages.length > 0
+                ? [...chat.messages].reverse().find((m) => m.role === 'assistant')?.content
+                : undefined
+            }
+            isLoading={chat.loading}
+          />
+        )}
       </main>
 
       {/* AUX PANELS — fixed overlay on mobile */}

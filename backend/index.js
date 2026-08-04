@@ -81,6 +81,7 @@ const githubRouter = require('./routes/github');
 const browserRouter = require('./routes/browser');
 const miscRouter = require('./routes/misc');
 const approvalsRouter = require('./routes/approvals');
+const ttsRouter = require('./routes/tts');
 
 // ==========================================
 // Configuration
@@ -308,6 +309,9 @@ app.use('/api', browserRouter);
 
 // Misc routes — task-plan, diff, terminal, project-health, etc.
 app.use('/api', miscRouter);
+
+// TTS — Fish Audio proxy (Voice Mode)
+app.use('/api', ttsRouter);
 
 // Approvals — POST /api/approvals/:id, POST /api/checkpoints/:id, GET /api/interactions
 app.use('/api', injectChatRuntime, approvalsRouter);
