@@ -307,6 +307,10 @@ function injectChatRuntime(req, res, next) {
 // Chat — POST /api/chat
 app.use('/api/chat', chatRouter);
 
+// TTS — Fish Audio proxy (Voice Mode) — must be before filesRouter
+// which has a router.use(requireWorkspaceAccess) that would block it
+app.use('/api', ttsRouter);
+
 // Files — GET /api/files, GET /api/read-file, POST /api/write-file, GET /api/pick-directory
 app.use('/api', filesRouter);
 
@@ -324,9 +328,6 @@ app.use('/api', browserRouter);
 
 // Misc routes — task-plan, diff, terminal, project-health, etc.
 app.use('/api', miscRouter);
-
-// TTS — Fish Audio proxy (Voice Mode)
-app.use('/api', ttsRouter);
 
 // Approvals — POST /api/approvals/:id, POST /api/checkpoints/:id, GET /api/interactions
 app.use('/api', injectChatRuntime, approvalsRouter);
