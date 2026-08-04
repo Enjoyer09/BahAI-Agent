@@ -33,19 +33,22 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   const prevAssistantRef = useRef<string>('');
   const activeRef = useRef(true);
   const speakerOffRef = useRef(false);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const audioSourceCreated = useRef(false);
 
   useEffect(() => { speakerOffRef.current = isSpeakerOff; }, [isSpeakerOff]);
 
   // ── Audio unlock (mobile autoplay policy) ──
+  // Mobile Chrome blocks audio.play() without a recent user gesture. We play a
+  // silent clip on the first orb tap to "warm" the audio pipeline — after that,
+  // programmatic play() calls succeed for the life of the page.
+  const audioUnlockedRef = useRef(false);
   const unlockAudio = useCallback(() => {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    if (audioCtxRef.current.state === 'suspended') {
-      audioCtxRef.current.resume();
-    }
+    if (audioUnlockedRef.current) return;
+    audioUnlockedRef.current = true;
+    // Play a tiny silent WAV to unlock the audio output
+    const silence = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+    const a = new Audio(silence);
+    a.volume = 0;
+    a.play().catch(() => {});
   }, []);
 
   // ── Start listening (called on orb tap) ──
@@ -151,7 +154,6 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
 
       const audio = new Audio(url);
       audioRef.current = audio;
-      audioSourceCreated.current = false;
 
       audio.onended = () => {
         URL.revokeObjectURL(url);
@@ -163,23 +165,7 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
         setState('idle');
       };
 
-      // Connect to AudioContext for mobile autoplay
-      if (audioCtxRef.current && !audioSourceCreated.current) {
-        try {
-          const source = audioCtxRef.current.createMediaElementSource(audio);
-          source.connect(audioCtxRef.current.destination);
-          audioSourceCreated.current = true;
-        } catch {}
-      }
-
-      try {
-        await audio.play();
-      } catch {
-        if (audioCtxRef.current) {
-          await audioCtxRef.current.resume();
-          await audio.play();
-        }
-      }
+      await audio.play();
     } catch (err) {
       console.error('[VoiceMode] TTS error:', err);
       setState('idle');
@@ -227,7 +213,6 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       activeRef.current = false;
       if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch {} }
       if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
-      if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); }
     };
   }, []);
 
