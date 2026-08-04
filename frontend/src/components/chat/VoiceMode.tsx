@@ -187,7 +187,17 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   }, []);
 
   // ── Watch for assistant response → speak it ──
+  // On mount, snapshot the current assistant message so we only speak NEW ones.
+  const mountedRef = useRef(false);
   useEffect(() => {
+    if (!mountedRef.current) {
+      // First render — record the existing assistant message so we don't speak it
+      mountedRef.current = true;
+      if (lastAssistantMessage) {
+        prevAssistantRef.current = lastAssistantMessage;
+      }
+      return;
+    }
     if (!lastAssistantMessage) return;
     if (lastAssistantMessage === prevAssistantRef.current) return;
     if (isLoading) return;
