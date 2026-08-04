@@ -41,10 +41,10 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
     setTranscript('');
 
     const recognition = new SpeechRecognition();
-    // Chrome mobile-da az-AZ olmaya bilər — tr-TR (türk) fallback daha
-    // yaxşı tanıyır çünki Azərbaycan dilini az-AZ olaraq dəstəkləməyən
-    // cihazlarda Türk dili ən yaxın alternativdir.
-    recognition.lang = 'az-AZ';
+    // Chrome mobile-da az-AZ dəstəklənmir (service-not-allowed xətası verir).
+    // tr-TR (türk dili) fonetik olaraq Azərbaycan dilinə ən yaxındır və
+    // Chrome-un speech recognition service-ində tam dəstəklənir.
+    recognition.lang = 'tr-TR';
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
