@@ -1,11 +1,15 @@
 // ==========================================
-// Voice Mode — ChatGPT-style full-screen voice chat
+// Voice Mode — Push-to-Talk (ChatGPT style)
 // ==========================================
-// Animated orb + mute/end/speaker controls
-// STT: Web Speech API | TTS: Fish Audio S2.1 Pro Free
+// Orba bir dəfə bas → dinləyir (mavi)
+// Bir daha bas → göndərir (bənövşəyi düşünür)
+// Cavab gəlir → səsləndirir (yaşıl danışır)
+// Audio bitir → idle (boz, yenidən basa bilərsən)
+//
+// STT: Web Speech API (tr-TR) | TTS: Fish Audio S2.1 Pro Free
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Mic, MicOff, X, Volume2, VolumeX, Phone } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Phone } from 'lucide-react';
 
 interface Props {
   onSend: (text: string) => void;
@@ -22,7 +26,6 @@ export const speechSupported = Boolean(SpeechRecognition);
 export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoading }: Props) {
   const [state, setState] = useState<VoiceState>('idle');
   const [transcript, setTranscript] = useState('');
-  const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOff, setIsSpeakerOff] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
@@ -30,38 +33,34 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   const prevAssistantRef = useRef<string>('');
   const activeRef = useRef(true);
   const speakerOffRef = useRef(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioSourceCreated = useRef(false);
 
-  // Keep ref in sync
   useEffect(() => { speakerOffRef.current = isSpeakerOff; }, [isSpeakerOff]);
 
-  // ── STT ──
-  const failCountRef = useRef(0);
-  const noSpeechStreakRef = useRef(0);
-  const startListening = useCallback(() => {
-    if (!speechSupported || isMuted) return;
-    // Prevent infinite restart loop
-    if (failCountRef.current > 3) {
-      setError('Səs tanıma xidməti əlçatan deyil. Səhifəni yeniləyin və ya Chrome mobil istifadə edin.');
-      setState('idle');
-      return;
+  // ── Audio unlock (mobile autoplay policy) ──
+  const unlockAudio = useCallback(() => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume();
+    }
+  }, []);
+
+  // ── Start listening (called on orb tap) ──
+  const startListening = useCallback(() => {
+    if (!speechSupported) return;
     setError(null);
     setTranscript('');
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'tr-TR';
-    recognition.continuous = true;       // Keep mic open — no restart spam
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
-    // Silence timeout — if no final result for 3s after last speech, stop and send
-    let silenceTimer: any = null;
-    const SILENCE_MS = 2500;
-
-    recognition.onstart = () => {
-      setState('listening');
-      failCountRef.current = 0;
-    };
+    recognition.onstart = () => setState('listening');
 
     recognition.onresult = (event: any) => {
       let interim = '';
@@ -74,63 +73,16 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
         }
       }
       setTranscript(final || interim);
-      recognition._finalTranscript = final;
-
-      // Reset silence timer on each result
-      if (silenceTimer) clearTimeout(silenceTimer);
-      if (final) {
-        // Got a final result — wait a bit for potential continuation, then send
-        silenceTimer = setTimeout(() => {
-          recognition._shouldSend = true;
-          try { recognition.stop(); } catch {}
-        }, SILENCE_MS);
-      }
+      recognition._finalTranscript = final || interim;
     };
 
-    // Web Speech API always fires onend right after onerror. Restart logic
-    // lives ONLY here — scheduling it from onerror too caused two overlapping
-    // recognition instances, which made Chrome re-prompt/re-toggle the mic
-    // indicator on every cycle (the "open/close loop" symptom).
     recognition.onend = () => {
-      if (silenceTimer) clearTimeout(silenceTimer);
-      const text = (recognitionRef.current?._finalTranscript || '').trim();
-      const hadHardError = recognition._hardError;
-
-      if (text.length > 0) {
-        noSpeechStreakRef.current = 0;
-        setState('processing');
-        onSend(text);
-        return;
-      }
-
-      if (hadHardError || !activeRef.current || isMuted) {
-        setState('idle');
-        return;
-      }
-
-      // No speech captured this cycle (silence/timeout). Back off increasingly
-      // and give up auto-restarting after a few empty cycles so the mic does
-      // not visibly flash forever — user can tap the mic button to resume.
-      noSpeechStreakRef.current += 1;
-      if (noSpeechStreakRef.current > 4) {
-        setState('idle');
-        setError('Səs eşidilmədi. Mikrofona toxunub yenidən danışın.');
-        return;
-      }
-      const backoffMs = 1000 + noSpeechStreakRef.current * 500;
-      setTimeout(() => {
-        if (activeRef.current && !isMuted) startListening();
-      }, backoffMs);
+      // Only fires when we explicitly stop — do nothing here,
+      // sending is handled by stopAndSend()
     };
 
     recognition.onerror = (event: any) => {
-      if (silenceTimer) clearTimeout(silenceTimer);
-      if (event.error === 'no-speech' || event.error === 'aborted') {
-        // Let onend (fired right after this) own the restart decision.
-        return;
-      }
-      recognition._hardError = true;
-      failCountRef.current += 1;
+      if (event.error === 'no-speech' || event.error === 'aborted') return;
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         setError('Mikrofon icazəsi yoxdur. Brauzer ayarlarından icazə verin.');
       } else if (event.error === 'network') {
@@ -138,43 +90,41 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       } else {
         setError(`Xəta: ${event.error}`);
       }
+      setState('idle');
     };
 
     recognitionRef.current = recognition;
     try {
       recognition.start();
     } catch (e: any) {
-      failCountRef.current += 1;
-      setError(`Mikrofon başlada bilmədi: ${e?.message || 'unknown'}`);
+      setError(`Mikrofon açılmadı: ${e?.message || ''}`);
       setState('idle');
     }
-  }, [onSend, isMuted]);
-
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch {}
-      recognitionRef.current = null;
-    }
   }, []);
+
+  // ── Stop listening and send (called on second orb tap) ──
+  const stopAndSend = useCallback(() => {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+
+    const text = (recognition._finalTranscript || '').trim();
+    try { recognition.stop(); } catch {}
+    recognitionRef.current = null;
+
+    if (text.length > 0) {
+      setState('processing');
+      setTranscript(text);
+      onSend(text);
+    } else {
+      setState('idle');
+      setTranscript('');
+    }
+  }, [onSend]);
 
   // ── TTS ──
-  // Mobile browsers require a user gesture to unlock audio playback.
-  // We create and resume an AudioContext on first user interaction (mic button
-  // or orb tap) so subsequent programmatic play() calls succeed.
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const unlockAudio = useCallback(() => {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    if (audioCtxRef.current.state === 'suspended') {
-      audioCtxRef.current.resume();
-    }
-  }, []);
-
   const speak = useCallback(async (text: string) => {
     if (!text || speakerOffRef.current) {
       setState('idle');
-      if (activeRef.current) setTimeout(startListening, 300);
       return;
     }
 
@@ -184,16 +134,12 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // BahAI auth stores the access token under auth_token. Using the
-          // old `token` key made every Fish Audio request return 401.
           'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
         },
         body: JSON.stringify({ text: text.slice(0, 4000) }),
       });
 
-      if (!response.ok) {
-        throw new Error(`TTS: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`TTS: ${response.status}`);
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -205,46 +151,42 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
 
       const audio = new Audio(url);
       audioRef.current = audio;
+      audioSourceCreated.current = false;
 
       audio.onended = () => {
         URL.revokeObjectURL(url);
         setState('idle');
-        noSpeechStreakRef.current = 0;
-        if (activeRef.current) setTimeout(startListening, 300);
       };
 
       audio.onerror = () => {
         URL.revokeObjectURL(url);
         setState('idle');
-        noSpeechStreakRef.current = 0;
-        if (activeRef.current) setTimeout(startListening, 300);
       };
 
-      // Mobile autoplay workaround: connect to unlocked AudioContext
-      if (audioCtxRef.current) {
-        const source = audioCtxRef.current.createMediaElementSource(audio);
-        source.connect(audioCtxRef.current.destination);
+      // Connect to AudioContext for mobile autoplay
+      if (audioCtxRef.current && !audioSourceCreated.current) {
+        try {
+          const source = audioCtxRef.current.createMediaElementSource(audio);
+          source.connect(audioCtxRef.current.destination);
+          audioSourceCreated.current = true;
+        } catch {}
       }
 
       try {
         await audio.play();
-      } catch (playErr) {
-        // Autoplay blocked — try resuming AudioContext and retry once
+      } catch {
         if (audioCtxRef.current) {
           await audioCtxRef.current.resume();
           await audio.play();
-        } else {
-          throw playErr;
         }
       }
     } catch (err) {
       console.error('[VoiceMode] TTS error:', err);
       setState('idle');
-      if (activeRef.current) setTimeout(startListening, 300);
     }
-  }, [startListening]);
+  }, []);
 
-  // ── Watch assistant messages ──
+  // ── Watch for assistant response → speak it ──
   useEffect(() => {
     if (!lastAssistantMessage) return;
     if (lastAssistantMessage === prevAssistantRef.current) return;
@@ -265,30 +207,18 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       .replace(/\s{2,}/g, ' ')
       .trim();
 
-    if (cleanText.length > 0) {
-      speak(cleanText);
-    }
+    if (cleanText.length > 0) speak(cleanText);
   }, [lastAssistantMessage, isLoading, speak]);
 
-  // ── Auto-start on mount ──
+  // ── Cleanup ──
   useEffect(() => {
     activeRef.current = true;
-    // Unlock audio context — the user just tapped the Voice Mode button
-    // which counts as a user gesture, so AudioContext can be resumed here.
-    unlockAudio();
-    startListening();
     return () => {
       activeRef.current = false;
-      stopListening();
-      if (audioRef.current) {
-        audioRef.current.pause();
-        URL.revokeObjectURL(audioRef.current.src);
-      }
-      if (audioCtxRef.current) {
-        audioCtxRef.current.close().catch(() => {});
-      }
+      if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch {} }
+      if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
+      if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── ESC to close ──
@@ -299,18 +229,17 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Mute toggle ──
-  const toggleMute = () => {
-    unlockAudio(); // Ensure audio is unlocked on user gesture
-    if (isMuted) {
-      setIsMuted(false);
-      noSpeechStreakRef.current = 0;
-      failCountRef.current = 0;
-      if (state === 'idle') setTimeout(startListening, 100);
-    } else {
-      setIsMuted(true);
-      stopListening();
-      if (state === 'listening') setState('idle');
+  // ── Orb tap — the main interaction ──
+  const handleOrbTap = () => {
+    unlockAudio();
+    if (state === 'idle') {
+      startListening();
+    } else if (state === 'listening') {
+      stopAndSend();
+    } else if (state === 'speaking') {
+      // Interrupt playback
+      if (audioRef.current) audioRef.current.pause();
+      setState('idle');
     }
   };
 
@@ -320,11 +249,9 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       setIsSpeakerOff(false);
     } else {
       setIsSpeakerOff(true);
-      // Stop current audio
       if (audioRef.current && state === 'speaking') {
         audioRef.current.pause();
         setState('idle');
-        if (activeRef.current && !isMuted) setTimeout(startListening, 200);
       }
     }
   };
@@ -332,21 +259,9 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   // ── End call ──
   const handleClose = () => {
     activeRef.current = false;
-    stopListening();
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
+    if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch {} }
+    if (audioRef.current) audioRef.current.pause();
     onClose();
-  };
-
-  // ── Interrupt (tap orb while speaking) ──
-  const handleOrbTap = () => {
-    unlockAudio();
-    if (state === 'speaking' && audioRef.current) {
-      audioRef.current.pause();
-      setState('idle');
-      if (!isMuted) setTimeout(startListening, 200);
-    }
   };
 
   if (!speechSupported) {
@@ -355,158 +270,99 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
         <div className="text-center p-8">
           <p className="text-white text-lg mb-4">Bu brauzer səs rejimini dəstəkləmir</p>
           <p className="text-white/50 text-sm mb-6">Chrome və ya Edge istifadə edin</p>
-          <button onClick={onClose} className="px-5 py-2.5 bg-white/10 rounded-full text-white text-sm hover:bg-white/20 transition">
-            Bağla
-          </button>
+          <button onClick={onClose} className="px-5 py-2.5 bg-white/10 rounded-full text-white text-sm hover:bg-white/20 transition">Bağla</button>
         </div>
       </div>
     );
   }
 
+  const stateConfig = {
+    idle: { label: 'Danışmaq üçün toxunun', gradient: 'radial-gradient(circle at 35% 35%, #6b7280, #374151, #1f2937)', glow: '0 0 40px rgba(0,0,0,0.3)', ring: null },
+    listening: { label: 'Dinləyir... Göndərmək üçün toxunun', gradient: 'radial-gradient(circle at 35% 35%, #60b5ff, #2563eb, #1e40af)', glow: '0 0 80px rgba(37,99,235,0.4)', ring: 'bg-blue-400' },
+    processing: { label: 'Düşünür...', gradient: 'radial-gradient(circle at 35% 35%, #c4a5ff, #7c3aed, #4c1d95)', glow: '0 0 60px rgba(124,58,237,0.3)', ring: null },
+    speaking: { label: 'Danışır — kəsmək üçün toxunun', gradient: 'radial-gradient(circle at 35% 35%, #4eeac0, #10a37f, #065f46)', glow: '0 0 80px rgba(16,163,127,0.4)', ring: 'bg-emerald-400' },
+  };
+
+  const cfg = stateConfig[state];
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-[#0d0d0f] select-none">
       {/* ── Top: transcript ── */}
-      <div className="flex-shrink-0 pt-16 px-6 text-center max-w-lg w-full">
-        {transcript && state === 'listening' && (
-          <p className="text-white/80 text-base leading-relaxed animate-in fade-in">
-            {transcript}
-          </p>
+      <div className="flex-shrink-0 pt-16 px-6 text-center max-w-lg w-full min-h-[80px]">
+        {transcript && (state === 'listening' || state === 'processing') && (
+          <p className="text-white/80 text-base leading-relaxed">{transcript}</p>
         )}
-        {state === 'processing' && (
-          <p className="text-white/50 text-sm">Düşünür...</p>
-        )}
-        {error && (
-          <p className="text-red-400/90 text-sm mt-2">{error}</p>
-        )}
+        {error && <p className="text-red-400/90 text-sm mt-2">{error}</p>}
       </div>
 
-      {/* ── Center: Animated Orb ── */}
+      {/* ── Center: Orb (main button) ── */}
       <div className="flex-1 flex items-center justify-center">
         <button
           onClick={handleOrbTap}
-          disabled={state !== 'speaking'}
-          className="relative focus:outline-none"
-          aria-label={state === 'speaking' ? 'Kəs' : ''}
+          disabled={state === 'processing'}
+          className="relative focus:outline-none active:scale-95 transition-transform"
+          aria-label={cfg.label}
         >
-          {/* Outer glow rings */}
-          <div
-            className="absolute inset-0 rounded-full transition-all duration-700"
-            style={{
-              transform: 'scale(1.4)',
-              background: state === 'listening'
-                ? 'radial-gradient(circle, rgba(99,179,255,0.15), transparent 70%)'
-                : state === 'speaking'
-                ? 'radial-gradient(circle, rgba(16,163,127,0.15), transparent 70%)'
-                : state === 'processing'
-                ? 'radial-gradient(circle, rgba(168,130,255,0.12), transparent 70%)'
-                : 'radial-gradient(circle, rgba(255,255,255,0.05), transparent 70%)',
-            }}
-          />
-          {state === 'listening' && (
-            <div className="absolute inset-0 rounded-full animate-ping opacity-20 bg-blue-400" style={{ animationDuration: '2s' }} />
-          )}
-          {state === 'speaking' && (
-            <div className="absolute inset-0 rounded-full animate-pulse opacity-20 bg-emerald-400" style={{ animationDuration: '1.5s' }} />
-          )}
+          {/* Glow */}
+          <div className="absolute inset-0 rounded-full transition-all duration-700" style={{ transform: 'scale(1.5)', background: state === 'listening' ? 'radial-gradient(circle, rgba(99,179,255,0.12), transparent 70%)' : state === 'speaking' ? 'radial-gradient(circle, rgba(16,163,127,0.12), transparent 70%)' : 'transparent' }} />
 
-          {/* Main orb */}
+          {/* Ping ring */}
+          {cfg.ring && <div className={`absolute inset-0 rounded-full animate-ping opacity-15 ${cfg.ring}`} style={{ animationDuration: '2s' }} />}
+
+          {/* Orb */}
           <div
-            className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full transition-all duration-500"
-            style={{
-              background: state === 'listening'
-                ? 'radial-gradient(circle at 35% 35%, #60b5ff, #2563eb, #1e40af)'
-                : state === 'speaking'
-                ? 'radial-gradient(circle at 35% 35%, #4eeac0, #10a37f, #065f46)'
-                : state === 'processing'
-                ? 'radial-gradient(circle at 35% 35%, #c4a5ff, #7c3aed, #4c1d95)'
-                : 'radial-gradient(circle at 35% 35%, #6b7280, #374151, #1f2937)',
-              boxShadow: state === 'listening'
-                ? '0 0 80px rgba(37,99,235,0.35), inset 0 -20px 40px rgba(0,0,0,0.3)'
-                : state === 'speaking'
-                ? '0 0 80px rgba(16,163,127,0.35), inset 0 -20px 40px rgba(0,0,0,0.3)'
-                : state === 'processing'
-                ? '0 0 60px rgba(124,58,237,0.25), inset 0 -20px 40px rgba(0,0,0,0.3)'
-                : '0 0 40px rgba(0,0,0,0.3), inset 0 -20px 40px rgba(0,0,0,0.3)',
-              animation: state === 'speaking' ? 'orb-breathe 2s ease-in-out infinite' : undefined,
-            }}
+            className="relative w-40 h-40 sm:w-48 sm:h-48 rounded-full transition-all duration-500 flex items-center justify-center"
+            style={{ background: cfg.gradient, boxShadow: `${cfg.glow}, inset 0 -20px 40px rgba(0,0,0,0.3)`, animation: state === 'speaking' ? 'orb-breathe 2s ease-in-out infinite' : undefined }}
           >
             {/* Inner highlight */}
-            <div
-              className="absolute top-[15%] left-[20%] w-[30%] h-[30%] rounded-full opacity-40"
-              style={{
-                background: 'radial-gradient(circle, rgba(255,255,255,0.6), transparent)',
-              }}
-            />
+            <div className="absolute top-[15%] left-[20%] w-[28%] h-[28%] rounded-full opacity-40" style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.6), transparent)' }} />
+
+            {/* Icon inside orb */}
+            {state === 'idle' && <Mic size={36} className="text-white/70" />}
+            {state === 'listening' && <Mic size={36} className="text-white animate-pulse" />}
+            {state === 'processing' && (
+              <div className="flex gap-1.5">
+                {[0,1,2].map(i => <div key={i} className="w-2.5 h-2.5 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: `${i*0.15}s` }} />)}
+              </div>
+            )}
+            {state === 'speaking' && <Volume2 size={36} className="text-white" />}
           </div>
         </button>
       </div>
 
       {/* ── Bottom: Controls ── */}
-      <div className="flex-shrink-0 pb-12 sm:pb-16 px-6 w-full max-w-sm">
+      <div className="flex-shrink-0 pb-12 sm:pb-16 px-6 w-full max-w-xs">
         <div className="flex items-center justify-between">
-          {/* Mute button */}
-          <button
-            onClick={toggleMute}
-            className="w-14 h-14 rounded-full flex items-center justify-center transition-all"
-            style={{
-              background: isMuted ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)',
-              border: isMuted ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(255,255,255,0.1)',
-            }}
-            aria-label={isMuted ? 'Mikrofonu aç' : 'Mikrofonu söndür'}
-          >
-            {isMuted
-              ? <MicOff size={22} className="text-red-400" />
-              : <Mic size={22} className="text-white/80" />
-            }
-          </button>
-
-          {/* End call button */}
-          <button
-            onClick={handleClose}
-            className="w-16 h-16 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-            style={{
-              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-              boxShadow: '0 8px 30px rgba(239,68,68,0.3)',
-            }}
-            aria-label="Səs rejimini bitir"
-          >
-            <Phone size={24} className="text-white rotate-[135deg]" />
-          </button>
-
-          {/* Speaker button */}
+          {/* Speaker toggle */}
           <button
             onClick={toggleSpeaker}
-            className="w-14 h-14 rounded-full flex items-center justify-center transition-all"
-            style={{
-              background: isSpeakerOff ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)',
-              border: isSpeakerOff ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(255,255,255,0.1)',
-            }}
+            className="w-12 h-12 rounded-full flex items-center justify-center transition-all"
+            style={{ background: isSpeakerOff ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)', border: isSpeakerOff ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(255,255,255,0.1)' }}
             aria-label={isSpeakerOff ? 'Dinamiki aç' : 'Dinamiki söndür'}
           >
-            {isSpeakerOff
-              ? <VolumeX size={22} className="text-red-400" />
-              : <Volume2 size={22} className="text-white/80" />
-            }
+            {isSpeakerOff ? <VolumeX size={20} className="text-red-400" /> : <Volume2 size={20} className="text-white/70" />}
           </button>
+
+          {/* End call */}
+          <button
+            onClick={handleClose}
+            className="w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+            style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', boxShadow: '0 8px 24px rgba(239,68,68,0.3)' }}
+            aria-label="Bitir"
+          >
+            <Phone size={22} className="text-white rotate-[135deg]" />
+          </button>
+
+          {/* Placeholder for symmetry */}
+          <div className="w-12 h-12" />
         </div>
 
         {/* State label */}
-        <p className="text-center mt-5 text-white/40 text-xs tracking-wider uppercase">
-          {state === 'listening' && !isMuted && 'Dinləyir'}
-          {state === 'listening' && isMuted && 'Mute'}
-          {state === 'processing' && 'Cavab hazırlanır'}
-          {state === 'speaking' && 'Danışır — kəsmək üçün toxunun'}
-          {state === 'idle' && isMuted && 'Mikrofon söndürülüb'}
-          {state === 'idle' && !isMuted && 'Danışmağa başlayın'}
-        </p>
+        <p className="text-center mt-5 text-white/40 text-xs tracking-wider uppercase">{cfg.label}</p>
       </div>
 
-      {/* Keyframe animation */}
       <style>{`
-        @keyframes orb-breathe {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.05); }
-        }
+        @keyframes orb-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
       `}</style>
     </div>
   );
