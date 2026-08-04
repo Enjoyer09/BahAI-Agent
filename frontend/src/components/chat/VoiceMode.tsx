@@ -183,24 +183,23 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
 
     prevAssistantRef.current = lastAssistantMessage;
 
-    if (state === 'processing' || autoListenRef.current) {
-      // Strip markdown formatting for cleaner speech
-      const cleanText = lastAssistantMessage
-        .replace(/```[\s\S]*?```/g, ' kod bloku ')
-        .replace(/`[^`]+`/g, (m) => m.slice(1, -1))
-        .replace(/\*\*([^*]+)\*\*/g, '$1')
-        .replace(/\*([^*]+)\*/g, '$1')
-        .replace(/#{1,6}\s/g, '')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/\n{2,}/g, '. ')
-        .replace(/\n/g, ' ')
-        .trim();
+    // Voice Mode açıq olduğu müddətcə hər yeni cavab səsləndirilir
+    // Strip markdown formatting for cleaner speech
+    const cleanText = lastAssistantMessage
+      .replace(/```[\s\S]*?```/g, ' kod bloku ')
+      .replace(/`[^`]+`/g, (m) => m.slice(1, -1))
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/#{1,6}\s/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/\n{2,}/g, '. ')
+      .replace(/\n/g, ' ')
+      .trim();
 
-      if (cleanText.length > 0) {
-        speak(cleanText);
-      }
+    if (cleanText.length > 0) {
+      speak(cleanText);
     }
-  }, [lastAssistantMessage, isLoading, state, speak]);
+  }, [lastAssistantMessage, isLoading, speak]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -221,6 +220,13 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       startListening();
     }
   };
+
+  // Voice Mode açıldığında avtomatik dinləməyə başla
+  useEffect(() => {
+    autoListenRef.current = true;
+    startListening();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleClose = () => {
     autoListenRef.current = false;
