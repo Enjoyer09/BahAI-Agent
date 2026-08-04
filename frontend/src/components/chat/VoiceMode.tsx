@@ -131,6 +131,19 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   }, []);
 
   // ── TTS ──
+  // Mobile browsers require a user gesture to unlock audio playback.
+  // We create and resume an AudioContext on first user interaction (mic button
+  // or orb tap) so subsequent programmatic play() calls succeed.
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const unlockAudio = useCallback(() => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume();
+    }
+  }, []);
+
   const speak = useCallback(async (text: string) => {
     if (!text || speakerOffRef.current) {
       setState('idle');
@@ -176,7 +189,23 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
         if (activeRef.current) setTimeout(startListening, 300);
       };
 
-      await audio.play();
+      // Mobile autoplay workaround: connect to unlocked AudioContext
+      if (audioCtxRef.current) {
+        const source = audioCtxRef.current.createMediaElementSource(audio);
+        source.connect(audioCtxRef.current.destination);
+      }
+
+      try {
+        await audio.play();
+      } catch (playErr) {
+        // Autoplay blocked — try resuming AudioContext and retry once
+        if (audioCtxRef.current) {
+          await audioCtxRef.current.resume();
+          await audio.play();
+        } else {
+          throw playErr;
+        }
+      }
     } catch (err) {
       console.error('[VoiceMode] TTS error:', err);
       setState('idle');
@@ -213,6 +242,9 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   // ── Auto-start on mount ──
   useEffect(() => {
     activeRef.current = true;
+    // Unlock audio context — the user just tapped the Voice Mode button
+    // which counts as a user gesture, so AudioContext can be resumed here.
+    unlockAudio();
     startListening();
     return () => {
       activeRef.current = false;
@@ -220,6 +252,9 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       if (audioRef.current) {
         audioRef.current.pause();
         URL.revokeObjectURL(audioRef.current.src);
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -235,6 +270,7 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
 
   // ── Mute toggle ──
   const toggleMute = () => {
+    unlockAudio(); // Ensure audio is unlocked on user gesture
     if (isMuted) {
       setIsMuted(false);
       if (state === 'idle') setTimeout(startListening, 100);
@@ -272,6 +308,7 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
 
   // ── Interrupt (tap orb while speaking) ──
   const handleOrbTap = () => {
+    unlockAudio();
     if (state === 'speaking' && audioRef.current) {
       audioRef.current.pause();
       setState('idle');
