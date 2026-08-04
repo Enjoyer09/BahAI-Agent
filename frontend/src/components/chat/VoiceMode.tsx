@@ -49,13 +49,17 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'tr-TR';
-    recognition.continuous = false;
+    recognition.continuous = true;       // Keep mic open — no restart spam
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
+    // Silence timeout — if no final result for 3s after last speech, stop and send
+    let silenceTimer: any = null;
+    const SILENCE_MS = 2500;
+
     recognition.onstart = () => {
       setState('listening');
-      failCountRef.current = 0; // Reset on successful start
+      failCountRef.current = 0;
     };
 
     recognition.onresult = (event: any) => {
@@ -70,34 +74,44 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       }
       setTranscript(final || interim);
       recognition._finalTranscript = final;
+
+      // Reset silence timer on each result
+      if (silenceTimer) clearTimeout(silenceTimer);
+      if (final) {
+        // Got a final result — wait a bit for potential continuation, then send
+        silenceTimer = setTimeout(() => {
+          recognition._shouldSend = true;
+          try { recognition.stop(); } catch {}
+        }, SILENCE_MS);
+      }
     };
 
     recognition.onend = () => {
-      const text = recognitionRef.current?._finalTranscript?.trim();
-      if (text && text.length > 0) {
+      if (silenceTimer) clearTimeout(silenceTimer);
+      const text = (recognitionRef.current?._finalTranscript || '').trim();
+      if (text.length > 0) {
         setState('processing');
         onSend(text);
       } else if (activeRef.current && !isMuted) {
+        // Mic closed unexpectedly (e.g. network) — restart ONCE, not in a loop
         setTimeout(() => {
-          if (activeRef.current) startListening();
-        }, 500);
+          if (activeRef.current && state !== 'speaking') startListening();
+        }, 1000);
       } else {
         setState('idle');
       }
     };
 
     recognition.onerror = (event: any) => {
+      if (silenceTimer) clearTimeout(silenceTimer);
       if (event.error === 'no-speech') {
+        // Continuous mode ended due to silence — just restart once
         if (activeRef.current && !isMuted) {
-          setTimeout(() => { if (activeRef.current) startListening(); }, 800);
-        } else {
-          setState('idle');
+          setTimeout(() => { if (activeRef.current) startListening(); }, 1000);
         }
         return;
       }
-      if (event.error === 'aborted') {
-        return;
-      }
+      if (event.error === 'aborted') return;
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         failCountRef.current += 1;
         setError('Mikrofon icazəsi yoxdur. Brauzer ayarlarından icazə verin.');
