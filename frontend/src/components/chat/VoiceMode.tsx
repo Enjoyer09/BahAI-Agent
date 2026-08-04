@@ -36,6 +36,7 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
 
   // ── STT ──
   const failCountRef = useRef(0);
+  const noSpeechStreakRef = useRef(0);
   const startListening = useCallback(() => {
     if (!speechSupported || isMuted) return;
     // Prevent infinite restart loop
@@ -86,44 +87,56 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       }
     };
 
+    // Web Speech API always fires onend right after onerror. Restart logic
+    // lives ONLY here — scheduling it from onerror too caused two overlapping
+    // recognition instances, which made Chrome re-prompt/re-toggle the mic
+    // indicator on every cycle (the "open/close loop" symptom).
     recognition.onend = () => {
       if (silenceTimer) clearTimeout(silenceTimer);
       const text = (recognitionRef.current?._finalTranscript || '').trim();
+      const hadHardError = recognition._hardError;
+
       if (text.length > 0) {
+        noSpeechStreakRef.current = 0;
         setState('processing');
         onSend(text);
-      } else if (activeRef.current && !isMuted) {
-        // Mic closed unexpectedly (e.g. network) — restart ONCE, not in a loop
-        setTimeout(() => {
-          if (activeRef.current && state !== 'speaking') startListening();
-        }, 1000);
-      } else {
-        setState('idle');
+        return;
       }
+
+      if (hadHardError || !activeRef.current || isMuted) {
+        setState('idle');
+        return;
+      }
+
+      // No speech captured this cycle (silence/timeout). Back off increasingly
+      // and give up auto-restarting after a few empty cycles so the mic does
+      // not visibly flash forever — user can tap the mic button to resume.
+      noSpeechStreakRef.current += 1;
+      if (noSpeechStreakRef.current > 4) {
+        setState('idle');
+        setError('Səs eşidilmədi. Mikrofona toxunub yenidən danışın.');
+        return;
+      }
+      const backoffMs = 1000 + noSpeechStreakRef.current * 500;
+      setTimeout(() => {
+        if (activeRef.current && !isMuted) startListening();
+      }, backoffMs);
     };
 
     recognition.onerror = (event: any) => {
       if (silenceTimer) clearTimeout(silenceTimer);
-      if (event.error === 'no-speech') {
-        // Continuous mode ended due to silence — just restart once
-        if (activeRef.current && !isMuted) {
-          setTimeout(() => { if (activeRef.current) startListening(); }, 1000);
-        }
+      if (event.error === 'no-speech' || event.error === 'aborted') {
+        // Let onend (fired right after this) own the restart decision.
         return;
       }
-      if (event.error === 'aborted') return;
+      recognition._hardError = true;
+      failCountRef.current += 1;
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        failCountRef.current += 1;
         setError('Mikrofon icazəsi yoxdur. Brauzer ayarlarından icazə verin.');
-        setState('idle');
       } else if (event.error === 'network') {
-        failCountRef.current += 1;
         setError('İnternet bağlantısı lazımdır.');
-        setState('idle');
       } else {
-        failCountRef.current += 1;
         setError(`Xəta: ${event.error}`);
-        setState('idle');
       }
     };
 
@@ -196,12 +209,14 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
       audio.onended = () => {
         URL.revokeObjectURL(url);
         setState('idle');
+        noSpeechStreakRef.current = 0;
         if (activeRef.current) setTimeout(startListening, 300);
       };
 
       audio.onerror = () => {
         URL.revokeObjectURL(url);
         setState('idle');
+        noSpeechStreakRef.current = 0;
         if (activeRef.current) setTimeout(startListening, 300);
       };
 
@@ -289,6 +304,8 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
     unlockAudio(); // Ensure audio is unlocked on user gesture
     if (isMuted) {
       setIsMuted(false);
+      noSpeechStreakRef.current = 0;
+      failCountRef.current = 0;
       if (state === 'idle') setTimeout(startListening, 100);
     } else {
       setIsMuted(true);
