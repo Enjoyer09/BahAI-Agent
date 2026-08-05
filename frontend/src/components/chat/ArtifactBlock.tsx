@@ -52,7 +52,7 @@ export default function ArtifactBlock({ language, code }: Props) {
   // Wrap fragments (no <html>/<body>) in a minimal document so the iframe
   // always renders something sensible.
   const doc = useCallback(() => {
-    const previewGuard = `<script>(function(){window.addEventListener('error',function(e){var box=document.createElement('div');box.style.cssText='position:fixed;inset:12px;background:#fff7ed;color:#9a3412;border:1px solid #fdba74;border-radius:10px;padding:12px;font:14px system-ui;z-index:2147483647;white-space:pre-wrap';box.textContent='Preview xətası: '+(e.message||'JavaScript xətası');document.body&&document.body.appendChild(box);});})();</script>`;
+    const previewGuard = `<script>(function(){window.addEventListener('error',function(e){var box=document.createElement('div');box.style.cssText='position:fixed;inset:12px;background:#fff7ed;color:#9a3412;border:1px solid #fdba74;border-radius:10px;padding:12px;font:14px system-ui;z-index:2147483647;white-space:pre-wrap';box.textContent='Preview xətası: '+(e.message||'JavaScript xətası')+(e.lineno?'\\nSətir: '+e.lineno+(e.colno?' | Sütun: '+e.colno:'' ):'');document.body&&document.body.appendChild(box);});})();</script>`;
     if (isHtml) {
       const hasFullDoc = /<(html|body|!doctype)\b/i.test(code);
       if (hasFullDoc) {
