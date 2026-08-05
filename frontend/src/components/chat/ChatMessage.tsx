@@ -268,7 +268,14 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
             {(() => {
               const displayContent = (message.content || '')
                 .replace(/```(?:json)?[\s\S]*?```/gi, (match) => {
-                  if (/name|arguments|query|web_search|browser_open/i.test(match)) return '';
+                  // Remove only actual tool-call JSON blocks. Do not hide a
+                  // legitimate Python/JS/HTML block just because game code
+                  // contains variables such as `name`, `query`, or `arguments`.
+                  const body = match.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+                  const isJsonToolBlock = /^\{[\s\S]*\}$/.test(body)
+                    && /"(?:name|arguments|query|tool|function)"\s*:/.test(body)
+                    && /web_search|browser_open|browser_eval|gui_step|run_terminal_command/i.test(body);
+                  if (isJsonToolBlock) return '';
                   return match;
                 })
                 .replace(/\{\s*"name"\s*:[\s\S]*?\}/gi, '')
