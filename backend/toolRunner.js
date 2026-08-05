@@ -321,7 +321,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
         if (isWeatherQuery && normalizedCity) {
           try {
             const wttrUrl = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=%C|%t|%w|%h`;
-            const wttrRes = await fetch(wttrUrl, { timeout: 10000, headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
+            const wttrRes = await fetch(wttrUrl, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
             if (wttrRes.ok) {
               const weatherLine = (await wttrRes.text()).trim();
               if (weatherLine) {
@@ -356,7 +356,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ api_key: tavilyKey, query, search_depth: 'basic', include_answer: true, max_results: 5 }),
-              timeout: 10000
+              signal: AbortSignal.timeout(10000)
             });
             if (tRes.ok) {
               const tData = await tRes.json();
@@ -377,7 +377,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
         if (googKey && googCx) {
           try {
             const gUrl = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(googKey)}&cx=${encodeURIComponent(googCx)}&q=${encodeURIComponent(query)}&hl=az`;
-            const gRes = await fetch(gUrl, { timeout: 10000 });
+            const gRes = await fetch(gUrl, { signal: AbortSignal.timeout(10000) });
             if (gRes.ok) {
               const gData = await gRes.json();
               if (gData.items && gData.items.length > 0) {
@@ -394,7 +394,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
         // 2) DuckDuckGo Instant Answer API (free, no key needed, limited coverage)
         try {
           const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
-          const ddgRes = await fetch(ddgUrl, { timeout: 10000 });
+          const ddgRes = await fetch(ddgUrl, { signal: AbortSignal.timeout(10000) });
           if (ddgRes.ok) {
             const data = await ddgRes.json();
             const ddgResults = [];
@@ -426,7 +426,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
             // If DDG returned nothing useful, try a Wikipedia search as extra fallback
             try {
               const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=3`;
-              const wikiRes = await fetch(wikiUrl, { timeout: 8000 });
+              const wikiRes = await fetch(wikiUrl, { signal: AbortSignal.timeout(8000) });
               if (wikiRes.ok) {
                 const wikiData = await wikiRes.json();
                 const wikiHits = wikiData?.query?.search || [];
@@ -461,7 +461,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
           const host = urlObj.hostname.toLowerCase();
           const isPrivate = (host === 'localhost' || host === '0.0.0.0' || host === '::1' || host.endsWith('.local') || host.endsWith('.internal') || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) || /^169\.254\./.test(host) || /^fc[0-9a-f]{2}:/.test(host) || /^fe80:/.test(host));
           if (isPrivate) return "Error: web_fetch private/internal host-larına müraciət edə bilməz.";
-          const response = await fetch(args.url, { timeout: 15000, headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
+          const response = await fetch(args.url, { signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
           if (!response.ok) return `Error: HTTP ${response.status}`;
           const text = await response.text();
           const clean = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 8000);
@@ -594,7 +594,7 @@ async function handleGithubTool(name, args, user) {
 
     if (name === "github_list_contents") {
       const { owner, repo, path: repoPath = '' } = args;
-      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${repoPath}`, { headers });
+      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${repoPath}`, { headers, signal: AbortSignal.timeout(15000) });
       if (!response.ok) return `GitHub API Error: ${response.status} ${response.statusText}`;
       const data = await response.json();
       if (Array.isArray(data)) return data.map(item => `[${item.type}] ${item.path}`).join('\n') || "Directory is empty";
@@ -603,7 +603,7 @@ async function handleGithubTool(name, args, user) {
 
     if (name === "github_read_file") {
       const { owner, repo, path: filePath } = args;
-      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`, { headers });
+      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`, { headers, signal: AbortSignal.timeout(15000) });
       if (!response.ok) return `GitHub API Error: ${response.status} ${response.statusText}`;
       const data = await response.json();
       if (data.type === 'file' && data.content && data.encoding === 'base64') return Buffer.from(data.content, 'base64').toString('utf8');
@@ -613,7 +613,7 @@ async function handleGithubTool(name, args, user) {
     if (name === "github_search_code") {
       const { owner, repo, query } = args;
       const encodedQuery = encodeURIComponent(`${query} repo:${owner}/${repo}`);
-      const response = await fetch(`https://api.github.com/search/code?q=${encodedQuery}`, { headers });
+      const response = await fetch(`https://api.github.com/search/code?q=${encodedQuery}`, { headers, signal: AbortSignal.timeout(15000) });
       if (!response.ok) {
         if (response.status === 401) return "Xəta: GitHub-da axtarış etmək üçün sistemə GitHub hesabı əlavə edilməlidir.";
         return `GitHub API Error: ${response.status} ${response.statusText}`;

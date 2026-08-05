@@ -722,6 +722,16 @@ ${generateToolsSystemPrompt(TOOLS)}`;
         // Vision queries get a separate, longer attempt budget (and their own
         // request deadline) so image ingestion and vision-model failover fit.
         visionTimeoutMs,
+        // Time-to-first-token cap: a provider that never emits its first chunk
+        // (queued/cold gateway) must fail over fast instead of burning the whole
+        // attempt budget in silence. runner.js only applies it when a fallback
+        // candidate exists. Web chat fails over cheaply to NVIDIA, so an 8s text
+        // / 15s vision cap fits there; desktop system prompts are much larger and
+        // healthy cloud models can legitimately exceed 8s TTFT, so desktop keeps
+        // a conservative 25s default unless overridden via env.
+        firstTokenTimeoutMs: hasImageAttachment
+          ? Math.max(1000, parseInt(process.env.VISION_LLM_FIRST_TOKEN_MS || (productMode === 'web_chat' ? '15000' : '25000'), 10))
+          : Math.max(1000, parseInt(process.env.LLM_FIRST_TOKEN_MS || (productMode === 'web_chat' ? '8000' : '25000'), 10)),
         hasImageAttachment,
         handleToolCall, normalizeToolName, extractTextToolCalls,
         buildToolCallCacheKey, flattenResponseJsonText,

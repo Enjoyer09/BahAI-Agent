@@ -104,6 +104,7 @@ async function openAiStreamWithFallback({
   shouldEmitDebugEvent,
   llmTimeoutMs,
   visionTimeoutMs = 30000,
+  firstTokenTimeoutMs = 0,
   isVisionRequest = false,
   onProviderTelemetry,
   providerSessionKey,
@@ -144,6 +145,20 @@ async function openAiStreamWithFallback({
     lastAttemptTimeoutMs = Math.max(1, Math.min(providerTimeoutMs, remainingRequestMs));
     const attemptController = new AbortController();
     const attemptTimer = setTimeout(() => attemptController.abort(), lastAttemptTimeoutMs);
+    // Separate, shorter time-to-first-token (TTFT) cap: a provider that never
+    // emits its first chunk (queued upstream, cold gateway, hung model) burns
+    // the whole attempt budget in silence before the user sees a single word.
+    // Cap TTFT so a slow start fails over to the next candidate fast. Only when
+    // a fallback exists — a lone provider would just turn a slow answer into an
+    // error. Local providers are excluded: local LLMs legitimately warm up slowly.
+    const hasFallbackProvider = Array.isArray(providerCandidates) && providerCandidates.length > 1;
+    const ttftBudget = (firstTokenTimeoutMs > 0 && hasFallbackProvider && !isLocalProvider)
+      ? Math.max(1, Math.min(firstTokenTimeoutMs, lastAttemptTimeoutMs))
+      : 0;
+    let firstTokenTimer = null;
+    if (ttftBudget > 0) {
+      firstTokenTimer = setTimeout(() => attemptController.abort(), ttftBudget);
+    }
     try {
       let rawStream;
       if (provider.wireApi === 'responses') {
@@ -173,6 +188,7 @@ async function openAiStreamWithFallback({
       return await primeProviderStream(rawStream);
     } finally {
       clearTimeout(attemptTimer);
+      if (firstTokenTimer) clearTimeout(firstTokenTimer);
     }
   }
 

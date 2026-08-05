@@ -156,6 +156,7 @@ async function runChatSession({
         shouldEmitDebugEvent,
         llmTimeoutMs: dependencies.llmTimeoutMs,
         visionTimeoutMs: dependencies.visionTimeoutMs || 30000,
+        firstTokenTimeoutMs: dependencies.firstTokenTimeoutMs || 0,
         isVisionRequest: Boolean(dependencies.hasImageAttachment),
         onProviderTelemetry: dependencies.onProviderTelemetry,
         providerSessionKey: dependencies.providerSessionKey,

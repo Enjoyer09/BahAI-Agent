@@ -597,6 +597,138 @@ describe('runner failover behavior', () => {
     expect(telemetry.some((item) => item.event === 'provider_failover' && item.providerId === fallback.id)).toBe(true);
   });
 
+  it('fails over at the first-token cap when a provider never emits its first chunk', async () => {
+    vi.useFakeTimers();
+    const runtime = createProviderRuntime();
+    const primary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
+    const fallback = { id: 'nvidia_general_1', wireApi: 'chat_completions', model: 'meta/llama-3.3-70b-instruct', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
+    // Provider opens the stream but the first chunk never arrives: this is the
+    // slow-cold-gateway case where the whole attempt budget used to burn in
+    // silence. The TTFT cap must abort it early and fail over.
+    const hangingClient = {
+      chat: {
+        completions: {
+          create: vi.fn((_input, options) => new Promise((resolve) => {
+            const pendingNexts = [];
+            const stream = {
+              response: {},
+              [Symbol.asyncIterator]: () => ({
+                next: () => new Promise((resolveNext, rejectNext) => {
+                  pendingNexts.push({ resolveNext, rejectNext });
+                }),
+                return: async () => ({ done: true, value: undefined })
+              })
+            };
+            options.signal.addEventListener('abort', () => {
+              pendingNexts.forEach(({ rejectNext }) => rejectNext(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+              pendingNexts.length = 0;
+            });
+            resolve(stream);
+          }))
+        }
+      }
+    };
+    const fallbackClient = createStreamingClient('ttft-fallback-ok');
+    const telemetry = [];
+
+    let settled = false;
+    const resultPromise = openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: hangingClient,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => provider.id === primary.id ? hangingClient : fallbackClient,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 20000,
+      firstTokenTimeoutMs: 5000,
+      onProviderTelemetry: (event) => telemetry.push(event),
+      providerSessionKey: 'web:anon:ttft'
+    });
+    resultPromise.then(() => { settled = true; });
+
+    // TTFT cap (5s) fires long before the full attempt budget (20s): failover
+    // must have already happened by 5.5s.
+    await vi.advanceTimersByTimeAsync(5500);
+    expect(settled).toBe(true);
+    const result = await resultPromise;
+    expect(result.activeProvider.id).toBe(fallback.id);
+    expect(telemetry.some((item) => item.event === 'provider_failover' && item.providerId === fallback.id)).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('does not apply the TTFT cap when there is no fallback candidate', async () => {
+    vi.useFakeTimers();
+    const runtime = createProviderRuntime();
+    const provider = { id: 'only', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://only.example/v1', apiKey: 'a' };
+    const hangingClient = {
+      chat: {
+        completions: {
+          create: vi.fn((_input, options) => new Promise((resolve) => {
+            const pendingNexts = [];
+            const stream = {
+              response: {},
+              [Symbol.asyncIterator]: () => ({
+                next: () => new Promise((resolveNext, rejectNext) => {
+                  pendingNexts.push({ resolveNext, rejectNext });
+                }),
+                return: async () => ({ done: true, value: undefined })
+              })
+            };
+            options.signal.addEventListener('abort', () => {
+              pendingNexts.forEach(({ rejectNext }) => rejectNext(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+              pendingNexts.length = 0;
+            });
+            resolve(stream);
+          }))
+        }
+      }
+    };
+
+    let settled = false;
+    const resultPromise = openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: provider.model,
+      activeProvider: provider,
+      client: hangingClient,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [provider],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => hangingClient,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 20000,
+      firstTokenTimeoutMs: 5000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:ttft-single'
+    });
+    resultPromise.then(() => { settled = true; });
+
+    // No fallback -> a lone provider must keep its full attempt budget; a 5s
+    // TTFT cap would otherwise turn a slow-but-alive answer into an error.
+    await vi.advanceTimersByTimeAsync(5500);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(15000);
+    const result = await resultPromise;
+    expect(result.errorEvent).toBeTruthy();
+    vi.useRealTimers();
+  });
+
   it('uses a fresh abort signal for a fallback attempt', async () => {
     vi.useFakeTimers();
     const runtime = createProviderRuntime();
