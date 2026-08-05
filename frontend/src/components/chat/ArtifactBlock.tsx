@@ -52,10 +52,15 @@ export default function ArtifactBlock({ language, code }: Props) {
   // Wrap fragments (no <html>/<body>) in a minimal document so the iframe
   // always renders something sensible.
   const doc = useCallback(() => {
+    const previewGuard = `<script>(function(){window.addEventListener('error',function(e){var box=document.createElement('div');box.style.cssText='position:fixed;inset:12px;background:#fff7ed;color:#9a3412;border:1px solid #fdba74;border-radius:10px;padding:12px;font:14px system-ui;z-index:2147483647;white-space:pre-wrap';box.textContent='Preview xətası: '+(e.message||'JavaScript xətası');document.body&&document.body.appendChild(box);});})();</script>`;
     if (isHtml) {
       const hasFullDoc = /<(html|body|!doctype)\b/i.test(code);
-      if (hasFullDoc) return code;
-      return `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n<style>body{font-family:system-ui,sans-serif;margin:0;padding:0}</style>\n</head>\n<body>\n${code}\n</body>\n</html>`;
+      if (hasFullDoc) {
+        return code.includes('</head>')
+          ? code.replace('</head>', `${previewGuard}</head>`)
+          : `${previewGuard}${code}`;
+      }
+      return `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n<style>body{font-family:system-ui,sans-serif;margin:0;padding:0}</style>\n${previewGuard}\n</head>\n<body>\n${code}\n</body>\n</html>`;
     }
     if (isSvg) {
       return `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n<style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff}</style>\n</head>\n<body>\n${code}\n</body>\n</html>`;
@@ -123,7 +128,7 @@ export default function ArtifactBlock({ language, code }: Props) {
           <iframe
             key={reloadKey}
             title="Artifact preview"
-            sandbox="allow-scripts allow-forms allow-popups"
+            sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-pointer-lock"
             srcDoc={doc()}
             className="w-full border-none"
             style={{ background: '#ffffff', height: isMobile ? '260px' : '360px' }}
