@@ -1,3 +1,25 @@
+const vm = require('node:vm');
+
+function findHtmlScriptSyntaxError(content = '') {
+  const htmlBlocks = String(content).match(/```html(?:\s|\n|\r)*([\s\S]*?)```/gi) || [];
+  for (const block of htmlBlocks) {
+    const html = block.replace(/^```html\s*/i, '').replace(/```\s*$/i, '');
+    const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
+    for (const match of scripts) {
+      try {
+        new vm.Script(match[1], { filename: 'generated-game.js' });
+      } catch (error) {
+        return {
+          message: String(error?.message || 'JavaScript sintaksis xətası').slice(0, 240),
+          line: error?.lineNumber || null,
+          column: error?.columnNumber || null,
+        };
+      }
+    }
+  }
+  return null;
+}
+
 function prepareWebFinalSynthesisMessages(messages = []) {
   const prepared = [];
   for (const message of messages) {
@@ -65,6 +87,7 @@ async function runChatSession({
   let currentMessages = [...apiMessages];
   let step = 0;
   let attachmentRetryUsed = false;
+  let htmlRepairUsed = false;
   let clientDisconnected = false;
   let disconnectReason = '';
   const phaseRecoveryAttempts = new Map();
@@ -260,6 +283,18 @@ async function runChatSession({
         const attempts = phaseRecoveryAttempts.get(phaseRecoveryKey) || 0;
         return attempts < 1;
       })();
+
+      if (productMode === 'web_chat' && !hasToolCalls && hasTextContent && !htmlRepairUsed) {
+        const htmlSyntaxError = findHtmlScriptSyntaxError(accumulatedContent);
+        if (htmlSyntaxError) {
+          htmlRepairUsed = true;
+          currentMessages.push({
+            role: 'system',
+            content: `Yaratdığın HTML oyunun JavaScript sintaksisi yoxlamadan keçmədi. Cavabı istifadəçiyə göndərmə və kodu tam yenidən yaz. Xəta: ${htmlSyntaxError.message}${htmlSyntaxError.line ? ` | Sətir: ${htmlSyntaxError.line}` : ''}${htmlSyntaxError.column ? ` | Sütun: ${htmlSyntaxError.column}` : ''}. Yalnız tam və valid HTML code block qaytar; izahı code block-dan kənarda yaz.`
+          });
+          continue;
+        }
+      }
 
       if (shouldRecoverCurrentPhase) {
         phaseRecoveryAttempts.set(phaseRecoveryKey, (phaseRecoveryAttempts.get(phaseRecoveryKey) || 0) + 1);
