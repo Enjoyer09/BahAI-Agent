@@ -129,10 +129,14 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
             onClick={handleCopy}
             className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
             style={{ minHeight: '44px', minWidth: '44px' }}
-            title="Kopyala"
+            title={copied ? 'Kopyalandı' : 'Kodu kopyala'}
+            aria-label={copied ? 'Kod kopyalandı' : 'Kodu kopyala'}
           >
             {copied ? (
-              <Check size={16} className="text-green-400" />
+              <span className="inline-flex items-center gap-1 text-[11px] text-green-400">
+                <Check size={16} />
+                <span className="hidden sm:inline">Kopyalandı</span>
+              </span>
             ) : (
               <Copy size={16} />
             )}
