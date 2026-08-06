@@ -171,7 +171,11 @@ async function collectStreamOutput({
 
     if (delta.content) {
       const nextContent = accumulatedContent + delta.content;
-      if (!accumulatedContent && /^\s*(?:```(?:json)?\s*)?\{/.test(nextContent)) {
+      // Only defer when the opening really looks like a tool-call JSON block
+      // (extractTextToolCalls requires a "name"/"arguments" pair). A normal
+      // answer that merely starts with "{" or a ```json example must stream
+      // immediately — full deferral made slow models feel frozen.
+      if (!accumulatedContent && /^\s*(?:```(?:json)?\s*)?\{\s*"(?:name|tool|function|action)"/.test(nextContent)) {
         deferStructuredOutput = true;
       }
       accumulatedContent += delta.content;
