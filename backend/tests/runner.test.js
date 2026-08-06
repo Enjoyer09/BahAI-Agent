@@ -867,4 +867,110 @@ describe('runner failover behavior', () => {
     expect(result.errorEvent.message).not.toContain('API açarı keçərsizdir');
     expect(result.errorEvent.message).toContain('AI provider');
   });
+
+  it('explains a 402 credit/balance error for a single provider', async () => {
+    const runtime = createProviderRuntime();
+    const provider = { id: 'openrouter_single', wireApi: 'chat_completions', model: 'anthropic/claude-sonnet-4.5', baseURL: 'https://openrouter.ai/api/v1', apiKey: 'sk-or-test' };
+
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: provider.model,
+      activeProvider: provider,
+      client: createClientThatFails({ status: 402, message: 'Insufficient Credits' }),
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [provider],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => createClientThatFails({ status: 402, message: 'Insufficient Credits' }),
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:single-402'
+    });
+
+    expect(result.errorEvent).toBeTruthy();
+    expect(result.errorEvent.message).toContain('balansı bitib');
+    expect(result.errorEvent.message).toContain('402');
+  });
+
+  it('emits the real error as a debug event after multi-provider failover', async () => {
+    const runtime = createProviderRuntime();
+    const primary = { id: 'omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
+    const fallback = { id: 'nvidia', wireApi: 'chat_completions', model: 'meta/llama-3.3-70b-instruct', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
+    const error = { status: 402, message: 'Insufficient Credits' };
+    const events = [];
+
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: createClientThatFails(error),
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => createClientThatFails(error),
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: (event) => events.push(event),
+      shouldEmitDebugEvent: () => true,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:failover-debug'
+    });
+
+    // Failover pool olduğu üçün istifadəçi ümumi mesaj görür...
+    expect(result.errorEvent.message).toContain('AI provider');
+    // ...amma BAHAI_DEBUG_EVENTS=1-də real xəta debug hadisəsində gəlir.
+    const debugEvent = events.find((event) => event.type === 'debug');
+    expect(debugEvent).toBeTruthy();
+    expect(debugEvent.info.providerError).toMatchObject({
+      status: 402,
+      message: 'Insufficient Credits'
+    });
+    expect(debugEvent.info.providerError.providerId).toBeTruthy();
+    expect(debugEvent.info.providerError.baseURL).toBeTruthy();
+  });
+
+  it('does not leak provider details in debug events when debug events are off', async () => {
+    const runtime = createProviderRuntime();
+    const primary = { id: 'primary', wireApi: 'responses', model: 'gpt-5.5', baseURL: 'https://a.example', apiKey: 'a' };
+    const fallback = { id: 'fallback', wireApi: 'responses', model: 'gpt-5.5', baseURL: 'https://b.example', apiKey: 'b' };
+    const error = { status: 500, message: 'Internal error' };
+    const events = [];
+
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client: createClientThatFails(error),
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => createClientThatFails(error),
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: (event) => events.push(event),
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:no-debug'
+    });
+
+    expect(result.errorEvent).toBeTruthy();
+    expect(events.some((event) => event.type === 'debug')).toBe(false);
+  });
 });

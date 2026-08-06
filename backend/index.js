@@ -53,6 +53,18 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection:', reason);
 });
 
+// SEC: production misconfiguration guard. LOCAL_MODE=true and DEMO_LOGIN_ENABLED=true
+// silently turn the deployment into an unauthenticated admin server — fail fast
+// instead of shipping an open deployment.
+if (process.env.NODE_ENV === 'production') {
+  if (String(process.env.LOCAL_MODE || '').toLowerCase() === 'true') {
+    throw new Error('LOCAL_MODE=true production mühitində qadağandır — bu serveri icazəsiz admin serverinə çevirir.');
+  }
+  if (String(process.env.DEMO_LOGIN_ENABLED || '').toLowerCase() === 'true') {
+    throw new Error('DEMO_LOGIN_ENABLED=true production mühitində qadağandır — hər kəs admin girişi alır.');
+  }
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -127,6 +139,11 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .map((o) => o.trim())
   .filter(Boolean);
 
+const isProd = process.env.NODE_ENV === 'production';
+if (isProd && allowedOrigins.length === 0) {
+  console.error('⚠️ Production CORS: ALLOWED_ORIGINS təyin olunmayıb — cross-origin brauzer sorğuları bloklanacaq. Frontend ayrı domendədirsə ALLOWED_ORIGINS-i mütləq təyin edin.');
+}
+
 const corsConfig = allowedOrigins.length > 0
   ? cors({
       origin: (origin, cb) => {
@@ -136,7 +153,12 @@ const corsConfig = allowedOrigins.length > 0
       },
       credentials: true
     })
-  : cors({ origin: true });
+  // Production-da allowlist yoxdursa fail-closed: cross-origin brauzer sorğuları
+  // CORS header-i almır (eyni-origin və origin-siz sorğular təsirlənmir). Lokal
+  // dev-də köhnə davranış qorunur (istənilən origin).
+  : (isProd
+      ? cors({ origin: false })
+      : cors({ origin: true }));
 
 app.use(corsConfig);
 // PERF: gzip/deflate all non-SSE responses. Mobile networks benefit heavily

@@ -415,6 +415,8 @@ async function openAiStreamWithFallback({
           userMsg = 'API açarı keçərsizdir. Ayarlardan düzgün API açarı daxil edin.';
         } else if (currentErr.status === 429 && !isGenericFailoverCandidate(providerCandidates)) {
           userMsg = 'API limiti aşıldı (rate limit). 1-2 dəqiqə gözləyib yenidən cəhd edin.';
+        } else if (currentErr.status === 402 && !isGenericFailoverCandidate(providerCandidates)) {
+          userMsg = 'API balansı bitib və ya kredit limiti aşılıb (402). Provider panelinə daxil olub kredit əlavə edin və ya başqa model seçin.';
         } else if (currentErr.status === 503) {
           userMsg = isGenericFailoverCandidate(providerCandidates)
             ? 'AI servisləri hazırda müvəqqəti əlçatmaz oldu. Sistem arxa planda alternativ provider-ləri sınadı, amma cavab ala bilmədi. Bir az sonra yenidən yoxlayaq.'
@@ -438,6 +440,24 @@ async function openAiStreamWithFallback({
           userMsg = isGenericFailoverCandidate(providerCandidates)
             ? 'Şəbəkə problemi səbəbilə AI provider-lərlə əlaqə qurmaq alınmadı. Sistem alternativləri sınadı, amma bu dəfə cavab çıxmadı.'
             : `Şəbəkə xətası: ${nextProvider.baseURL}-ə qoşula bilmədim. İnternet bağlantınızı və baseURL-i yoxlayın.`;
+        }
+
+        // Failover pool-u istifadəçiyə ümumi mesaj göstərir və real xəta itir.
+        // BAHAI_DEBUG_EVENTS=1 olduqda həqiqi xətanı debug hadisəsi kimi ver —
+        // lokal debaqda failover səbəbini görmək mümkün olsun.
+        if (isGenericFailoverCandidate(providerCandidates) && shouldEmitDebugEvent()) {
+          writeSse({
+            type: 'debug',
+            info: {
+              providerError: {
+                status,
+                message: String(currentErr?.message || '').slice(0, 500),
+                providerId: nextProvider?.id || null,
+                model: nextModel,
+                baseURL: nextProvider?.baseURL || null
+              }
+            }
+          });
         }
 
         return {

@@ -659,10 +659,16 @@ async function fileExists(filePath) {
 // GitHub helpers
 // ==========================================
 
+// SEC: No hardcoded fallback key — a well-known default would let anyone with
+// the repo source decrypt stored GitHub tokens. Derive from GITHUB_TOKEN_SECRET
+// or JWT_SECRET; if neither is set (dev only) use a random per-boot key.
 const GITHUB_TOKEN_SECRET = crypto
   .createHash('sha256')
-  .update(process.env.GITHUB_TOKEN_SECRET || process.env.JWT_SECRET || 'bahai_github_secret')
+  .update(process.env.GITHUB_TOKEN_SECRET || process.env.JWT_SECRET || crypto.randomBytes(48).toString('hex'))
   .digest();
+if (!process.env.GITHUB_TOKEN_SECRET && !process.env.JWT_SECRET) {
+  console.warn('⚠️ GITHUB_TOKEN_SECRET təyin olunmayıb. Müvəqqəti random secret istifadə olunur — GitHub tokenları restart-da deşifrə oluna bilməyəcək.');
+}
 
 function encryptSecret(text) {
   if (!text) return null;

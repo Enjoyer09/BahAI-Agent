@@ -38,6 +38,9 @@ sandbox/local_db.json
 backend/debug_messages.json
 backend/debug_*.json
 *.db-journal
+*.db-shm
+*.db-wal
+.freebuff/
 .env.*
 !.env.example
 *.env

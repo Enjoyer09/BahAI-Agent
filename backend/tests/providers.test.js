@@ -403,4 +403,116 @@ describe('provider candidate routing', () => {
     expect(candidates[0].baseURL).toBe('http://localhost:11434/v1');
     expect(candidates[0].model).toBe('gemma4:12b');
   });
+
+  it('web chat auto expands an env-driven OpenRouter fallback chain', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'fast',
+      webTaskType: 'general',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        OPENROUTER_API_KEY: 'sk-or-test',
+        OPENROUTER_FALLBACK_MODELS: 'deepseek/deepseek-v4-flash:free,qwen/qwen3-coder:free'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    const openRouter = candidates.filter((p) => p.baseURL === 'https://openrouter.ai/api/v1');
+    expect(openRouter.map((p) => p.model)).toEqual([
+      'deepseek/deepseek-v4-flash:free',
+      'qwen/qwen3-coder:free',
+      'meta-llama/llama-3.3-70b-instruct:free'
+    ]);
+    expect(openRouter.every((p) => p.apiKey === 'sk-or-test' && p.wireApi === 'chat_completions')).toBe(true);
+  });
+
+  it('web chat vision fallback appends the vision OpenRouter model', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'smart',
+      hasImageAttachment: true,
+      webTaskType: 'vision',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        OPENROUTER_API_KEY: 'sk-or-test'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    const openRouter = candidates.filter((p) => p.baseURL === 'https://openrouter.ai/api/v1');
+    expect(openRouter.at(-1).model).toBe('google/gemini-2.0-flash-exp:free');
+  });
+
+  it('dedupes OpenRouter fallback models already present in the primary chain', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'fast',
+      webTaskType: 'code',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        OPENAI_API_KEY: 'sk-or-test',
+        OPENROUTER_API_KEY: 'sk-or-test',
+        OPENROUTER_FALLBACK_MODELS: 'qwen/qwen3-coder:free',
+        WEB_CHAT_CODE_MODEL: 'qwen/qwen3-coder:free'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    const openRouter = candidates.filter((p) => p.baseURL === 'https://openrouter.ai/api/v1');
+    expect(openRouter.filter((p) => p.model === 'qwen/qwen3-coder:free')).toHaveLength(1);
+  });
+
+  it('desktop auto mode adds OpenRouter fallbacks when a key is configured', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'fast',
+      productMode: 'desktop_code',
+      executionMode: 'cloud',
+      env: {
+        OPENROUTER_API_KEY: 'sk-or-test',
+        OPENROUTER_FALLBACK_MODELS: 'qwen/qwen3-coder:free'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    const openRouter = candidates.filter((p) => p.baseURL === 'https://openrouter.ai/api/v1');
+    expect(openRouter.length).toBeGreaterThan(0);
+    expect(openRouter.map((p) => p.model)).toContain('qwen/qwen3-coder:free');
+    expect(openRouter.map((p) => p.model)).toContain('meta-llama/llama-3.3-70b-instruct:free');
+  });
+
+  it('desktop local mode never adds OpenRouter candidates', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'fast',
+      productMode: 'desktop_code',
+      executionMode: 'local',
+      env: {
+        OPENROUTER_API_KEY: 'sk-or-test',
+        OLLAMA_BASE_URL: 'http://localhost:11434/v1'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    expect(candidates.some((p) => p.baseURL === 'https://openrouter.ai/api/v1')).toBe(false);
+    expect(candidates[0].id).toBe('desktop_local_primary');
+  });
 });

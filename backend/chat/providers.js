@@ -224,6 +224,26 @@ function buildProviderCandidates({
   ]);
   const nvidiaApiKey = String(env.NVIDIA_API_KEY || '').trim();
   const nvidiaBaseUrl = normalizeProviderBaseUrl(env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1');
+  const openRouterKey = env.OPENROUTER_API_KEY || (String(env.OPENAI_API_KEY || '').startsWith('sk-or-') ? env.OPENAI_API_KEY : '');
+  const openRouterBase = normalizeProviderBaseUrl(env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1');
+  const openRouterDefaultModel = hasImageAttachment ? 'google/gemini-2.0-flash-exp:free' : 'meta-llama/llama-3.3-70b-instruct:free';
+
+  function buildOpenRouterFallbackCandidates(idPrefix = 'web_auto') {
+    if (!openRouterKey) return [];
+    const models = uniqueModels([
+      ...parseModelList(env.OPENROUTER_FALLBACK_MODELS || ''),
+      openRouterDefaultModel
+    ]);
+    return models
+      .filter(Boolean)
+      .map((model, index) => ({
+        id: `${idPrefix}_openrouter_fallback_${index + 1}`,
+        apiKey: openRouterKey,
+        baseURL: openRouterBase,
+        model,
+        wireApi: 'chat_completions'
+      }));
+  }
 
   function buildNvidiaProviders(taskType = 'general') {
     if (!nvidiaApiKey) return [];
@@ -335,16 +355,15 @@ function buildProviderCandidates({
       }
     }
 
-    // Cloud Fallback: OpenRouter Free Models (only if valid key is configured)
-    const openRouterKey = env.OPENROUTER_API_KEY || (String(env.OPENAI_API_KEY || '').startsWith('sk-or-') ? env.OPENAI_API_KEY : '');
-    if (openRouterKey && !seenKeys.has('https://openrouter.ai/api/v1|meta-llama/llama-3.3-70b-instruct:free')) {
-      candidates.push({
-        id: 'web_auto_openrouter_free_fallback',
-        apiKey: openRouterKey,
-        baseURL: 'https://openrouter.ai/api/v1',
-        model: hasImageAttachment ? 'google/gemini-2.0-flash-exp:free' : 'meta-llama/llama-3.3-70b-instruct:free',
-        wireApi: 'chat_completions'
-      });
+    // Cloud Fallback: OpenRouter Free Models (only if valid key is configured).
+    // Env-driven chain: OPENROUTER_FALLBACK_MODELS first, then the task-matched
+    // default (text vs vision). Each entry is a separate failover candidate.
+    for (const cand of buildOpenRouterFallbackCandidates('web_auto')) {
+      const key = `${cand.baseURL}|${cand.model}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        candidates.push(cand);
+      }
     }
 
     // Local Fallback: Always include Ollama in local mode or when local execution is allowed
@@ -392,14 +411,17 @@ function buildProviderCandidates({
       if (cloudOnly) {
         if (cloudProvider) list.push(cloudProvider);
         list.push(...buildNvidiaProviders('code'));
+        list.push(...buildOpenRouterFallbackCandidates('auto'));
       } else if (autoIntent === 'smart' && cloudProvider) {
         list.push(cloudProvider);
         list.push(...buildNvidiaProviders('code'));
+        list.push(...buildOpenRouterFallbackCandidates('auto'));
         list.push(localProvider);
       } else {
         list.push(localProvider);
         if (cloudProvider) list.push(cloudProvider);
         list.push(...buildNvidiaProviders('code'));
+        list.push(...buildOpenRouterFallbackCandidates('auto'));
       }
     }
   }
