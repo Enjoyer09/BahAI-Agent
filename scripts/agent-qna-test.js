@@ -6,6 +6,7 @@
 //   node scripts/agent-qna-test.js --subset quick # only fast/llm/security
 //   PRODUCT_MODE=web_chat node scripts/agent-qna-test.js
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:3001';
+const AUTH_TOKEN = process.env.BASE_TOKEN || '';
 const PRODUCT_MODE = process.env.PRODUCT_MODE || 'desktop_code';
 const EXECUTION_MODE = process.env.EXECUTION_MODE || (PRODUCT_MODE === 'web_chat' ? 'cloud' : 'local');
 const MODEL = process.env.MODEL || 'auto';
@@ -66,9 +67,11 @@ async function askOne(question, index, total) {
   };
 
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
     const res = await fetch(`${BASE}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
       signal: controller.signal
     });
@@ -133,7 +136,7 @@ async function askOne(question, index, total) {
 }
 
 async function main() {
-  console.log(`Agent Q&A test — ${BASE} | productMode=${PRODUCT_MODE} | executionMode=${EXECUTION_MODE} | model=${MODEL}`);
+  console.log(`Agent Q&A test — ${BASE} | productMode=${PRODUCT_MODE} | executionMode=${EXECUTION_MODE} | model=${MODEL} | auth=${AUTH_TOKEN ? 'token' : 'none'}`);
   console.log(`Questions: ${selected.length} (groups: ${[...new Set(selected.map((q) => q.group))].join(', ')})`);
   console.log('');
   const results = [];

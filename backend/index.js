@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const moduleAlias = require('module');
 
 // Extend Node module resolution paths
@@ -72,6 +73,14 @@ const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 
 const app = express();
+
+// Per-request correlation id — every error log and client-visible error
+// carries it, so a user-reported "Server xetasi" can be matched to the
+// exact stack trace in Railway logs.
+app.use(function (req, res, next) {
+  req.correlationId = crypto.randomUUID();
+  next();
+});
 app.set('trust proxy', 1);
 const db = require('./db');
 const { router: authRoutes, verifyToken } = require('./auth');
@@ -372,8 +381,19 @@ app.use(function(req, res) {
 // Error Handler
 // ==========================================
 app.use(function(err, req, res, next) {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Server xetasi' });
+  const correlationId = req.correlationId || crypto.randomUUID();
+  console.error(`[ERROR:${correlationId}] Unhandled error on ${req.method} ${req.originalUrl}:`, err);
+  if (err && err.message) {
+    console.error(`[ERROR:${correlationId}] Context:`, {
+      user: req.user?.id || req.user?.email || null,
+      bodyKeys: req.body ? Object.keys(req.body).slice(0, 20) : [],
+      messagePreview: String(req.body?.message || '').slice(0, 200)
+    });
+  }
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({ error: 'Server xetasi', correlationId });
 });
 
 // ==========================================
