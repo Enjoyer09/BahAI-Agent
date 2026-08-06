@@ -4,18 +4,11 @@
 // ==========================================
 
 function buildFallbackWebPlan(queryText = '', primaryFailReason = '') {
-  const isBankDepositQuery = /bank|faiz|depozit|manat|pul/i.test(queryText);
-
-  if (isBankDepositQuery) {
-    return `Azərbaycandakı əsas bankların cari depozit faiz dərəcələri haqqında ümumi məlumat:
-• **Kapital Bank**: Müddətli depozit üzrə illik təxminən **9% – 10.5%**
-• **ABB (Azərbaycan Beynəlxalq Bankı)**: Müddətli depozit üzrə illik təxminən **8.5% – 9.5%**
-• **Xalq Bank / Yelo Bank**: Müddətli depozit üzrə illik təxminən **9.5% – 11%**
-
-*Qeyd: Dəqiq şərtlər depozitin valyutasından (AZN/USD) və müddətindən (6, 12, 24 ay) asılı olaraq dəyişə bilər. Ən son rəsmi müqavilə üçün bank filialına yaxınlaşmağınız tövsiyə olunur.*`;
-  }
-
-  return 'Üzr istəyirəm, cari veb axtarış sistemində xəta baş verdi. Zəhmət olmasa sorğunuzu bir qədər dəqiqləşdirib yenidən göndərin.';
+  // SEC/FUNC: A generic fallback only. Hardcoded financial figures (bank
+  // deposit rates, etc.) were previously served as fact when the web search
+  // failed; stale or wrong numbers presented as current data are a product
+  // risk, so fallbacks no longer invent specific figures.
+  return 'Üzr istəyirəm, cari veb axtarış sistemində xəta baş verdi və mən bu məlumatı doğrulaya bilmədim. Zəhmət olmasa sorğunuzu bir qədər dəqiqləşdirib yenidən göndərin, ya da rəsmi mənbədən yoxlayın.';
 }
 
 module.exports = {

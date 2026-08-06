@@ -57,7 +57,12 @@ async function executeToolCalls({
 
     writeSse({ type: 'tool_execution', tool: toolCall.function.name, args: toolCall.function.arguments, tool_call_id: toolCall.id });
 
-    if (safeMode && !isLocalMode() && isSensitiveTool(toolCall.function.name)) {
+    // Approval gate: sensitive tools require a human decision whenever
+    // safeMode is enabled, including LOCAL_MODE (desktop). Previously the
+    // `!isLocalMode()` condition silently skipped approvals on the desktop,
+    // so a prompt-injected agent could write files / run commands without
+    // any user consent even though the UI advertised "approved execution".
+    if (safeMode && isSensitiveTool(toolCall.function.name)) {
       const approvalId = crypto.randomUUID();
       const approvalMeta = await buildApprovalMetadata(toolCall.function.name, toolCall.function.arguments, resolvedWD, reqUser);
       createInteraction(approvalId, {

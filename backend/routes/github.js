@@ -4,8 +4,16 @@
 
 const express = require('express');
 const router = express.Router();
-const { decryptSecret, encryptSecret } = require('../helpers');
+const { decryptSecret, encryptSecret, readLocalDb, writeLocalDb } = require('../helpers');
 const db = require('../db');
+
+async function getLocalGithubToken() {
+  const localDb = await readLocalDb();
+  const localToken = localDb.settings?.github_token;
+  if (typeof localToken === 'string' && localToken.trim()) return localToken.trim();
+  const envToken = process.env.GITHUB_TOKEN;
+  return typeof envToken === 'string' && envToken.trim() ? envToken.trim() : null;
+}
 
 // GET /api/github/status — Check GitHub connection status
 router.get('/status', async (req, res) => {
@@ -22,7 +30,7 @@ router.get('/status', async (req, res) => {
         username = row.github_username || null;
       }
     } else {
-      connected = Boolean(process.env.GITHUB_TOKEN);
+      connected = Boolean(await getLocalGithubToken());
     }
 
     res.json({ connected, username, scopes: connected ? ['repo'] : [] });
@@ -51,6 +59,15 @@ router.post('/connect', async (req, res) => {
         'UPDATE users SET github_token_enc = $1, github_username = $2 WHERE id = $3',
         [encrypted, githubUser.login, req.user.id]
       );
+    } else {
+      // LOCAL_MODE without a database: persist the token to the local
+      // settings file so connect survives restarts (previously the encrypted
+      // token was computed and then simply discarded).
+      const localDb = await readLocalDb();
+      localDb.settings = localDb.settings || {};
+      localDb.settings.github_token = token;
+      localDb.settings.github_username = githubUser.login;
+      await writeLocalDb(localDb);
     }
 
     res.json({ success: true, username: githubUser.login });
@@ -64,6 +81,13 @@ router.delete('/connect', async (req, res) => {
   try {
     if (db.hasDatabase()) {
       await db.query('UPDATE users SET github_token_enc = NULL, github_username = NULL WHERE id = $1', [req.user.id]);
+    } else {
+      const localDb = await readLocalDb();
+      if (localDb.settings) {
+        delete localDb.settings.github_token;
+        delete localDb.settings.github_username;
+        await writeLocalDb(localDb);
+      }
     }
     res.json({ success: true });
   } catch (e) {
@@ -80,7 +104,7 @@ router.get('/repos', async (req, res) => {
       const encrypted = result.rows[0]?.github_token_enc;
       token = encrypted ? decryptSecret(encrypted) : null;
     } else {
-      token = process.env.GITHUB_TOKEN;
+      token = await getLocalGithubToken();
     }
 
     if (!token) return res.status(401).json({ error: 'GitHub bağlantısı yoxdur' });

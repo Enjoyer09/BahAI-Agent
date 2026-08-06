@@ -29,6 +29,53 @@ const DEFAULT_INIT_TIMEOUT_MS = 15000;
 const DEFAULT_TOOLS_TIMEOUT_MS = 10000;
 const DEFAULT_CALL_TIMEOUT_MS = 60000;
 
+// SEC: MCP configs live inside the workspace the AI agent works on, so the
+// agent (or a prompt-injected payload) could otherwise write a config that
+// spawns an arbitrary binary (bash -c "curl ... | sh") with the full server
+// environment. Only well-known MCP runtimes may be spawned; anything else is
+// skipped with a clear log line.
+const ALLOWED_MCP_COMMANDS = new Set(['node', 'npx', 'python', 'python3', 'uvx', 'deno', 'bun']);
+
+// SEC: MCP child processes do not inherit the app's secret env vars by
+// default. Config authors can still pass specific values explicitly via the
+// server's `env` block.
+const MCP_SECRET_ENV_KEYS = [
+  'JWT_SECRET',
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+  'GOOGLE_CLIENT_SECRET',
+  'GITHUB_TOKEN',
+  'GITHUB_TOKEN_SECRET',
+  'OMNIROUTE_API_KEY',
+  'FISH_API_KEY',
+  'ELEVENLABS_API_KEY',
+  'TAVILY_API_KEY',
+  'NVIDIA_API_KEY',
+  'DATABASE_URL',
+  'ADMIN_PASSWORD',
+  'DEMO_PASSWORD'
+];
+
+function isAllowedMcpCommand(command) {
+  const value = String(command || '').trim();
+  if (!value) return false;
+  const base = value.split('/').pop().split('\\').pop();
+  return ALLOWED_MCP_COMMANDS.has(base);
+}
+
+function buildMcpEnv(extraEnv = {}) {
+  const env = { ...process.env };
+  for (const key of MCP_SECRET_ENV_KEYS) {
+    delete env[key];
+  }
+  for (const [key, value] of Object.entries(extraEnv || {})) {
+    if (value !== undefined && value !== null) env[key] = String(value);
+  }
+  return env;
+}
+
 class MCPStdioClient {
   /**
    * @param {object} config
@@ -122,9 +169,14 @@ class MCPStdioClient {
     if (!this.command) {
       throw new Error(`MCP server "${this.name}" is missing a command`);
     }
+    if (!isAllowedMcpCommand(this.command)) {
+      throw new Error(
+        `MCP server "${this.name}" command "${this.command}" is not in the allowed runtime allowlist (${[...ALLOWED_MCP_COMMANDS].join(', ')}). Add an explicit `env`-only config or use a supported runtime.`
+      );
+    }
     const child = spawn(this.command, this.args, {
       cwd: this.cwd,
-      env: { ...process.env, ...this.env },
+      env: buildMcpEnv(this.env),
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
     });

@@ -21,6 +21,24 @@ const execFileAsync = promisify(execFile);
 const PYTHON = path.resolve(__dirname, '../../.venv/bin/python3');
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../sandbox/screen-agent');
 
+// SEC: Never interpolate LLM-controlled values into the Python source string.
+// Payloads are passed as a JSON argv argument and decoded with json.loads so
+// strings like `x'); import os; os.system(...) #` stay inert data, not code.
+async function runPy(script, payload = {}, timeoutMs = 5000) {
+  const { stdout } = await execFileAsync(
+    PYTHON,
+    ['-c', script, JSON.stringify(payload)],
+    { timeout: timeoutMs }
+  );
+  return stdout;
+}
+
+const BOUNDED_INT = (value, fallback, min, max) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(n)));
+};
+
 /**
  * Take a screenshot of the entire screen.
  * Returns the screenshot as a base64 PNG string.
@@ -65,12 +83,19 @@ print(json.dumps(info))
  */
 async function mouseClick(x, y, options = {}) {
   const { clicks = 1, button = 'left' } = options;
-  await execFileAsync(PYTHON, ['-c', `
+  await runPy(`
 import pyautogui, time
-pyautogui.click(${x}, ${y}, clicks=${clicks}, button='${button}')
+import sys, json
+p = json.loads(sys.argv[1])
+pyautogui.click(p["x"], p["y"], clicks=p["clicks"], button=p["button"])
 time.sleep(0.3)
 print("OK")
-  `], { timeout: 5000 });
+`, {
+    x: BOUNDED_INT(x, 0, 0, 100000),
+    y: BOUNDED_INT(y, 0, 0, 100000),
+    clicks: BOUNDED_INT(clicks, 1, 1, 20),
+    button: ['left', 'right', 'middle'].includes(String(button)) ? String(button) : 'left',
+  });
   return { ok: true, action: 'click', x, y, button, clicks };
 }
 
@@ -78,11 +103,16 @@ print("OK")
  * Move mouse to coordinates (without clicking).
  */
 async function mouseMove(x, y) {
-  await execFileAsync(PYTHON, ['-c', `
+  await runPy(`
 import pyautogui
-pyautogui.moveTo(${x}, ${y}, duration=0.3)
+import sys, json
+p = json.loads(sys.argv[1])
+pyautogui.moveTo(p["x"], p["y"], duration=0.3)
 print("OK")
-  `], { timeout: 5000 });
+`, {
+    x: BOUNDED_INT(x, 0, 0, 100000),
+    y: BOUNDED_INT(y, 0, 0, 100000),
+  });
   return { ok: true, action: 'move', x, y };
 }
 
@@ -92,26 +122,27 @@ print("OK")
  */
 async function typeText(text, options = {}) {
   const { interval = 0.02, useClipboard = false } = options;
-  const escaped = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+  const safeText = String(text || '').slice(0, 2000);
 
-  if (useClipboard || /[^\x00-\x7F]/.test(text)) {
+  if (useClipboard || /[^\x00-\x7F]/.test(safeText)) {
     // Unicode — use clipboard
-    await execFileAsync(PYTHON, ['-c', `
-import pyautogui, pyperclip, time
-pyperclip.copy("${escaped}")
+    await runPy(`
+import pyautogui, pyperclip, time, sys, json
+pyperclip.copy(json.loads(sys.argv[1])["text"])
 pyautogui.hotkey('command', 'v')
 time.sleep(0.3)
 print("OK")
-    `], { timeout: 5000 });
+    `, { text: safeText });
   } else {
-    await execFileAsync(PYTHON, ['-c', `
-import pyautogui, time
-pyautogui.write("${escaped}", interval=${interval})
+    await runPy(`
+import pyautogui, time, sys, json
+p = json.loads(sys.argv[1])
+pyautogui.write(p["text"], interval=p["interval"])
 time.sleep(0.2)
 print("OK")
-    `], { timeout: 10000 });
+    `, { text: safeText, interval: Math.min(1, Math.max(0, Number(interval) || 0.02)) }, 10000);
   }
-  return { ok: true, action: 'type', text: text.slice(0, 50) };
+  return { ok: true, action: 'type', text: safeText.slice(0, 50) };
 }
 
 /**
@@ -119,16 +150,20 @@ print("OK")
  */
 async function pressKey(key) {
   // Handle combinations like "command+a", "ctrl+c"
-  const keys = key.split('+').map(k => k.trim());
-  const escaped = keys.map(k => `'${k}'`).join(', ');
+  const keys = String(key || 'enter')
+    .split('+')
+    .map((k) => k.trim().toLowerCase())
+    .filter((k) => /^[a-z0-9 ]{1,32}$/.test(k))
+    .slice(0, 6);
+  if (keys.length === 0) keys.push('enter');
 
-  await execFileAsync(PYTHON, ['-c', `
-import pyautogui, time
-pyautogui.hotkey(${escaped})
+  await runPy(`
+import pyautogui, time, sys, json
+pyautogui.hotkey(*json.loads(sys.argv[1])["keys"])
 time.sleep(0.3)
 print("OK")
-  `], { timeout: 5000 });
-  return { ok: true, action: 'press', key };
+  `, { keys });
+  return { ok: true, action: 'press', key: keys.join('+') };
 }
 
 /**
@@ -136,14 +171,22 @@ print("OK")
  */
 async function scroll(amount, options = {}) {
   const { x, y } = options;
-  const moveCmd = (x != null && y != null) ? `pyautogui.moveTo(${x}, ${y}); time.sleep(0.2); ` : '';
+  const payload = { amount: BOUNDED_INT(amount, -3, -1000, 1000) };
+  if (x != null && y != null && Number.isFinite(Number(x)) && Number.isFinite(Number(y))) {
+    payload.x = BOUNDED_INT(x, 0, 0, 100000);
+    payload.y = BOUNDED_INT(y, 0, 0, 100000);
+  }
 
-  await execFileAsync(PYTHON, ['-c', `
-import pyautogui, time
-${moveCmd}pyautogui.scroll(${amount})
+  await runPy(`
+import pyautogui, time, sys, json
+p = json.loads(sys.argv[1])
+if "x" in p and "y" in p:
+    pyautogui.moveTo(p["x"], p["y"])
+    time.sleep(0.2)
+pyautogui.scroll(p["amount"])
 time.sleep(0.3)
 print("OK")
-  `], { timeout: 5000 });
+  `, payload);
   return { ok: true, action: 'scroll', amount, x, y };
 }
 

@@ -350,7 +350,12 @@ function isCacheableTool(toolName = '') {
 }
 
 function isSensitiveTool(toolName) {
-  return toolName === 'write_file' || toolName === 'file_edit' || toolName === 'multi_file_edit' || toolName === 'run_terminal_command' || toolName === 'git_clone' || toolName === 'git_push' || toolName === 'start_server';
+  if (toolName === 'write_file' || toolName === 'file_edit' || toolName === 'multi_file_edit' || toolName === 'run_terminal_command' || toolName === 'git_clone' || toolName === 'git_push' || toolName === 'start_server') {
+    return true;
+  }
+  // MCP tools run external processes defined by workspace config, so they
+  // must go through the same approval gate as other sensitive tools.
+  return typeof toolName === 'string' && toolName.startsWith('mcp_');
 }
 
 // ==========================================
@@ -706,6 +711,12 @@ async function readLocalDb() {
     const data = await fs.readFile(path.resolve(__dirname, '../sandbox/local_db.json'), 'utf8').catch(() => '{}');
     return JSON.parse(data);
   } catch { return {}; }
+}
+
+async function writeLocalDb(data) {
+  const filePath = path.resolve(__dirname, '../sandbox/local_db.json');
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
 
 function injectGithubTokenIntoUrl(url, token) {
@@ -1499,26 +1510,32 @@ async function buildApprovalMetadata(toolName, rawArgs, workingDirectory, user) 
 // Bash safety
 // ==========================================
 
-// SEC-FIX: Allowed commands for run_terminal_command. Destructive commands (rm, mv,
-// sudo, chmod, chown, dd, shutdown, reboot, mkfs, fdisk, dd, wget, curl with -o/-O)
-// are intentionally excluded. For file deletion the agent should use the file tool.
-const ALLOWED_COMMANDS = ['npm', 'npx', 'yarn', 'git', 'node', 'python', 'python3', 'pip', 'ls', 'pwd', 'mkdir', 'touch', 'grep', 'find', 'cat', 'echo', 'cp', 'curl', 'which', 'env'];
+// SEC-FIX: Allowed commands for run_terminal_command. Destructive commands
+// (rm, mv, chmod, chown, dd, sudo, shutdown, reboot, mkfs, fdisk) and network
+// pivot tools (ssh, scp, rsync, nc, telnet, socat, ftp, wget) are
+// intentionally excluded. For file deletion the agent should use the file
+// tool; for Git operations it should use the dedicated git_* tools so the
+// approval gate applies.
+const ALLOWED_COMMANDS = ['npm', 'npx', 'yarn', 'git', 'node', 'python', 'python3', 'pip', 'ls', 'pwd', 'mkdir', 'touch', 'grep', 'find', 'cat', 'echo', 'cp', 'curl', 'which'];
 
 // SEC-FIX: Dangerous patterns that are blocked regardless of base command.
 // Covers file destruction, privilege escalation, network pivots and fork bombs.
 const DENIED_PATTERNS = [
-  /\brm\s+-[rf]/i,           // rm -rf (recursive forced delete)
+  /\brm\b/i,                   // file deletion (use the file tool instead)
+  /\bmv\b/i,                   // moves/renames can clobber paths outside the project
   /\bsudo\b/i,                 // privilege escalation
-  /\bchmod\s+[0-7]{3,4}/i,     // permission changes
-  /\bchown\b/i,                // owner changes
+  /\b(?:chmod|chown|chgrp)\b/i, // permission/ownership changes
   /\bdd\s+if=/i,                // disk destroy
   /\b(?:shutdown|reboot|halt|poweroff)\b/i,  // system control
   /\bmkfs\./,                  // filesystem creation (destructive)
   /\bfdisk\b/,                  // partition table
+  /\bgit\s+(?:reset|clean|rebase|merge)\b/i, // destructive/conflict-prone git ops
+  /\b(?:wget|ssh|scp|rsync|nc|ncat|telnet|socat|ftp|sftp)\b/i, // network pivots
   /\b>:\s*\//,                  // redirect to root
   /\bwget\s+.*\s+-[a-z]*o\b/i,   // wget with output file
   /\bcurl\s+.*\s+-[a-z]*o\b/i,   // curl with -o / -O (output file)
   /\bcurl\b.*--output\b/i,       // curl with --output (no \s+ needed, -- has no word boundary before)
+  /\bcurl\b[^|;&]*\s-k\b/i,      // curl -k disables TLS verification
   /:\s*\)\s*\{.*:\s*\)\s*\}/, // fork bomb
   /\b(?:\/dev\/(?:null|zero|random|urandom))/, // device access
 ];
@@ -1669,7 +1686,7 @@ module.exports = {
   },
 
   // GitHub
-  encryptSecret,  decryptSecret, injectGithubTokenIntoUrl, getUserGithubToken, readLocalDb,
+  encryptSecret,  decryptSecret, injectGithubTokenIntoUrl, getUserGithubToken, readLocalDb, writeLocalDb,
 
   // Repo detection
   detectRepoProfile, serializeRepoProfile,
