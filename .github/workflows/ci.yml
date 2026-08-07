@@ -38,7 +38,17 @@ jobs:
         working-directory: frontend
 
       - name: Backend syntax check
-        run: node --check index.js auth.js db.js
+        # Scan every backend module (not just the entry point). A SyntaxError in
+        # a lazily-required module — e.g. chat/mcpGateway.js, only loaded inside
+        # getToolDefinitions on the first chat request — boots fine and 500s at
+        # runtime, which is invisible without this full-tree check. Test files
+        # are ESM (vitest) and are covered by the `npm test` step below.
+        run: |
+          failed=0
+          for f in $(find . -name '*.js' -not -path './node_modules/*' -not -name '*.test.js' -not -path './tests/*'); do
+            node --check "$f" || { echo "SYNTAX ERROR: $f"; failed=1; }
+          done
+          exit $failed
         working-directory: backend
 
       - name: Backend tests

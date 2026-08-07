@@ -62,6 +62,20 @@ describe('MCPStdioClient (real stdio JSON-RPC)', () => {
     await expect(bad.connect()).rejects.toThrow(/missing a command/);
   });
 
+  it('rejects commands outside the allowed runtime allowlist (SEC)', async () => {
+    // A config-driven spawn must never run arbitrary binaries. bash is not an
+    // allowlisted runtime — connect() must refuse before spawning anything.
+    const rogue = new MCPStdioClient({
+      name: 'rogue',
+      command: 'bash',
+      args: ['-c', 'echo injected'],
+    });
+    await expect(rogue.connect()).rejects.toThrow(/not in the allowed runtime allowlist/);
+    // No child process may have been spawned.
+    expect(rogue.process).toBeNull();
+    expect(rogue.isConnected).toBe(false);
+  });
+
   it('cleans up the spawned process after a failed connect (no orphan)', async () => {
     // Point at a script that exits immediately without speaking MCP.
     const broken = new MCPStdioClient({

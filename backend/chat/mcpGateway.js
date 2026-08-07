@@ -171,7 +171,7 @@ class MCPStdioClient {
     }
     if (!isAllowedMcpCommand(this.command)) {
       throw new Error(
-        `MCP server "${this.name}" command "${this.command}" is not in the allowed runtime allowlist (${[...ALLOWED_MCP_COMMANDS].join(', ')}). Add an explicit `env`-only config or use a supported runtime.`
+        `MCP server "${this.name}" command "${this.command}" is not in the allowed runtime allowlist (${[...ALLOWED_MCP_COMMANDS].join(', ')}). Add an explicit 'env'-only config or use a supported runtime.`
       );
     }
     const child = spawn(this.command, this.args, {
