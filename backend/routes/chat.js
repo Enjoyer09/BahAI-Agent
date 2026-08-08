@@ -682,13 +682,36 @@ ${generateToolsSystemPrompt(TOOLS)}`;
     }
   ];
 
-  // Setup the chat session
-  initSse(res);
-  emitOrchestrationPrelude(res, { runId, orchestration, runManager, pendingAutoRouteEvent: null });
+  const chatRuntime = req.chatRuntime;
+  const userId = req.user?.id || 'anon';
+  const requestedPriority = Number(req.body.priority);
+  const queuePriority = Number.isFinite(requestedPriority)
+    ? Math.max(0, Math.min(2, Math.trunc(requestedPriority)))
+    : 0;
+  let slotAcquired = false;
 
   try {
+    if (!chatRuntime) {
+      const runtimeError = new Error('Chat runtime is unavailable');
+      runtimeError.code = 'CHAT_RUNTIME_UNAVAILABLE';
+      runtimeError.statusCode = 503;
+      throw runtimeError;
+    }
+
+    // Supersede any in-flight run for this user+conversation, then acquire a
+    // slot. This makes the in-memory concurrency guard actually enforce the
+    // configured total/per-user limits instead of being bypassed.
+    chatRuntime.supersedeConversation(userId, conversationIdSafe);
+    await chatRuntime.acquireChatSlotQueued(userId, conversationIdSafe, req, queuePriority);
+    slotAcquired = true;
+
+    // Initialize SSE only after admission so queue failures stay normal JSON
+    // responses (clients can honor HTTP status + Retry-After).
+    initSse(res);
+    emitOrchestrationPrelude(res, { runId, orchestration, runManager, pendingAutoRouteEvent: null });
+
     await runChatSession({
-      req, res, slotAcquired: true, conversationId: conversationIdSafe,
+      req, res, slotAcquired, conversationId: conversationIdSafe,
       runManager, orchestration, resolvedWD, latestUserText,
       auditStyleRequest: isAuditStyle, productMode: productMode || 'desktop_code',
       projectMemory: null, apiMessages,
@@ -715,8 +738,8 @@ ${generateToolsSystemPrompt(TOOLS)}`;
       buildPhaseHandoffMessage,
       buildPlannerArtifactContext,
       buildExecutionArtifactContext,
-      releaseChatSlot: () => {},
-      setConversationAbort: () => {},
+      releaseChatSlot: chatRuntime.releaseChatSlot,
+      setConversationAbort: chatRuntime.setConversationAbort,
       reqUser: req.user,
       dependencies: {
         MAX_STEPS, effectiveModelRef, activeProviderRef, clientRef, isLocalOrFlakyModel,
@@ -783,7 +806,24 @@ ${generateToolsSystemPrompt(TOOLS)}`;
       }
     });
   } catch (err) {
+    if (slotAcquired) {
+      chatRuntime?.releaseChatSlot(userId, conversationIdSafe);
+      slotAcquired = false;
+    }
     console.error('Chat session error:', err);
+    if (!res.headersSent) {
+      const statusCode = Number(err?.statusCode) || 503;
+      if (err?.retryAfterSeconds > 0) {
+        res.setHeader('Retry-After', String(err.retryAfterSeconds));
+      }
+      return res.status(statusCode).json({
+        error: statusCode === 429
+          ? 'Chat növbəsi doludur. Bir az sonra yenidən cəhd edin.'
+          : 'Chat xidməti hazırda məşğuldur. Bir az sonra yenidən cəhd edin.',
+        code: err?.code || 'CHAT_UNAVAILABLE',
+        correlationId: req.correlationId
+      });
+    }
     if (!res.writableEnded) {
       writeSse(res, { type: 'error', message: 'Server xətası baş verdi.' });
       res.end();

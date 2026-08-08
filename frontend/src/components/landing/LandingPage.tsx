@@ -61,6 +61,16 @@ function GridDots() {
 }
 
 export default function LandingPage({ onGetStarted }: LandingPageProps) {
+  // Enable scrolling on mobile — global CSS sets overflow:hidden for chat UI
+  useEffect(() => {
+    document.documentElement.classList.add('landing-active');
+    document.body.classList.add('landing-active');
+    return () => {
+      document.documentElement.classList.remove('landing-active');
+      document.body.classList.remove('landing-active');
+    };
+  }, []);
+
   const features = [
     {
       icon: <Bot size={22} />,
@@ -119,7 +129,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
   ];
 
   return (
-    <div className="min-h-screen text-white overflow-x-hidden font-sans scroll-smooth" style={{ background: '#09090b' }}>
+    <div className="landing-page-root min-h-screen text-white overflow-x-hidden font-sans scroll-smooth" style={{ background: '#09090b' }}>
 
       {/* Navigation */}
       <nav
@@ -164,7 +174,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center px-5 md:px-10 pt-16 overflow-hidden">
+      <section className="relative min-h-screen flex flex-col items-center justify-center px-5 md:px-10 pt-16 overflow-x-hidden">
         <GridDots />
 
         {/* Glow ambient background */}

@@ -318,11 +318,13 @@ var MAX_ACTIVE_CHAT_TOTAL = parseInt(process.env.MAX_ACTIVE_CHAT_TOTAL || '50', 
 var MAX_ACTIVE_CHAT_PER_USER = parseInt(process.env.MAX_ACTIVE_CHAT_PER_USER || '5', 10);
 var CHAT_QUEUE_TIMEOUT_MS = parseInt(process.env.CHAT_QUEUE_TIMEOUT_MS || '10000', 10);
 var CHAT_SLOT_MAX_AGE_MS = parseInt(process.env.CHAT_SLOT_MAX_AGE_MS || '300000', 10);
+var CHAT_QUEUE_MAX_LENGTH = parseInt(process.env.CHAT_QUEUE_MAX_LENGTH || '100', 10);
 var chatRuntime = createChatRuntime({
   maxActiveChatTotal: MAX_ACTIVE_CHAT_TOTAL,
   maxActiveChatPerUser: MAX_ACTIVE_CHAT_PER_USER,
   chatQueueTimeoutMs: CHAT_QUEUE_TIMEOUT_MS,
-  chatSlotMaxAgeMs: CHAT_SLOT_MAX_AGE_MS
+  chatSlotMaxAgeMs: CHAT_SLOT_MAX_AGE_MS,
+  maxQueueLength: CHAT_QUEUE_MAX_LENGTH
 });
 
 // Inject chatRuntime into request for route handlers that need it
@@ -336,7 +338,7 @@ function injectChatRuntime(req, res, next) {
 // ==========================================
 
 // Chat — POST /api/chat
-app.use('/api/chat', chatRouter);
+app.use('/api/chat', injectChatRuntime, chatRouter);
 
 // TTS — Fish Audio proxy (Voice Mode) — must be before filesRouter
 // which has a router.use(requireWorkspaceAccess) that would block it

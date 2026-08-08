@@ -523,6 +523,27 @@ button, a, [role="button"] {
     overflow: hidden;
   }
 
+  /* Landing page needs scroll — override overflow hidden */
+  html:has(.landing-page-root),
+  html:has(.landing-page-root) body,
+  html:has(.landing-page-root) #root {
+    overflow: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Fallback for browsers without :has() support */
+  html.landing-active,
+  body.landing-active,
+  html.landing-active #root {
+    overflow: auto !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100dvh;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: auto;
+  }
+
   textarea, input {
     font-size: 16px;
   }

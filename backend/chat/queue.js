@@ -4,7 +4,8 @@ function createChatRuntime({
   maxActiveChatTotal,
   maxActiveChatPerUser,
   chatQueueTimeoutMs,
-  chatSlotMaxAgeMs
+  chatSlotMaxAgeMs,
+  maxQueueLength = 100
 }) {
   const interactions = new Map();
   const activeChatByUser = new Map();
@@ -12,12 +13,24 @@ function createChatRuntime({
   const chatQueue = [];
   let activeChatTotal = 0;
 
+  function conversationKey(userId, conversationId) {
+    return `${String(userId || 'anon')}:${String(conversationId || 'default')}`;
+  }
+
+  function createQueueError(message, code, statusCode = 503, retryAfterSeconds = 1) {
+    const error = new Error(message);
+    error.code = code;
+    error.statusCode = statusCode;
+    error.retryAfterSeconds = retryAfterSeconds;
+    return error;
+  }
+
   function cleanupStaleSlots() {
     const now = Date.now();
-    for (const [cid, info] of activeChatByConversation.entries()) {
+    for (const [key, info] of activeChatByConversation.entries()) {
       if (now - info.startedAt > chatSlotMaxAgeMs) {
-        console.warn(`⚠️ Force-releasing stale chat slot: conversation=${cid}, age=${Math.round((now - info.startedAt) / 1000)}s`);
-        releaseChatSlot(info.userId, cid);
+        console.warn(`⚠️ Force-releasing stale chat slot: conversation=${info.conversationId}, age=${Math.round((now - info.startedAt) / 1000)}s`);
+        releaseChatSlot(info.userId, info.conversationId, key);
       }
     }
   }
@@ -25,14 +38,15 @@ function createChatRuntime({
   function acquireChatSlot(userId, conversationId) {
     const uid = String(userId || 'anon');
     const cid = String(conversationId || 'default');
+    const key = conversationKey(uid, cid);
 
     cleanupStaleSlots();
 
-    if (activeChatByConversation.has(cid)) {
-      const existing = activeChatByConversation.get(cid);
+    if (activeChatByConversation.has(key)) {
+      const existing = activeChatByConversation.get(key);
       const age = Date.now() - existing.startedAt;
       if (age > chatSlotMaxAgeMs) {
-        releaseChatSlot(existing.userId, cid);
+        releaseChatSlot(existing.userId, existing.conversationId, key);
       } else {
         return false;
       }
@@ -45,13 +59,20 @@ function createChatRuntime({
 
     activeChatTotal += 1;
     activeChatByUser.set(uid, byUser + 1);
-    activeChatByConversation.set(cid, { userId: uid, startedAt: Date.now(), abortCurrent: null });
+    activeChatByConversation.set(key, {
+      userId: uid,
+      conversationId: cid,
+      startedAt: Date.now(),
+      abortCurrent: null
+    });
     return true;
   }
 
   function supersedeConversation(userId, conversationId) {
+    const uid = String(userId || 'anon');
     const cid = String(conversationId || 'default');
-    const existing = activeChatByConversation.get(cid);
+    const key = conversationKey(uid, cid);
+    const existing = activeChatByConversation.get(key);
     if (!existing) return false;
     if (typeof existing.abortCurrent === 'function') {
       try {
@@ -60,7 +81,7 @@ function createChatRuntime({
         // ignore abort hook errors
       }
     }
-    releaseChatSlot(existing.userId || userId, cid);
+    releaseChatSlot(existing.userId || uid, cid, key);
     return true;
   }
 
@@ -88,23 +109,32 @@ function createChatRuntime({
     }
   }
 
-  function releaseChatSlot(userId, conversationId) {
+  function releaseChatSlot(userId, conversationId, knownKey = null) {
     const uid = String(userId || 'anon');
     const cid = String(conversationId || 'default');
+    const key = knownKey || conversationKey(uid, cid);
+    const existing = activeChatByConversation.get(key);
+    if (!existing) return false;
 
-    activeChatByConversation.delete(cid);
+    activeChatByConversation.delete(key);
 
-    const byUser = activeChatByUser.get(uid) || 0;
-    if (byUser <= 1) activeChatByUser.delete(uid);
-    else activeChatByUser.set(uid, byUser - 1);
+    const ownerId = String(existing.userId || uid);
+    const byUser = activeChatByUser.get(ownerId) || 0;
+    if (byUser <= 1) activeChatByUser.delete(ownerId);
+    else activeChatByUser.set(ownerId, byUser - 1);
     if (activeChatTotal > 0) activeChatTotal -= 1;
 
     drainChatQueue();
+    return true;
   }
 
   async function acquireChatSlotQueued(userId, conversationId, req, priority = 0) {
     cleanupStaleSlots();
     if (acquireChatSlot(userId, conversationId)) return true;
+
+    if (chatQueue.length >= maxQueueLength) {
+      throw createQueueError('Chat queue is full', 'CHAT_QUEUE_FULL', 429, 2);
+    }
 
     const ticketId = crypto.randomUUID();
     return new Promise((resolve, reject) => {
@@ -120,7 +150,7 @@ function createChatRuntime({
       const onAborted = () => {
         finalize(() => {
           removeFromChatQueue(ticketId);
-          reject(new Error('Client disconnected while waiting in queue'));
+          reject(createQueueError('Client disconnected while waiting in queue', 'CHAT_QUEUE_CLIENT_DISCONNECTED', 499, 0));
         });
       };
 
@@ -134,7 +164,7 @@ function createChatRuntime({
       const onTimeout = () => {
         finalize(() => {
           removeFromChatQueue(ticketId);
-          reject(new Error('Queue timeout'));
+          reject(createQueueError('Queue timeout', 'CHAT_QUEUE_TIMEOUT', 503, 2));
         });
       };
 
@@ -148,6 +178,7 @@ function createChatRuntime({
         id: ticketId,
         userId: String(userId || 'anon'),
         conversationId: String(conversationId || 'default'),
+        priority: Number.isFinite(Number(priority)) ? Number(priority) : 0,
         resolve: () => {
           finalize(() => resolve(true));
         },
@@ -224,11 +255,12 @@ function createChatRuntime({
   }
 
   function setConversationAbort(userId, conversationId, abortCurrent) {
+    const uid = String(userId || 'anon');
     const cid = String(conversationId || 'default');
-    const existing = activeChatByConversation.get(cid);
+    const key = conversationKey(uid, cid);
+    const existing = activeChatByConversation.get(key);
     if (!existing) return false;
-    if (String(existing.userId || 'anon') !== String(userId || 'anon')) return false;
-    activeChatByConversation.set(cid, {
+    activeChatByConversation.set(key, {
       ...existing,
       abortCurrent: typeof abortCurrent === 'function' ? abortCurrent : null
     });
