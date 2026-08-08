@@ -470,7 +470,8 @@ async function openAiStreamWithFallback({
           userMsg = 'API balansı bitib və ya kredit limiti aşılıb (402). Provider panelinə daxil olub kredit əlavə edin və ya başqa model seçin.';
         } else if (currentErr.status === 503) {
           userMsg = isGenericFailoverCandidate(providerCandidates)
-            ? 'AI servisləri hazırda müvəqqəti əlçatmaz oldu. Sistem arxa planda alternativ provider-ləri sınadı, amma cavab ala bilmədi. Bir az sonra yenidən yoxlayaq.'
+            ? ('AI servisləri hazırda müvəqqəti əlçatmaz oldu. Sistem arxa planda alternativ provider-ləri sınadı, amma cavab ala bilmədi. Bir az sonra yenidən yoxlayaq.'
+              + (singleGateway ? ' (Qeyd: bütün modellər eyni AI gateway-dən keçir — ehtiyat provider, məsələn OpenRouter və ya NVIDIA, qoşulu olarsa avtomatik keçid olunar.)' : ''))
             : 'AI servisi müvəqqəti əlçatmazdır. Mesajınız çox böyük ola bilər — daha qısa mesaj göndərin və ya bir neçə dəqiqə gözləyin.';
         } else if (currentErr.status === 404 && !isGenericFailoverCandidate(providerCandidates)) {
           if (isOllamaUrl) {

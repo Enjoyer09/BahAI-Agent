@@ -1046,4 +1046,120 @@ describe('runner failover behavior', () => {
     expect(result.errorEvent.message).toContain('AI provider');
     expect(result.errorEvent.message).toContain('eyni AI gateway');
   });
+
+  it('fails over from an OmniRoute 5xx to a configured OpenRouter candidate (cross-provider)', async () => {
+    const runtime = createProviderRuntime();
+    const omniPrimary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omniroute.example/v1', apiKey: 'omni-key' };
+    const omniFallback = { id: 'web_general_fallback_1', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: 'https://omniroute.example/v1', apiKey: 'omni-key' };
+    const openRouter = { id: 'web_auto_openrouter_fallback_1', wireApi: 'chat_completions', model: 'meta-llama/llama-3.3-70b-instruct:free', baseURL: 'https://openrouter.ai/api/v1', apiKey: 'sk-or-test' };
+    const clients = {
+      [omniPrimary.id]: createClientThatFails({ status: 503, message: 'Maximum combo retry limit reached' }),
+      [omniFallback.id]: createClientThatFails({ status: 503, message: 'Maximum combo retry limit reached' }),
+      [openRouter.id]: createStreamingClient('openrouter-ok')
+    };
+
+    const telemetry = [];
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: omniPrimary.model,
+      activeProvider: omniPrimary,
+      client: clients[omniPrimary.id],
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [omniPrimary, omniFallback, openRouter],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => clients[provider.id],
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: (event) => telemetry.push(event),
+      providerSessionKey: 'web:anon:omniroute->openrouter'
+    });
+
+    expect(result.errorEvent).toBeFalsy();
+    expect(result.activeProvider.id).toBe('web_auto_openrouter_fallback_1');
+    expect(runtime.markProviderSuccess).toHaveBeenCalledWith('web_auto_openrouter_fallback_1');
+    expect(telemetry.some((item) => item.event === 'provider_failover' && item.providerId === 'web_auto_openrouter_fallback_1')).toBe(true);
+  });
+
+  it('withholds the single-gateway hint once a real second provider (OpenRouter) is in the pool', async () => {
+    const runtime = createProviderRuntime();
+    const omniPrimary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omniroute.example/v1', apiKey: 'omni-key' };
+    const omniFallback = { id: 'web_general_fallback_1', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: 'https://omniroute.example/v1', apiKey: 'omni-key' };
+    const openRouter = { id: 'web_auto_openrouter_fallback_1', wireApi: 'chat_completions', model: 'meta-llama/llama-3.3-70b-instruct:free', baseURL: 'https://openrouter.ai/api/v1', apiKey: 'sk-or-test' };
+    const clients = {
+      [omniPrimary.id]: createClientThatFails({ status: 503, message: 'Maximum combo retry limit reached' }),
+      [omniFallback.id]: createClientThatFails({ status: 503, message: 'Maximum combo retry limit reached' }),
+      [openRouter.id]: createClientThatFails({ status: 503, message: 'Maximum combo retry limit reached' })
+    };
+
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: omniPrimary.model,
+      activeProvider: omniPrimary,
+      client: clients[omniPrimary.id],
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [omniPrimary, omniFallback, openRouter],
+      providerRuntime: runtime,
+      buildOpenAIClient: (provider) => clients[provider.id],
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 1000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:anon:multigw-hint'
+    });
+
+    expect(result.errorEvent).toBeTruthy();
+    expect(result.errorEvent.message).toContain('AI servisləri');
+    // With a distinct base URL (OpenRouter) in the pool, the "all models share
+    // one gateway" redundancy hint must NOT be shown.
+    expect(result.errorEvent.message).not.toContain('eyni AI gateway');
+  });
+
+  it('shows the single-gateway hint on a 503 when no second provider is configured', async () => {
+    const runtime = createProviderRuntime();
+    const base = 'https://api.freemodel.dev/v1';
+    const primary = { id: 'web_text_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: base, apiKey: 'key' };
+    const fallback = { id: 'web_text_fallback_1', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: base, apiKey: 'key' };
+    const client = {
+      chat: { completions: { create: vi.fn().mockRejectedValue({ status: 503, message: 'Maximum combo retry limit reached' }) } }
+    };
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => client,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 20000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:singlegw:503'
+    });
+
+    // 503 is the most common outage shape; the redundancy hint must appear here too.
+    expect(result.errorEvent).toBeTruthy();
+    expect(result.errorEvent.message).toContain('AI servisləri');
+    expect(result.errorEvent.message).toContain('eyni AI gateway');
+  });
 });

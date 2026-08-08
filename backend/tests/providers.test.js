@@ -515,4 +515,33 @@ describe('provider candidate routing', () => {
     expect(candidates.some((p) => p.baseURL === 'https://openrouter.ai/api/v1')).toBe(false);
     expect(candidates[0].id).toBe('desktop_local_primary');
   });
+
+  it('mixes OmniRoute models with a real OpenRouter cross-provider candidate when both are configured', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'smart',
+      webTaskType: 'general',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        OMNIROUTE_ENABLED: 'true',
+        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
+        OMNIROUTE_API_KEY: 'omni-key',
+        OMNIROUTE_MODEL: 'auto',
+        OPENROUTER_API_KEY: 'sk-or-test'
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    const omniCandidates = candidates.filter((p) => p.baseURL === 'https://omniroute.example/v1');
+    const openRouterCandidates = candidates.filter((p) => p.baseURL === 'https://openrouter.ai/api/v1');
+    expect(omniCandidates.length).toBeGreaterThan(0);
+    expect(openRouterCandidates.length).toBeGreaterThan(0);
+    // Cross-provider failover only helps if the pool spans more than one base URL.
+    const distinctBases = new Set(candidates.map((p) => String(p.baseURL).replace(/\/+$/, '').toLowerCase()));
+    expect(distinctBases.size).toBeGreaterThan(1);
+  });
 });
