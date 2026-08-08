@@ -10,6 +10,30 @@
   --color-info: #3b82f6;
 }
 
+/* Accessibility: honor users who prefer reduced motion (agent-grade a11y) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Keyboard focus visibility (a11y) */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 /* ==========================================
    DESIGN SYSTEM — Dark Theme (Default) — ChatGPT
    ========================================== */
@@ -548,6 +572,21 @@ button, a, [role="button"] {
     font-size: 16px;
   }
 
+  /* Native-feel mobile polish */
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    /* App is a fixed full-height surface — disable pull-to-refresh / page bounce */
+    overscroll-behavior-y: none;
+  }
+  button,
+  a,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
   .mobile-topbar {
     min-height: calc(52px + env(safe-area-inset-top, 0px));
     padding: env(safe-area-inset-top, 0px) 8px 0;
@@ -622,7 +661,12 @@ button, a, [role="button"] {
 
   .mobile-composer-dock {
     padding: 6px 10px max(8px, env(safe-area-inset-bottom));
-    background: linear-gradient(to top, var(--bg-main) 78%, transparent);
+    background: linear-gradient(to top, var(--bg-main) 82%, transparent);
+    border-top: 1px solid var(--border-subtle);
+    /* Lift the dock above the soft keyboard (set by the visualViewport handler) */
+    transform: translateY(calc(-1 * var(--kb, 0px)));
+    transition: transform 0.18s ease-out;
+    will-change: transform;
   }
 
   .mobile-message-actions button {
@@ -791,6 +835,12 @@ button, a, [role="button"] {
   border-radius: 999px;
   color: var(--fg-muted);
   touch-action: manipulation;
+  transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.composer-icon-button:active,
+.composer-send-button:active {
+  transform: scale(0.92);
 }
 
 .composer-icon-button:disabled,

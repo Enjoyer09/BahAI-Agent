@@ -78,6 +78,38 @@ function AppContent() {
     if (isMobile) setSidebarOpen(false);
   }, [isMobile]);
 
+  // Keep the mobile composer above the soft keyboard. iOS Safari overlays the
+  // keyboard WITHOUT resizing the layout viewport, so the composer dock (pinned
+  // to the bottom of the full-height root) ends up hidden behind it. We measure
+  // the visualViewport and expose the keyboard height as a CSS var (--kb) that
+  // the composer dock translates up by. On Android/Chrome (where the layout
+  // viewport resizes, and via interactive-widget=resizes-content), vv.height
+  // already equals the visible area, so --kb resolves to 0 and nothing moves.
+  useEffect(() => {
+    if (!isMobile) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const apply = () => {
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty('--kb', `${kb}px`);
+      // While typing, keep the latest messages visible above the keyboard.
+      if (kb > 0 && document.activeElement?.classList?.contains('composer-textarea')) {
+        const scroller = document.querySelector<HTMLElement>('.mobile-chat-scroll');
+        if (scroller) scroller.scrollTop = scroller.scrollHeight;
+      }
+    };
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    window.addEventListener('resize', apply);
+    apply();
+    return () => {
+      vv.removeEventListener('resize', apply);
+      vv.removeEventListener('scroll', apply);
+      window.removeEventListener('resize', apply);
+      document.documentElement.style.removeProperty('--kb');
+    };
+  }, [isMobile]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;

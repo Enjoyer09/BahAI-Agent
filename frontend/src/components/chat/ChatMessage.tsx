@@ -216,16 +216,16 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
           <div
             className={`leading-relaxed break-words ${isMobile && !isBot ? 'rounded-2xl px-4 py-2.5' : 'rounded-[22px] px-4 py-3 sm:px-4.5 sm:py-3.5'} ${isMobile && isBot ? 'pl-2' : ''}`}
             style={isBot ? ((isMobile || isDesktopProduct) ? {
-              background: 'transparent',
-              border: 'none',
+              background: 'var(--bg-surface-elevated, rgba(255,255,255,0.03))',
+              border: '1px solid var(--border-subtle)',
               boxShadow: 'none'
             } : {
               background: 'var(--bg-surface-elevated, rgba(255,255,255,0.03))',
               border: '1px solid var(--border-subtle)',
               boxShadow: '0 14px 34px rgba(0,0,0,0.06)'
             }) : ((isMobile || isDesktopProduct) ? {
-              background: 'var(--bg-surface-alt)',
-              border: 'none',
+              background: 'var(--color-accent-muted)',
+              border: '1px solid var(--border-subtle)',
             } : {
               background: 'rgba(255,255,255,0.03)',
               border: '1px solid rgba(255,255,255,0.05)'
