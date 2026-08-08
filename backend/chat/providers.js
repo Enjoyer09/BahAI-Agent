@@ -324,7 +324,10 @@ function buildProviderCandidates({
         // fastModel = FAST || AUTO_FAST || defaultModel was computed first.
         defaults: {
           fast: env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel,
-          smart: env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel,
+          // Smart/conversational tier must prefer a GENERAL model, not the coder.
+          // Previously this fell back to AUTO_FAST_MODEL (qwen2.5-coder), which
+          // degraded open conversation. Prefer AUTO_SMART_MODEL explicitly.
+          smart: env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel,
         },
       });
 

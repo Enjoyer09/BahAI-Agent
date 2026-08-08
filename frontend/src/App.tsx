@@ -3,7 +3,7 @@ import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen, K
 import ChatArea from './components/chat/ChatArea';
 import KeyboardShortcutsDialog from './components/chat/KeyboardShortcutsDialog';
 import { Composer } from './components/chat/Composer';
-import VoiceMode, { speechSupported } from './components/chat/VoiceMode';
+import VoiceMode, { speechSupported, mediaRecordingSupported } from './components/chat/VoiceMode';
 import ActionCenterModal from './components/chat/ActionCenterModal';
 import AuthModal from './components/auth/AuthModal';
 import Sidebar from './components/sidebar/Sidebar';
@@ -442,7 +442,7 @@ function AppContent() {
             settings={settings}
             jobStatus={chat.jobStatus}
             onCancelJob={chat.stop}
-            onVoiceMode={settings.productMode === 'web_chat' && speechSupported ? () => setShowVoiceMode(true) : undefined}
+            onVoiceMode={settings.productMode === 'web_chat' && (speechSupported || mediaRecordingSupported) ? () => setShowVoiceMode(true) : undefined}
           />
         </div>
 

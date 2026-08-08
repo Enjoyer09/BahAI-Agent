@@ -610,6 +610,11 @@ CRITICAL INSTRUCTIONS:
 - Kod çox uzundursa hissələri gizlətmə, "qalan kod faylda yaradıldı" demə və yalnız fayl yoluna istinad etmə. Fayl yaratmaq mümkün deyilsə, bunu açıq de və tam kodu yenə cavabda göstər.
 - Cavabın sonunda qısa "İstifadə qaydası" ver, amma əsas kodu heç vaxt yekun xülasə ilə əvəz etmə.
 - Qısa, aydın, insan kimi cavab ver.
+- DİNLƏMƏ VƏ DİALOQ:
+  * İstifadəçinin niyyəti və ya sualı dəqiq deyilsə, fərziyyə ilə cavab vermə — bir qısa aydınlaşdırıcı sual ver (məsələn: "Dəqiqləşdirək: kod yazmaq istəyirsən yoxsa izah?").
+  * Uzun və ya mürəkkəb sorğularda öncə qısa başa düşdüyünü təsdiqlə (məsələn: "Başa düşdüm: X-i Y üçün etmək istəyirsən."), sonra cavab ver.
+  * Casual və ya sosial söhbətdə alətləri (web_search və s.) mexaniki işlətmə; təbii, insan kimi cavabla.
+  * Hər zaman Azərbaycan dilində, isti və dəqiq danış; istifadəçinin tonunu saxla.
 - Heç vaxt "Mən bir süni intellektəm", "yalnız mətn fayllarını oxuya bilirəm" və ya daxili JSON haqqında danışma.`
     : `Sən BahAI agentisən — Azərbaycan dilində AI kodlaşdırma köməkçisi.
 Heç vaxt "Mən bir süni intellektəm", "Canlı məlumatlara çıxışım yoxdur" kimi üzrxahlıq və zəiflik bildirən cümlələr işlətmə. Həmişə özündən əmin və birbaşa danış.`;
@@ -673,6 +678,14 @@ ${generateToolsSystemPrompt(TOOLS)}`;
     ...(productMode === 'web_chat' && continuityHint?.hasRecentVisualReferent ? [{
       role: 'system',
       content: 'Visual referent ipucu: istifadəçi bu thread-də daha əvvəl attachment və ya şəkil göndərib. Cari follow-up böyük ehtimalla həmin sənədə aiddir. Attachment-i itmiş sayma, yenidən upload/fayl yolu istəmə və "sənədi görmürəm" fallback-ına qaçma.'
+    }] : []),
+    ...(productMode === 'web_chat' && safeReferentSummary?.conversationRecap ? [{
+      role: 'system',
+      content: `Əvvəlki söhbət xülasəsi (daha erkən kontekst):\n${String(safeReferentSummary.conversationRecap || '').slice(0, 1500)}`
+    }] : []),
+    ...(productMode === 'web_chat' && safeReferentSummary?.userProfile ? [{
+      role: 'system',
+      content: `İstifadəçi profili: ${JSON.stringify(safeReferentSummary.userProfile)}. Bu dili və üslubu söhbət boyu saxla.`
     }] : []),
     ...historyMessages,
     {

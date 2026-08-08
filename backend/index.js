@@ -104,6 +104,7 @@ const browserRouter = require('./routes/browser');
 const miscRouter = require('./routes/misc');
 const approvalsRouter = require('./routes/approvals');
 const ttsRouter = require('./routes/tts');
+const speechRouter = require('./routes/speech');
 const opsRouter = require('./routes/ops');
 
 // ==========================================
@@ -351,6 +352,11 @@ app.use('/', opsRouter);
 // TTS — Fish Audio proxy (Voice Mode) — must be before filesRouter
 // which has a router.use(requireWorkspaceAccess) that would block it
 app.use('/api', ttsRouter);
+
+// STT — multilingual Speech-to-Text proxy (Voice Mode). Disabled by default;
+// activates when STT_BASE_URL + STT_API_KEY are set. Must be before
+// filesRouter for the same access reason as TTS.
+app.use('/api', speechRouter);
 
 // Files — GET /api/files, GET /api/read-file, POST /api/write-file, GET /api/pick-directory
 app.use('/api', filesRouter);

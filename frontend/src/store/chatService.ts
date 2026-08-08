@@ -124,6 +124,37 @@ function sanitizeWebChatHistory(messages: Message[]): Message[] {
   return filtered.slice(-12);
 }
 
+function trunc(s: string, n: number): string {
+  const t = String(s || '').trim();
+  return t.length > n ? `${t.slice(0, n)}…` : t;
+}
+
+// Pair user/assistant messages into turns (oldest -> newest).
+function buildTurnPairs(messages: Message[]): Array<{ user: string; assistant: string }> {
+  const pairs: Array<{ user: string; assistant: string }> = [];
+  let pendingUser = '';
+  for (const m of messages) {
+    const content = String(m.content || '').trim();
+    const hasAttach = Array.isArray(m.attachments) && m.attachments.length > 0;
+    if (!content && !hasAttach) continue;
+    if (m.role === 'user') {
+      pendingUser = content || (hasAttach ? '[attachment]' : '');
+    } else if (m.role === 'assistant') {
+      pairs.push({ user: pendingUser, assistant: content });
+      pendingUser = '';
+    }
+  }
+  return pairs;
+}
+
+// Lightweight, extractive user-profile memory (no LLM call, no latency).
+function detectUserProfile(messages: Message[]): Record<string, unknown> {
+  const userMsgs = messages.filter((m) => m.role === 'user' && String(m.content || '').trim());
+  const az = userMsgs.filter((m) => /[əığıöşüçƏIĞÖŞÜÇ]/u.test(m.content || '')).length;
+  const language = userMsgs.length ? (az >= userMsgs.length * 0.5 ? 'az' : 'en') : 'az';
+  return { language };
+}
+
 function buildWebReferentSummary(messages: Message[], latestInput: string): Record<string, unknown> | null {
   const history = sanitizeWebChatHistory(messages);
   if (history.length < 2) return null;
@@ -145,6 +176,16 @@ function buildWebReferentSummary(messages: Message[], latestInput: string): Reco
   const hasMeaningfulPriorThread = history.filter((item) => item.role === 'assistant' || item.role === 'user').length >= 2;
   if (!hasMeaningfulPriorThread) return null;
 
+  // Rolling memory: surface a few EARLIER turns so the agent keeps context
+  // beyond the immediate previous pair (helps "listening" across long chats).
+  const turns = buildTurnPairs(history);
+  const earlier = turns.slice(0, -1).slice(-6);
+  const conversationRecap = earlier.length >= 2
+    ? earlier.map((t) => `İstifadəçi: ${trunc(t.user, 200)} | BahAI: ${trunc(t.assistant, 300)}`).join('\n')
+    : null;
+
+  const userProfile = detectUserProfile(history);
+
   return {
     latestFollowup: latestInput,
     previousAssistant: String(previousAssistant.content || '').slice(0, 1200),
@@ -155,6 +196,8 @@ function buildWebReferentSummary(messages: Message[], latestInput: string): Reco
       mimeType: previousAttachment.mimeType || '',
       extractedText: String(previousAttachment.extractedText || '').slice(0, 1200),
     } : null,
+    conversationRecap,
+    userProfile,
   };
 }
 

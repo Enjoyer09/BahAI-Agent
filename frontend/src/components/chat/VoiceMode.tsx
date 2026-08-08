@@ -6,7 +6,8 @@
 // Cavab gəlir → səsləndirir (yaşıl danışır)
 // Audio bitir → idle (boz, yenidən basa bilərsən)
 //
-// STT: Web Speech API (tr-TR) | TTS: Fish Audio S2.1 Pro Free
+// STT: server-side /api/stt (MediaRecorder) + Web Speech API fallback (az-AZ)
+// TTS: Fish Audio S2.1 Pro Free
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Mic, MicOff, Volume2, VolumeX, Phone } from 'lucide-react';
@@ -23,6 +24,13 @@ type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 export const speechSupported = Boolean(SpeechRecognition);
 
+// Server-side STT path (MediaRecorder + /api/stt). Works on all modern browsers
+// including Safari/Firefox where the Web Speech API is unreliable or absent.
+export const mediaRecordingSupported =
+  typeof navigator !== 'undefined' &&
+  !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) &&
+  typeof (window as any).MediaRecorder !== 'undefined';
+
 export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoading }: Props) {
   const [state, setState] = useState<VoiceState>('idle');
   const [transcript, setTranscript] = useState('');
@@ -32,6 +40,13 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   const prevAssistantRef = useRef<string>('');
   const activeRef = useRef(true);
   const speakerOffRef = useRef(false);
+
+  // Server STT (MediaRecorder) capture refs
+  const mediaRecorderRef = useRef<any>(null);
+  const mediaChunksRef = useRef<BlobPart[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const wsFinalRef = useRef<string>(''); // Web Speech final transcript (fallback)
+  const usingServerSttRef = useRef<boolean>(false);
 
   useEffect(() => { speakerOffRef.current = isSpeakerOff; }, [isSpeakerOff]);
 
@@ -56,77 +71,134 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   }, [getAudioEl]);
 
   // ── Start listening (called on orb tap) ──
-  const startListening = useCallback(() => {
-    if (!speechSupported) return;
+  const startListening = useCallback(async () => {
     setError(null);
     setTranscript('');
+    wsFinalRef.current = '';
+    mediaChunksRef.current = [];
+    usingServerSttRef.current = false;
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'tr-TR';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => setState('listening');
-
-    recognition.onresult = (event: any) => {
-      let interim = '';
-      let final = '';
-      for (let i = 0; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          final += event.results[i][0].transcript;
-        } else {
-          interim += event.results[i][0].transcript;
-        }
+    // Primary path: capture audio locally and transcribe on the server (/api/stt).
+    if (mediaRecordingSupported) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaStreamRef.current = stream;
+        const recorder = new (window as any).MediaRecorder(stream);
+        recorder.ondataavailable = (e: any) => {
+          if (e.data && e.data.size > 0) mediaChunksRef.current.push(e.data);
+        };
+        recorder.start();
+        mediaRecorderRef.current = recorder;
+        usingServerSttRef.current = true;
+      } catch (e: any) {
+        // Permission denied / no device / not allowed → fall back to Web Speech.
+        mediaRecorderRef.current = null;
+        usingServerSttRef.current = false;
       }
-      setTranscript(final || interim);
-      recognition._finalTranscript = final || interim;
-    };
-
-    recognition.onend = () => {
-      // Only fires when we explicitly stop — do nothing here,
-      // sending is handled by stopAndSend()
-    };
-
-    recognition.onerror = (event: any) => {
-      if (event.error === 'no-speech' || event.error === 'aborted') return;
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        setError('Mikrofon icazəsi yoxdur. Brauzer ayarlarından icazə verin.');
-      } else if (event.error === 'network') {
-        setError('İnternet bağlantısı lazımdır.');
-      } else {
-        setError(`Xəta: ${event.error}`);
-      }
-      setState('idle');
-    };
-
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch (e: any) {
-      setError(`Mikrofon açılmadı: ${e?.message || ''}`);
-      setState('idle');
     }
+
+    // Live transcript preview via Web Speech API (best-effort). Also serves as the
+    // fallback transcript if server STT is unconfigured/unavailable. Language is
+    // fixed to Azerbaijani (it was incorrectly set to tr-TR before).
+    if (speechSupported) {
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'az-AZ';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+        recognition.onresult = (event: any) => {
+          let interim = '';
+          let final = '';
+          for (let i = 0; i < event.results.length; i++) {
+            if (event.results[i].isFinal) final += event.results[i][0].transcript;
+            else interim += event.results[i][0].transcript;
+          }
+          wsFinalRef.current = final || interim;
+          setTranscript(final || interim);
+        };
+        recognition.onerror = (event: any) => {
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            setError('Mikrofon icazəsi yoxdur. Brauzer ayarlarından icazə verin.');
+          }
+        };
+        recognitionRef.current = recognition;
+        recognition.start();
+      } catch (e: any) {
+        recognitionRef.current = null;
+      }
+    }
+
+    setState('listening');
+  }, []);
+
+  // ── Transcribe via server STT (MediaRecorder buffer) ──
+  const transcribeServer = useCallback((): Promise<string> => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return Promise.resolve('');
+
+    return new Promise<string>((resolve) => {
+      recorder.onstop = async () => {
+        try {
+          const blob = new Blob(mediaChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+          if (!blob.size) return resolve(wsFinalRef.current);
+
+          const fd = new FormData();
+          fd.append('audio', blob, 'audio.webm');
+          const token = localStorage.getItem('auth_token') || '';
+          const res = await fetch('/api/stt?lang=az', {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: fd,
+          });
+
+          if (!res.ok) {
+            // Unconfigured or upstream error → fall back to Web Speech transcript.
+            return resolve(wsFinalRef.current);
+          }
+          const data = await res.json().catch(() => null);
+          const text = (data && data.text) || '';
+          resolve(text || wsFinalRef.current);
+        } catch {
+          resolve(wsFinalRef.current);
+        }
+      };
+      try { recorder.stop(); } catch { resolve(wsFinalRef.current); }
+    });
   }, []);
 
   // ── Stop listening and send (called on second orb tap) ──
   const stopAndSend = useCallback(() => {
-    const recognition = recognitionRef.current;
-    if (!recognition) return;
-
-    const text = (recognition._finalTranscript || '').trim();
-    try { recognition.stop(); } catch {}
-    recognitionRef.current = null;
-
-    if (text.length > 0) {
-      setState('processing');
-      setTranscript(text);
-      onSend(text);
-    } else {
-      setState('idle');
-      setTranscript('');
+    // Stop the Web Speech preview/fallback recognizer.
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+      recognitionRef.current = null;
     }
-  }, [onSend]);
+
+    const finish = (text: string) => {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+      }
+      mediaRecorderRef.current = null;
+      const t = (text || '').trim();
+      if (t) {
+        setState('processing');
+        setTranscript(t);
+        onSend(t);
+      } else {
+        setState('idle');
+        setTranscript('');
+      }
+    };
+
+    if (usingServerSttRef.current && mediaRecorderRef.current) {
+      setState('processing');
+      transcribeServer().then(finish).catch(() => finish(wsFinalRef.current));
+    } else {
+      finish(wsFinalRef.current);
+    }
+  }, [onSend, transcribeServer]);
 
   // ── TTS ──
   // Use a SINGLE audio element for the lifetime of VoiceMode. Mobile browsers
@@ -216,6 +288,8 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
     return () => {
       activeRef.current = false;
       if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch {} }
+      if (mediaRecorderRef.current) { try { mediaRecorderRef.current.stop(); } catch {} mediaRecorderRef.current = null; }
+      if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach((t) => t.stop()); mediaStreamRef.current = null; }
       const audio = audioElRef.current;
       if (audio) { audio.pause(); if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src); }
     };
@@ -261,12 +335,14 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
   const handleClose = () => {
     activeRef.current = false;
     if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch {} }
+    if (mediaRecorderRef.current) { try { mediaRecorderRef.current.stop(); } catch {} mediaRecorderRef.current = null; }
+    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach((t) => t.stop()); mediaStreamRef.current = null; }
     const audio = audioElRef.current;
     if (audio) audio.pause();
     onClose();
   };
 
-  if (!speechSupported) {
+  if (!speechSupported && !mediaRecordingSupported) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
         <div className="text-center p-8">
