@@ -82,6 +82,11 @@ const NVIDIA_SPEC = {
   },
   modelDefault: {
     vision: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+    // Drop-in defaults: with ONLY NVIDIA_API_KEY set, NVIDIA still serves as a
+    // cross-provider failover for text chat (no per-slot env vars required).
+    // Small, free NIM instruct model — override with NVIDIA_GENERAL_MODEL etc.
+    general: 'meta/llama-3.1-8b-instruct',
+    smart: 'meta/llama-3.1-8b-instruct',
   },
   modelAliasEnv: {
     general: ['NVIDIA_FAST_MODEL'], // old: general = GENERAL || FAST

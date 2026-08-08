@@ -544,4 +544,26 @@ describe('provider candidate routing', () => {
     const distinctBases = new Set(candidates.map((p) => String(p.baseURL).replace(/\/+$/, '').toLowerCase()));
     expect(distinctBases.size).toBeGreaterThan(1);
   });
+
+  it('provides NVIDIA text-chat candidates from defaults when only NVIDIA_API_KEY is set', () => {
+    const candidates = buildProviderCandidates({
+      frontendApiKey: '',
+      frontendBaseUrl: '',
+      frontendModel: 'auto',
+      autoIntent: 'smart',
+      webTaskType: 'general',
+      productMode: 'web_chat',
+      executionMode: 'cloud',
+      env: {
+        NVIDIA_API_KEY: 'nvapi-test'
+        // no NVIDIA_*_MODEL envs — must fall back to modelDefault (drop-in)
+      },
+      parseProviderPoolFromEnv: () => [],
+      looksLikeOllamaModel
+    });
+
+    const nvidia = candidates.filter((p) => p.baseURL === 'https://integrate.api.nvidia.com/v1');
+    expect(nvidia.length).toBeGreaterThan(0);
+    expect(nvidia.some((p) => p.model === 'meta/llama-3.1-8b-instruct')).toBe(true);
+  });
 });
