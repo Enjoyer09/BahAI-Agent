@@ -408,6 +408,8 @@ function AppContent() {
             isGenerating={chat.loading}
             onStop={chat.stop}
             settings={settings}
+            jobStatus={chat.jobStatus}
+            onCancelJob={chat.stop}
           />
           {/* Voice Mode button — web_chat only, when Speech API is available */}
           {settings.productMode === 'web_chat' && speechSupported && (

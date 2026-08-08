@@ -811,6 +811,108 @@ button, a, [role="button"] {
   background: var(--color-danger);
 }
 
+/* ==========================================
+   Durable job status pill (web chat background agent)
+   ========================================== */
+.composer-job-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 4px 4px;
+  padding: 4px 8px;
+  width: fit-content;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 999px;
+  background: var(--bg-surface, #f1f3f5);
+  color: var(--fg-muted, #6b7280);
+  border: 1px solid var(--border-subtle, #e3e6ea);
+}
+
+.composer-job-status-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.composer-job-status-detail {
+  margin-left: 4px;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+  font-weight: 400;
+}
+
+.composer-job-status-spinner {
+  display: inline-flex;
+}
+
+.composer-job-spin {
+  animation: composer-job-spin 0.9s linear infinite;
+}
+
+@keyframes composer-job-spin {
+  to { transform: rotate(360deg); }
+}
+
+.composer-job-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.composer-job-cancel:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* Status tones */
+.composer-job-status--queued {
+  color: #2563eb;
+  border-color: color-mix(in srgb, #2563eb 30%, transparent);
+  background: color-mix(in srgb, #2563eb 8%, var(--bg-main));
+}
+.composer-job-status--running {
+  color: #2563eb;
+  border-color: color-mix(in srgb, #2563eb 30%, transparent);
+  background: color-mix(in srgb, #2563eb 8%, var(--bg-main));
+}
+.composer-job-status--retrying {
+  color: #b45309;
+  border-color: color-mix(in srgb, #d97706 35%, transparent);
+  background: color-mix(in srgb, #d97706 10%, var(--bg-main));
+}
+.composer-job-status--completed {
+  color: #16a34a;
+  border-color: color-mix(in srgb, #16a34a 30%, transparent);
+  background: color-mix(in srgb, #16a34a 8%, var(--bg-main));
+}
+.composer-job-status--failed {
+  color: #dc2626;
+  border-color: color-mix(in srgb, #dc2626 30%, transparent);
+  background: color-mix(in srgb, #dc2626 8%, var(--bg-main));
+}
+.composer-job-status--cancelled {
+  color: #6b7280;
+  border-color: color-mix(in srgb, #6b7280 30%, transparent);
+  background: color-mix(in srgb, #6b7280 8%, var(--bg-main));
+}
+
+@media (prefers-color-scheme: dark) {
+  .composer-job-cancel:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+
 .composer-textarea {
   min-width: 0;
   min-height: 44px;

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FileText, Paperclip, Send, Square, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileText, Loader2, Paperclip, Send, Square, X } from 'lucide-react';
 import type { Attachment } from '../../lib/types';
+import type { JobStatusState } from '../../store/chatService';
+import type { JobStatus } from '../../lib/jobTypes';
 import { useToast } from '../common/Toast';
 
 interface ComposerProps {
@@ -9,6 +11,74 @@ interface ComposerProps {
   isGenerating?: boolean;
   onStop?: () => void;
   settings?: any;
+  // Durable background-job status (web chat): shows queued/running/retrying/
+  // cancelled/completed and exposes a cancel affordance.
+  jobStatus?: JobStatusState | null;
+  onCancelJob?: () => void;
+}
+
+// Localized labels + tone per durable job status.
+const JOB_STATUS_META: Record<JobStatus, { label: string; tone: string }> = {
+  queued: { label: 'Növbədə', tone: 'queued' },
+  running: { label: 'İşlənir', tone: 'running' },
+  retrying: { label: 'Təkrar cəhd', tone: 'retrying' },
+  completed: { label: 'Tamamlandı', tone: 'completed' },
+  failed: { label: 'Xəta', tone: 'failed' },
+  cancelled: { label: 'Ləğv edildi', tone: 'cancelled' },
+};
+
+function JobStatusPill({
+  status,
+  queuePosition,
+  errorMessage,
+  onCancel,
+}: {
+  status: JobStatus;
+  queuePosition?: number;
+  errorMessage?: string | null;
+  onCancel?: () => void;
+}) {
+  const meta = JOB_STATUS_META[status];
+  const isActive = status === 'queued' || status === 'running' || status === 'retrying';
+  const label =
+    status === 'queued' && typeof queuePosition === 'number' && queuePosition > 0
+      ? `${meta.label} · #${queuePosition}`
+      : meta.label;
+
+  return (
+    <div
+      className={`composer-job-status composer-job-status--${meta.tone}`}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="composer-job-status-spinner">
+        {status === 'completed' ? (
+          <CheckCircle2 size={14} />
+        ) : status === 'failed' ? (
+          <AlertCircle size={14} />
+        ) : status === 'cancelled' ? (
+          <X size={14} />
+        ) : (
+          <Loader2 size={14} className="composer-job-spin" />
+        )}
+      </span>
+      <span className="composer-job-status-label">{label}</span>
+      {status === 'failed' && errorMessage && (
+        <span className="composer-job-status-detail">{errorMessage}</span>
+      )}
+      {isActive && onCancel && (
+        <button
+          type="button"
+          className="composer-job-cancel"
+          onClick={onCancel}
+          aria-label="Job-i ləğv et"
+          title="Ləğv et"
+        >
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  );
 }
 
 const MAX_ATTACHMENTS = 5;
@@ -30,7 +100,7 @@ function fileToAttachment(file: File): Promise<Attachment> {
   });
 }
 
-export function Composer({ onSendMessage, disabled, isGenerating, onStop, settings }: ComposerProps) {
+export function Composer({ onSendMessage, disabled, isGenerating, onStop, settings, jobStatus, onCancelJob }: ComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,6 +185,15 @@ export function Composer({ onSendMessage, disabled, isGenerating, onStop, settin
             </div>
           ))}
         </div>
+      )}
+
+      {jobStatus && (
+        <JobStatusPill
+          status={jobStatus.status}
+          queuePosition={jobStatus.queuePosition}
+          errorMessage={jobStatus.errorMessage}
+          onCancel={onCancelJob || onStop}
+        />
       )}
 
       <div className="composer-input-row">

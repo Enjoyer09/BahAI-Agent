@@ -9,12 +9,25 @@ const router = express.Router();
 
 const repo = require('../jobs/repository');
 const { JobStatus, isTerminal } = require('../jobs/types');
+const { logger } = require('../lib/structuredLogger');
+const { config } = require('../config');
 
 function requireUser(req, res, next) {
   if (!req.user || !req.user.id) {
     return res.status(401).json({ error: 'Giriş tələb olunur' });
   }
   next();
+}
+
+// Normalize a stored event row into the same flat shape the live sink streams
+// (payload fields spread to the top level) so the client mapping is uniform
+// whether it is reconnecting from durable storage or attached to a live stream.
+function writeEvent(res, event) {
+  const normalized =
+    event && event.payload && typeof event.payload === 'object'
+      ? { type: event.type, seq: Number(event.seq), jobId: event.job_id, ...event.payload }
+      : event;
+  res.write(`data: ${JSON.stringify(normalized)}\n\n`);
 }
 
 function queuePosition(job) {
@@ -50,6 +63,22 @@ router.post('/', requireUser, async (req, res) => {
       return res.status(413).json({ error: 'Job payloadı çox böyükdür (max 1MB).' });
     }
 
+    // Per-user admission guard: prevent a single user from flooding the durable
+    // queue. The claim-time perUserActive cap already limits *concurrency*; this
+    // caps *queued+running* volume so one user cannot starve the others.
+    const activeForUser = await repo.countActiveForUser({ userId: req.user.id });
+    const maxActive = config.quota.maxActivePerUser;
+    if (activeForUser >= maxActive) {
+      logger.warn('Job admission rejected: per-user active cap reached', {
+        userId: req.user.id, active: activeForUser, max: maxActive
+      });
+      return res.status(429).json({
+        error: 'Aktiv job limitinə çatdınız. Davam edən işlərin bitməsini gözləyin.',
+        activeJobs: activeForUser,
+        maxActiveJobs: maxActive
+      });
+    }
+
     const safePriority = Math.max(0, Math.min(2, Math.trunc(Number(priority) || 1)));
     const { id } = await repo.createJob({
       userId: req.user.id,
@@ -63,9 +92,10 @@ router.post('/', requireUser, async (req, res) => {
 
     const job = await repo.getJob({ jobId: id });
     const position = await queuePosition(job);
+    logger.info('Job admitted', { jobId: id, userId: req.user.id, status: job.status, queuePosition: position });
     return res.status(202).json({ jobId: id, status: job.status, queuePosition: position });
   } catch (err) {
-    console.error('Job submit error:', err.message);
+    logger.error('Job submit error', { message: err.message, userId: req.user && req.user.id });
     return res.status(500).json({ error: 'Job qəbul edilə bilmədi.' });
   }
 });
@@ -129,9 +159,7 @@ router.get('/:id/events', requireUser, async (req, res) => {
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no'
     });
-    const send = (event) => {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
-    };
+    const send = (event) => writeEvent(res, event);
     for (const e of existing) send(e);
     if (isTerminal(job.status)) send({ type: 'terminal', job });
 

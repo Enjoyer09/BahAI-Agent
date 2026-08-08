@@ -64,6 +64,9 @@ function createWorker(opts) {
       // abandon before doing provider work.
       const fresh = await repo.getJob({ jobId: job.id });
       if (fresh && fresh.cancel_requested_at) {
+        // A cancel arrived before any provider work began. Record it on the
+        // durable stream so a reconnecting client sees the terminal state.
+        await sink.cancelled({ status: 'cancelled' }).catch(() => {});
         await repo.cancelJob({ jobId: job.id });
         return;
       }
@@ -76,8 +79,16 @@ function createWorker(opts) {
       });
 
       if (outcome.status === 'completed') {
+        // Emit BEFORE flipping the job status so the content always lands on the
+        // durable stream and any reconnecting client receives the answer.
+        await sink.completed({ result: outcome.result || {}, status: 'completed' }).catch(() => {});
         await repo.completeJob({ jobId: job.id, result: outcome.result || {} });
       } else {
+        await sink.failed({
+          errorCode: outcome.errorCode || 'INTERNAL',
+          errorMessage: outcome.errorMessage || 'Job failed',
+          status: 'failed'
+        }).catch(() => {});
         await repo.failJob({
           jobId: job.id,
           errorCode: outcome.errorCode || 'INTERNAL',
@@ -91,6 +102,7 @@ function createWorker(opts) {
       // rather than a failure that would be retried.
       const fresh = await repo.getJob({ jobId: job.id }).catch(() => null);
       if (fresh && fresh.cancel_requested_at) {
+        await sink.cancelled({ status: 'cancelled' }).catch(() => {});
         await repo.cancelJob({ jobId: job.id }).catch(() => {});
         return;
       }

@@ -104,6 +104,7 @@ const browserRouter = require('./routes/browser');
 const miscRouter = require('./routes/misc');
 const approvalsRouter = require('./routes/approvals');
 const ttsRouter = require('./routes/tts');
+const opsRouter = require('./routes/ops');
 
 // ==========================================
 // Configuration
@@ -343,6 +344,9 @@ app.use('/api/chat', injectChatRuntime, chatRouter);
 
 // Durable job admission + status (web process only; execution runs in worker)
 app.use('/api/jobs', jobsRouter);
+
+// Ops: liveness/readiness probes + admin operational snapshot
+app.use('/', opsRouter);
 
 // TTS — Fish Audio proxy (Voice Mode) — must be before filesRouter
 // which has a router.use(requireWorkspaceAccess) that would block it

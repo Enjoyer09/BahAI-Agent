@@ -312,6 +312,19 @@ async function queueDepth(run = null) {
   return row;
 }
 
+async function countActiveForUser({ userId, run = null }) {
+  const query = getQuery(run);
+  const row = (
+    await query(
+      `SELECT COUNT(*) AS active
+       FROM agent_jobs
+       WHERE user_id = $1 AND status IN ('queued','retrying','running')`,
+      [userId]
+    )
+  ).rows[0];
+  return Number(row?.active || 0);
+}
+
 module.exports = {
   generateId,
   createJob,
@@ -326,5 +339,6 @@ module.exports = {
   getJob,
   listJobsForUser,
   queueDepth,
+  countActiveForUser,
   LEASE_SLACK_MS
 };

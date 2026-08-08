@@ -2,7 +2,7 @@
 // useChat Hook — Refactored (Reducer + Service)
 // ==========================================
 
-import { useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useReducer, useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import type { Message, Conversation, Project, Settings, ApprovalRequest, PlannerArtifact, ExecutionArtifact } from '../lib/types';
 import { trackChatMessage } from '../lib/telemetry';
 import {
@@ -13,6 +13,8 @@ import { chatReducer } from '../store/chatReducer';
 
 import {
   handleSendMessage,
+  handleSendJobMessage,
+  followJobStream,
   loadWorkspace,
   listConversations,
   generateId,
@@ -38,7 +40,10 @@ import {
   previewDiff,
   applyDiff,
 } from '../store/chatService';
+import type { JobStatusState } from '../store/chatService';
 import { getConversationMessages, searchConversations } from '../lib/api';
+import { listJobs, cancelJob } from '../lib/jobClient';
+import type { JobStatus } from '../lib/jobTypes';
 import {
   mergeApprovalDecisionIntoMemory,
   mergeEvidenceSummaryIntoMemory,
@@ -69,6 +74,17 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   const streamBufferRef = useRef<string>('');
   const storageTimeout = useRef<any>(null);
   const loadingOlderMessagesRef = useRef<Set<string>>(new Set());
+
+  // Durable job tracking: for server-backed web chat each conversation may have an
+  // in-flight background job. We keep the close fn + last status so the UI can show
+  // queued/running/retrying/cancelled/completed and cancel/stop it on demand, and
+  // so a reload can resume the stream from where it left off.
+  const jobByConvRef = useRef<Record<string, { jobId: string; status: JobStatus; close: () => void }>>({});
+  const [activeJobStatus, setActiveJobStatus] = useState<JobStatusState | null>(null);
+
+  function isTerminalJobStatus(status: JobStatus): boolean {
+    return status === 'completed' || status === 'failed' || status === 'cancelled';
+  }
 
   const persistLocalWorkspace = useCallback((projects: Project[], conversations: Conversation[]) => {
     try {
@@ -344,6 +360,71 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       })
       .catch(() => dispatch({ type: 'SET_INTERACTIONS', interactions: [] }));
   }, [state.serverBacked, state.activeConvId]);
+
+  // ==========================================
+  // Resume in-flight durable jobs after reload / reconnect (web chat only)
+  // ==========================================
+  useEffect(() => {
+    if (!state.hydrated || !state.serverBacked) return;
+    if (settings.productMode !== 'web_chat') return;
+    const convId = state.activeConvId;
+    if (!convId) return;
+    // Don't clobber a job we're already following in this session.
+    const existing = jobByConvRef.current[convId];
+    if (existing && !isTerminalJobStatus(existing.status)) return;
+
+    let cancelled = false;
+    const resumeCtx: SendMessageContext = {
+      settings,
+      activeConvId: convId,
+      activeProject: projectsRef.current.find((p) => p.id === conversationsRef.current.find((c) => c.id === convId)?.projectId) || null,
+      messages: [],
+      projectMemory: stateRef.current.projectMemory,
+      plannerArtifact: stateRef.current.plannerArtifact,
+      executionArtifacts: stateRef.current.executionArtifacts,
+      serverBacked: stateRef.current.serverBacked,
+      safeMode: stateRef.current.safeMode,
+      signal: undefined,
+      sink: eventSink,
+    };
+
+    const applyStatus = (state: JobStatusState | null) => {
+      if (state) {
+        const prev = jobByConvRef.current[convId] || ({} as any);
+        jobByConvRef.current[convId] = { jobId: state.jobId, status: state.status, close: prev.close || (() => {}) };
+        setActiveJobStatus(state);
+        dispatch({ type: 'SET_LOADING', loading: !isTerminalJobStatus(state.status) });
+        if (isTerminalJobStatus(state.status)) {
+          window.setTimeout(() => setActiveJobStatus((cur) => (cur && cur.jobId === state.jobId ? null : cur)), 2500);
+        }
+      } else {
+        setActiveJobStatus(null);
+        dispatch({ type: 'SET_LOADING', loading: false });
+      }
+    };
+
+    const resume = async () => {
+      try {
+        const jobs = await listJobs(50);
+        if (cancelled) return;
+        const candidate = jobs.find((j) => j.conversation_id === convId && !isTerminalJobStatus(j.status as JobStatus));
+        if (!candidate) return;
+        const lastSeq = Number(typeof localStorage !== 'undefined' ? localStorage.getItem(`job_seq_${candidate.id}`) || '0' : '0');
+        const close = followJobStream({
+          jobId: candidate.id,
+          afterSeq: lastSeq,
+          ctx: resumeCtx,
+          onJobStatus: applyStatus,
+        });
+        jobByConvRef.current[convId] = { jobId: candidate.id, status: candidate.status as JobStatus, close };
+        applyStatus({ jobId: candidate.id, status: candidate.status as JobStatus });
+      } catch {
+        /* ignore resume errors */
+      }
+    };
+    resume();
+    return () => { cancelled = true; };
+  }, [state.hydrated, state.serverBacked, state.activeConvId, settings.productMode]);
 
   // ==========================================
   // Event Sink (bridge between SSE handler and reducer)
@@ -737,13 +818,52 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       sink: eventSink,
     };
 
+    // Server-backed web chat admits the request as a durable background job and
+    // follows its reconnectable event stream, so work survives a disconnect. The
+    // legacy SSE path remains for desktop / offline web chat.
+    const useJobTransport = settings.productMode === 'web_chat' && stateRef.current.serverBacked;
+
+    const applyJobStatus = (state: JobStatusState | null) => {
+      if (state) {
+        const prev = jobByConvRef.current[convId] || ({} as any);
+        jobByConvRef.current[convId] = { jobId: state.jobId, status: state.status, close: prev.close || (() => {}) };
+        setActiveJobStatus(state);
+        dispatch({ type: 'SET_LOADING', loading: !isTerminalJobStatus(state.status) });
+        if (isTerminalJobStatus(state.status)) {
+          window.setTimeout(() => {
+            setActiveJobStatus((cur) => (cur && cur.jobId === state.jobId ? null : cur));
+          }, 2500);
+        }
+      } else {
+        setActiveJobStatus(null);
+        dispatch({ type: 'SET_LOADING', loading: false });
+      }
+    };
+
     try {
-      await handleSendMessage(input, attachments, ctx);
+      if (useJobTransport) {
+        applyJobStatus({ jobId: '', status: 'queued' });
+        const result = await handleSendJobMessage(input, attachments, ctx, applyJobStatus);
+        jobByConvRef.current[convId] = {
+          ...(jobByConvRef.current[convId] || {}),
+          jobId: result.jobId,
+          status: jobByConvRef.current[convId]?.status || 'queued',
+          close: result.close,
+        };
+      } else {
+        await handleSendMessage(input, attachments, ctx);
+      }
     } finally {
-      dispatch({ type: 'SET_LOADING', loading: false });
-      dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
-      const responseTime = Date.now() - userMsg.timestamp;
-      trackChatMessage(settings.model, responseTime);
+      if (!useJobTransport) {
+        dispatch({ type: 'SET_LOADING', loading: false });
+        dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
+        const responseTime = Date.now() - userMsg.timestamp;
+        trackChatMessage(settings.model, responseTime);
+      } else {
+        // For the job path, the stream keeps loading=true until the job settles;
+        // only release the abort controller (no longer used for aborting).
+        dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
+      }
     }
   }, [stateRef, activeProject, settings, eventSink, ensureConversationForSend, persistLocalWorkspace]);
 
@@ -1045,6 +1165,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     activeConversation,
     activeProject,
     loading: state.loading,
+    jobStatus: activeJobStatus,
     loadingOlderMessages: activeConversation ? loadingOlderMessagesRef.current.has(activeConversation.id) : false,
     previewKey: state.previewKey,
     safeMode: state.safeMode,
@@ -1061,7 +1182,20 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     editMessage: editMessageFn,
     regenerateMessage: regenerateMessageFn,
     // RACE FIX: use stateRef for abort controller to always get latest
-    stop: () => { stateRef.current.abortController?.abort(); dispatch({ type: 'SET_LOADING', loading: false }); },
+    stop: () => {
+      const convId = stateRef.current.activeConvId;
+      const job = convId ? jobByConvRef.current[convId] : null;
+      if (job && !isTerminalJobStatus(job.status)) {
+        try { job.close(); } catch { /* ignore */ }
+        cancelJob(job.jobId).catch(() => {});
+        delete jobByConvRef.current[convId as string];
+        setActiveJobStatus(null);
+        dispatch({ type: 'SET_LOADING', loading: false });
+        return;
+      }
+      stateRef.current.abortController?.abort();
+      dispatch({ type: 'SET_LOADING', loading: false });
+    },
     decideApproval,
     resolveHumanCheckpoint,
     runHealthCheck,

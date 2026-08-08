@@ -12,6 +12,8 @@ try {
 
 const os = require('os');
 const db = require('./db');
+const { config } = require('./config');
+const { logger } = require('./lib/structuredLogger');
 const { createWorker } = require('./jobs/workerLoop');
 const { createAgentExecutor } = require('./jobs/agentExecutor');
 
@@ -20,27 +22,37 @@ const RECOVER_MS = parseInt(process.env.WORKER_RECOVER_MS || '5000', 10);
 
 async function main() {
   await db.initDb();
-  console.log(`🔧 Worker başladı: ${WORKER_ID}`);
+  logger.info('Worker started', {
+    workerId: WORKER_ID,
+    concurrency: config.worker.concurrency,
+    perUserActive: config.worker.perUserActive,
+    omniRouteEnabled: config.omniRoute.enabled
+  });
 
-  const execute = await createAgentExecutor({ env: process.env });
+  const execute = await createAgentExecutor({ env: process.env, db });
   const worker = createWorker({
     workerId: WORKER_ID,
+    concurrency: config.worker.concurrency,
+    leaseMs: config.worker.leaseMs,
+    heartbeatMs: config.worker.heartbeatMs,
+    perUserActive: config.worker.perUserActive,
+    pollIntervalMs: config.worker.pollMs,
     execute,
-    onError: (err) => console.error(`[worker:${WORKER_ID}] error:`, err && err.message)
+    onError: (err) => logger.error('worker error', { workerId: WORKER_ID, message: err && err.message })
   });
 
   worker.start();
 
   // Periodically recover jobs whose lease expired (worker crash/restart safety).
   const recoverTimer = setInterval(() => {
-    worker.recover().catch((err) => console.error('[worker] recover error:', err.message));
+    worker.recover().catch((err) => logger.error('worker recover error', { message: err.message }));
   }, RECOVER_MS);
 
   let shuttingDown = false;
   const shutdown = async (signal) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`[worker:${WORKER_ID}] ${signal} alındı, boşaldılır...`);
+    logger.info('Worker shutting down', { workerId: WORKER_ID, signal });
     clearInterval(recoverTimer);
     await worker.drain();
     await db.shutdown();

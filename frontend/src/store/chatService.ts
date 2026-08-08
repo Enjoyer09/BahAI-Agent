@@ -27,6 +27,8 @@ import {
   submitApproval
 } from '../lib/api';
 import { trackToolUse, trackChatError } from '../lib/telemetry';
+import { submitJob, connectJobEvents, mapBackendJobEventToSSE } from '../lib/jobClient';
+import type { JobStatus } from '../lib/jobTypes';
 import {
   normalizeAssistantText,
   chooseAssistantContent,
@@ -205,13 +207,21 @@ export interface SendMessageContext {
   sink: EventSink;
 }
 
-export async function handleSendMessage(
-  input: string,
-  attachments: any[],
-  ctx: SendMessageContext
-): Promise<void> {
-  const { settings, activeConvId, activeProject, messages, projectMemory, serverBacked, safeMode, sink } = ctx;
-  // Process attachments
+export interface PreparedChat {
+  messages: any[];
+  referentSummary: Record<string, unknown> | null;
+  isSmartMode: boolean;
+  isWebChat: boolean;
+  effectiveBaseUrl: string;
+  effectiveApiKey: string;
+  effectiveModel: string;
+}
+
+// Builds the final model payload (history slice, enriched attachments, referent
+// summary, effective provider routing) shared by BOTH the legacy SSE path and
+// the durable job path so a request is framed identically regardless of transport.
+export async function buildPreparedMessages(ctx: SendMessageContext, input: string, attachments: any[]): Promise<PreparedChat> {
+  const { settings, messages, projectMemory } = ctx;
   const enrichedAttachments = await extractAttachments(attachments);
 
   // useChat already places the optimistic user message in the conversation.
@@ -229,7 +239,222 @@ export async function handleSendMessage(
       timestamp: Date.now(),
     });
   }
+
+  const isLikelyLocalModel = !settings.model.includes('/') || settings.baseUrl.includes('localhost') || settings.baseUrl.includes('127.0.0.1');
+  const MAX_HISTORY_MESSAGES = isLikelyLocalModel ? 12 : 20;
+  const historySource = settings.productMode === 'web_chat'
+    ? sanitizeWebChatHistory(currentMsgs)
+    : currentMsgs;
+  const historySlice = historySource.slice(-MAX_HISTORY_MESSAGES);
+  const preparedMessagesCore = historySlice.map((m, idx) => {
+    const isRecent = idx >= historySlice.length - 6;
+    const trimmedToolCalls = isRecent
+      ? m.tool_calls?.map((tc: any) => ({
+          id: tc.id,
+          type: tc.type || 'function',
+          function: {
+            name: tc.function?.name || tc.name || '',
+            arguments: String(tc.function?.arguments || tc.args || '').slice(0, 2000),
+          },
+        }))
+      : undefined;
+    return {
+      role: m.role,
+      content: String(m.content || '').slice(0, 8000),
+      attachments: m.attachments?.map((at: any) => ({
+        id: at.id,
+        name: at.name,
+        type: at.type,
+        mimeType: at.mimeType,
+        extractedText: at.extractedText || '',
+        extractionError: at.extractionError,
+        url: at.url || '',
+      })),
+      tool_calls: trimmedToolCalls,
+      tool_call_id: m.tool_call_id,
+    };
+  });
+
+  const activeGuiSession = projectMemory?.activeGuiSession as any;
+  const referentSummary = settings.productMode === 'web_chat'
+    ? buildWebReferentSummary(currentMsgs, input)
+    : null;
+  const preparedMessages = activeGuiSession?.sessionId && settings.workflow === 'gui'
+    ? [{
+        role: 'system' as const,
+        content: `Active GUI session: ${activeGuiSession.sessionId}. Cari visible browser sessiyası açıqdır.`,
+      }, ...preparedMessagesCore]
+    : preparedMessagesCore;
+
+  let finalPreparedMessages = preparedMessages;
+  if (settings.customInstructions && settings.customInstructions.trim() !== '') {
+    finalPreparedMessages = [
+      { role: 'system' as const, content: `Custom Instructions:\n${settings.customInstructions}` },
+      ...preparedMessages,
+    ];
+  }
+
+  const isSmartMode = settings.aiMode === 'smart';
+  const isWebChat = settings.productMode === 'web_chat';
+  // Web provider credentials and routing belong to the BahAI backend. Do not
+  // let stale browser settings override Railway's OmniRoute configuration.
+  const effectiveBaseUrl = isWebChat ? '' : settings.baseUrl;
+  const effectiveApiKey = isWebChat ? '' : settings.apiKey;
+  const effectiveModel = (isWebChat || isSmartMode) ? 'auto' : settings.model;
+
+  return { messages: finalPreparedMessages, referentSummary, isSmartMode, isWebChat, effectiveBaseUrl, effectiveApiKey, effectiveModel };
+}
+
+export interface JobStatusState {
+  jobId: string;
+  status: JobStatus;
+  queuePosition?: number;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+}
+
+export interface JobSendResult {
+  jobId: string;
+  close: () => void;
+}
+
+function isTerminalJobStatus(status: JobStatus): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled';
+}
+
+// Follow a durable job's reconnectable event stream, dispatching mapped events to
+// the chat pipeline and reporting status transitions. Returns a close() that
+// detaches the stream. Shared by the submit path and the resume-after-reload path
+// so a fresh send and a reconnect behave identically.
+export function followJobStream(opts: {
+  jobId: string;
+  afterSeq?: number;
+  ctx: SendMessageContext;
+  signal?: AbortSignal;
+  onJobStatus?: (state: JobStatusState | null) => void;
+}): () => void {
+  const { jobId, afterSeq = 0, ctx, signal, onJobStatus } = opts;
+  const streamBufferRef = { current: '' };
+  const currentMsgsRef = { current: [] as any[] };
+  const sseContext = {
+    convId: ctx.activeConvId,
+    projectMemory: ctx.projectMemory,
+    activeProject: ctx.activeProject,
+    serverBacked: ctx.serverBacked,
+    settings: ctx.settings,
+    sink: ctx.sink,
+    currentMsgs: currentMsgsRef,
+    streamBufferRef,
+  };
+
+  const closeStream = connectJobEvents({
+    jobId,
+    afterSeq,
+    signal,
+    onEvent: (event) => {
+      if (event.type === 'terminal') {
+        const job = event.job;
+        onJobStatus?.(job
+          ? { jobId, status: job.status, errorCode: job.error_code, errorMessage: job.error_message }
+          : null);
+        closeStream();
+        return;
+      }
+      // Track the latest seq so a reload can reconnect from exactly where it left.
+      if (event.seq && typeof localStorage !== 'undefined') {
+        try { localStorage.setItem('job_seq_' + jobId, String(event.seq)); } catch { /* ignore */ }
+      }
+      const statusByType: Record<string, JobStatus> = {
+        created: 'queued',
+        claimed: 'running',
+        retrying: 'retrying',
+        completed: 'completed',
+        failed: 'failed',
+        cancelled: 'cancelled',
+      };
+      const mapped = statusByType[event.type];
+      if (mapped) onJobStatus?.({ jobId, status: mapped });
+
+      const sse = mapBackendJobEventToSSE(event);
+      if (sse) handleSSEEvent(sse, sseContext);
+    },
+  });
+
+  return () => closeStream();
+}
+
+// Durable-path equivalent of handleSendMessage for server-backed web chat: the
+// request is admitted as a durable job and the client follows its reconnectable
+// event stream instead of a single synchronous SSE request. Work continues on the
+// server even if the browser disconnects; the caller can reconnect from the last
+// seen seq via GET /api/jobs/:id/events?after=<seq>.
+export async function handleSendJobMessage(
+  input: string,
+  attachments: any[],
+  ctx: SendMessageContext,
+  onJobStatus?: (state: JobStatusState | null) => void
+): Promise<JobSendResult> {
+  const { settings, activeConvId, activeProject, serverBacked, sink } = ctx;
+
+  // Background task plan fetch (keeps the UI responsive, mirroring legacy path).
+  getTaskPlan(input, activeProject?.path || settings.projectDir)
+    .then((plan) => sink.setTaskPlan(plan.items))
+    .catch(() => sink.setTaskPlan([]));
+
+  const prepared = await buildPreparedMessages(ctx, input, attachments);
+
+  let submit: { jobId: string; status: JobStatus; queuePosition: number };
+  try {
+    submit = await submitJob({
+      conversationId: activeConvId,
+      resourceClass: 'text',
+      priority: 1,
+      payload: { messages: prepared.messages, referentSummary: prepared.referentSummary },
+    });
+  } catch (err: any) {
+    // Surface admission failures as a system error and stop tracking.
+    sink.addSystemMessage(`❌ Xəta: ${normalizeUiErrorMessage(err?.message || 'Job qəbul edilmədi')}`);
+    throw err;
+  }
+
+  onJobStatus?.({ jobId: submit.jobId, status: submit.status, queuePosition: submit.queuePosition });
+
+  const close = followJobStream({
+    jobId: submit.jobId,
+    afterSeq: 0,
+    ctx,
+    signal: ctx.signal,
+    onJobStatus: (state) => {
+      onJobStatus?.(state);
+      // Persist a minimal project-memory snapshot once the job settles (mirrors
+      // the legacy path's post-completion save).
+      if (state && isTerminalJobStatus(state.status) && activeProject?.id && serverBacked) {
+        const inferredMemory = {
+          ...ctx.projectMemory,
+          language: 'az',
+          model: settings.model,
+          latestPrompt: input,
+          workspace: activeProject.path,
+        };
+        const memoryToSave = settings.productMode === 'web_chat' ? stripProviderDetailsFromMemory(inferredMemory) : inferredMemory;
+        sink.mergeProjectMemory(memoryToSave);
+        saveProjectMemory(activeProject.id, memoryToSave).catch(console.error);
+      }
+    },
+  });
+
+  return { jobId: submit.jobId, close };
+}
+
+export async function handleSendMessage(
+  input: string,
+  attachments: any[],
+  ctx: SendMessageContext
+): Promise<void> {
+  const { settings, activeConvId, activeProject, projectMemory, serverBacked, safeMode, sink } = ctx;
   const convId = activeConvId;
+  const isWebChat = settings.productMode === 'web_chat';
+  const currentMsgs: any[] = [];
   const streamBufferRef = { current: '' };
 
   // Dispatch user message to store
@@ -241,73 +466,13 @@ export async function handleSendMessage(
       .then(plan => sink.setTaskPlan(plan.items))
       .catch(() => sink.setTaskPlan([]));
 
-    const isLikelyLocalModel = !settings.model.includes('/') || settings.baseUrl.includes('localhost') || settings.baseUrl.includes('127.0.0.1');
-    const MAX_HISTORY_MESSAGES = isLikelyLocalModel ? 12 : 20;
-    const historySource = settings.productMode === 'web_chat'
-      ? sanitizeWebChatHistory(currentMsgs)
-      : currentMsgs;
-    const historySlice = historySource.slice(-MAX_HISTORY_MESSAGES);
-    const preparedMessagesCore = historySlice.map((m, idx) => {
-      const isRecent = idx >= historySlice.length - 6;
-      const trimmedToolCalls = isRecent
-        ? m.tool_calls?.map((tc: any) => ({
-            id: tc.id,
-            type: tc.type || 'function',
-            function: {
-              name: tc.function?.name || tc.name || '',
-              arguments: String(tc.function?.arguments || tc.args || '').slice(0, 2000),
-            },
-          }))
-        : undefined;
-      return {
-        role: m.role,
-        content: String(m.content || '').slice(0, 8000),
-        attachments: m.attachments?.map((at: any) => {
-          return {
-            id: at.id,
-            name: at.name,
-            type: at.type,
-            mimeType: at.mimeType,
-            extractedText: at.extractedText || '',
-            extractionError: at.extractionError,
-            url: at.url || '',
-          };
-        }),
-        tool_calls: trimmedToolCalls,
-        tool_call_id: m.tool_call_id,
-      };
-    });
-
-    const activeGuiSession = projectMemory?.activeGuiSession as any;
-    const referentSummary = settings.productMode === 'web_chat'
-      ? buildWebReferentSummary(currentMsgs, input)
-      : null;
-    const preparedMessages = activeGuiSession?.sessionId && settings.workflow === 'gui'
-      ? [{
-          role: 'system' as const,
-          content: `Active GUI session: ${activeGuiSession.sessionId}. Cari visible browser sessiyası açıqdır.`,
-        }, ...preparedMessagesCore]
-      : preparedMessagesCore;
-
-    let finalPreparedMessages = preparedMessages;
-    if (settings.customInstructions && settings.customInstructions.trim() !== '') {
-      finalPreparedMessages = [
-        { role: 'system' as const, content: `Custom Instructions:\n${settings.customInstructions}` },
-        ...preparedMessages
-      ];
-    }
-
-    const isSmartMode = settings.aiMode === 'smart';
-    const isWebChat = settings.productMode === 'web_chat';
-    // Web provider credentials and routing belong to the BahAI backend. Do not
-    // let stale browser settings override Railway's OmniRoute configuration.
-    const effectiveBaseUrl = isWebChat ? '' : settings.baseUrl;
-    const effectiveApiKey = isWebChat ? '' : settings.apiKey;
-    const effectiveModel = (isWebChat || isSmartMode) ? 'auto' : settings.model;
+    // Build the model payload once; shared with the durable job path so both
+    // transports frame the request identically.
+    const prepared = await buildPreparedMessages(ctx, input, attachments);
 
     await apiSendChatMessage(
-      finalPreparedMessages,
-      effectiveApiKey, effectiveBaseUrl, effectiveModel,
+      prepared.messages,
+      prepared.effectiveApiKey, prepared.effectiveBaseUrl, prepared.effectiveModel,
       activeProject?.path || settings.projectDir,
       {
         safeMode,
@@ -320,7 +485,7 @@ export async function handleSendMessage(
         guiBrowserCdpUrl: settings.guiBrowserCdpUrl,
         productMode: settings.productMode,
         executionMode: settings.executionMode,
-        referentSummary,
+        referentSummary: prepared.referentSummary,
       },
       (event: any) => handleSSEEvent(event, {
         convId,
