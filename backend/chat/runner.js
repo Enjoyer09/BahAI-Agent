@@ -34,6 +34,29 @@ function isGenericFailoverCandidate(providerCandidates = []) {
   return Array.isArray(providerCandidates) && providerCandidates.length > 1;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Whether a provider error is worth a single local retry (vs. failing over to the
+// next candidate). Covers transient upstream blips only: 408/429/5xx and network
+// errors. Deliberately EXCLUDES AbortError (request/attempt deadline) and
+// deterministic 4xx — those are not fixed by retrying the same call.
+const TRANSIENT_RETRY_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+function isTransientForRetry(err) {
+  if (!err) return false;
+  if (err.name === 'AbortError') return false;
+  const status = err.status || err.code;
+  if (TRANSIENT_RETRY_STATUS.has(status)) return true;
+  if (!status) {
+    const msg = String(err.message || '').toLowerCase();
+    if (msg.includes('network') || msg.includes('timeout') || msg.includes('fetch failed') || msg.includes('econnrefused') || msg.includes('econnreset')) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function modelDisablesTools(model = '') {
   return /(?:^|[\/_-])(embed|embedding|rerank|retriever|reward|guard|safety|moderation|parse)(?:$|[\/_-])/i.test(String(model || ''));
 }
@@ -192,6 +215,25 @@ async function openAiStreamWithFallback({
     }
   }
 
+  // Retry a single candidate once on transient errors before failing over. This
+  // absorbs short gateway blips (e.g. a transient 5xx from OmniRoute) that would
+  // otherwise burn the whole candidate pool and surface the generic failure.
+  async function callCreateStream(provider, client, model, messages, forceDisableTools, deadlineAt) {
+    const MAX_ATTEMPTS = 2;
+    let lastErr;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        return await createStream(provider, client, model, messages, forceDisableTools);
+      } catch (err) {
+        lastErr = err;
+        const remaining = (deadlineAt || Number.POSITIVE_INFINITY) - Date.now();
+        if (attempt >= MAX_ATTEMPTS || !isTransientForRetry(err) || remaining < 800) throw err;
+        await sleep(350);
+      }
+    }
+    throw lastErr;
+  }
+
   while (true) {
     try {
         if (providerCandidates.length > 1 && !providerRuntime.canUseProviderNow(nextProvider.id)) {
@@ -212,12 +254,13 @@ async function openAiStreamWithFallback({
           }
         }
 
-        stream = await createStream(
+        stream = await callCreateStream(
           nextProvider,
           nextClient,
           nextModel,
           nextMessages,
-          forceDisableTools
+          forceDisableTools,
+          requestDeadlineAt
         );
         providerRuntime.markProviderSuccess(nextProvider.id);
         providerRuntime.markSessionProviderSuccess?.(providerSessionKey, nextProvider.id);
@@ -260,7 +303,7 @@ async function openAiStreamWithFallback({
           for (const alt of alternatives) {
             try {
               const altClient = buildOpenAIClient(alt);
-              stream = await createStream(alt, altClient, alt.model, nextMessages, forceDisableTools);
+              stream = await callCreateStream(alt, altClient, alt.model, nextMessages, forceDisableTools, requestDeadlineAt);
               const previousProviderId = nextProvider.id;
               nextProvider = alt;
               nextClient = altClient;
@@ -405,8 +448,16 @@ async function openAiStreamWithFallback({
 
         console.error(`❌ API Error [${status}]:`, currentErr.message);
         console.error(`❌ Full error:`, JSON.stringify({ status: currentErr.status, headers: currentErr.headers, body: currentErr.error || currentErr.body }, null, 2));
+        // If every candidate routes through the SAME gateway/base URL, the
+        // "alternative models" the system "auto-checked" are not real backups —
+        // they share one point of failure. Say so, and point at the actual fix.
+        const distinctBases = Array.from(
+          new Set((providerCandidates || []).map((c) => String(c.baseURL || '').replace(/\/+$/, '').toLowerCase()))
+        ).filter(Boolean);
+        const singleGateway = distinctBases.length <= 1;
         let userMsg = isGenericFailoverCandidate(providerCandidates)
-          ? 'AI provider-lər hazırda cavab qaytarmadı. Sistem alternativ modelləri avtomatik yoxladı. Bir az sonra yenidən cəhd edin.'
+          ? ('AI provider-lər hazırda cavab qaytarmadı. Sistem alternativ modelləri avtomatik yoxladı. Bir az sonra yenidən cəhd edin.'
+            + (singleGateway ? ' (Qeyd: bütün modellər eyni AI gateway-dən keçir — ehtiyat provider, məsələn OpenRouter və ya NVIDIA, qoşulu olarsa avtomatik keçid olunar.)' : ''))
           : `API xətası: ${currentErr.message}`;
         const errLower = String(currentErr.message || '').toLowerCase();
         const isOllamaUrl = String(nextProvider.baseURL || '').includes('11434') || String(nextProvider.baseURL || '').includes('ollama');

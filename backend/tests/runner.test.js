@@ -973,4 +973,77 @@ describe('runner failover behavior', () => {
     expect(result.errorEvent).toBeTruthy();
     expect(events.some((event) => event.type === 'debug')).toBe(false);
   });
+
+  it('retries a single candidate once on a transient 5xx before succeeding', async () => {
+    const runtime = createProviderRuntime();
+    const provider = { id: 'web_text_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://api.freemodel.dev/v1', apiKey: 'key' };
+    const okStream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield { choices: [{ delta: { content: 'retry-ok' }, finish_reason: 'stop' }] };
+      }
+    };
+    const client = {
+      chat: { completions: { create: vi.fn()
+        .mockRejectedValueOnce({ status: 500, message: 'Internal error' })
+        .mockResolvedValue(okStream) } }
+    };
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: provider.model,
+      activeProvider: provider,
+      client,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [provider],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => client,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 20000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:retry:test'
+    });
+    expect(client.chat.completions.create).toHaveBeenCalledTimes(2);
+    expect(result.stream).toBeTruthy();
+    expect(result.errorEvent).toBeFalsy();
+  });
+
+  it('notes single-gateway redundancy when all candidates share one base URL', async () => {
+    const runtime = createProviderRuntime();
+    const base = 'https://api.freemodel.dev/v1';
+    const primary = { id: 'web_text_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: base, apiKey: 'key' };
+    const fallback = { id: 'web_text_fallback_1', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: base, apiKey: 'key' };
+    const client = {
+      chat: { completions: { create: vi.fn().mockRejectedValue({ status: 500, message: 'Internal error' }) } }
+    };
+    const result = await openAiStreamWithFallback({
+      currentMessages: [{ role: 'user', content: 'Salam' }],
+      effectiveModel: primary.model,
+      activeProvider: primary,
+      client,
+      phaseTools: [],
+      isLocalOrFlakyModel: false,
+      providerCandidates: [primary, fallback],
+      providerRuntime: runtime,
+      buildOpenAIClient: () => client,
+      normalizeMessagesForModel: async (messages) => messages,
+      mapMessagesToResponsesInput: (messages) => messages,
+      mapToolsToResponsesTools: (tools) => tools,
+      isResponsesSchemaMismatchError: () => false,
+      buildDeepSeekRecoveryMessages: (messages) => messages,
+      writeSse: () => {},
+      shouldEmitDebugEvent: () => false,
+      llmTimeoutMs: 20000,
+      onProviderTelemetry: () => {},
+      providerSessionKey: 'web:singlegw:test'
+    });
+    expect(result.errorEvent).toBeTruthy();
+    expect(result.errorEvent.message).toContain('AI provider');
+    expect(result.errorEvent.message).toContain('eyni AI gateway');
+  });
 });
