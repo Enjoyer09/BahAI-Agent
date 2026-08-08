@@ -811,6 +811,17 @@ button, a, [role="button"] {
   background: var(--color-danger);
 }
 
+/* Inline Voice Mode entry — sits left of the send button (replaces the old
+   floating absolute mic that overlapped the send button on mobile). */
+.composer-voice-button {
+  background: var(--color-accent);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(16, 163, 127, 0.28);
+}
+.composer-voice-button:hover {
+  filter: brightness(1.06);
+}
+
 /* ==========================================
    Durable job status pill (web chat background agent)
    ========================================== */

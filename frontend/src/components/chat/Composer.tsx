@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, FileText, Loader2, Paperclip, Send, Square, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileText, Loader2, Mic, Paperclip, Send, Square, X } from 'lucide-react';
 import type { Attachment } from '../../lib/types';
 import type { JobStatusState } from '../../store/chatService';
 import type { JobStatus } from '../../lib/jobTypes';
@@ -15,6 +15,9 @@ interface ComposerProps {
   // cancelled/completed and exposes a cancel affordance.
   jobStatus?: JobStatusState | null;
   onCancelJob?: () => void;
+  // Optional Voice Mode entry point (web_chat, when Speech API is available).
+  // Rendered inline (left of the send button) so it never overlaps on mobile.
+  onVoiceMode?: () => void;
 }
 
 // Localized labels + tone per durable job status.
@@ -100,7 +103,7 @@ function fileToAttachment(file: File): Promise<Attachment> {
   });
 }
 
-export function Composer({ onSendMessage, disabled, isGenerating, onStop, settings, jobStatus, onCancelJob }: ComposerProps) {
+export function Composer({ onSendMessage, disabled, isGenerating, onStop, settings, jobStatus, onCancelJob, onVoiceMode }: ComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -245,6 +248,18 @@ export function Composer({ onSendMessage, disabled, isGenerating, onStop, settin
           disabled={disabled}
           aria-label="Message input"
         />
+
+        {onVoiceMode && (
+          <button
+            type="button"
+            onClick={onVoiceMode}
+            className="composer-icon-button composer-voice-button"
+            title="Səs rejimi"
+            aria-label="Səs rejimini aç"
+          >
+            <Mic size={18} />
+          </button>
+        )}
 
         {isGenerating ? (
           <button type="button" onClick={onStop} className="composer-send-button is-stop" aria-label="Stop generation">
