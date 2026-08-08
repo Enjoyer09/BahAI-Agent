@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { AlertCircle, CheckCircle2, FileText, Loader2, Mic, Paperclip, Send, Square, X } from 'lucide-react';
 import type { Attachment } from '../../lib/types';
 import type { JobStatusState } from '../../store/chatService';
@@ -103,6 +103,78 @@ function fileToAttachment(file: File): Promise<Attachment> {
   });
 }
 
+// Swipe-to-dismiss attachment chip. Pointer events cover mouse + touch. A
+// leftward swipe past the threshold removes the chip; a smaller drag snaps back.
+// The explicit X button remains the primary affordance (this is an enhancement).
+const SWIPE_DISMISS_PX = 56;
+
+function AttachmentChip({
+  attachment,
+  onRemove,
+}: {
+  attachment: Attachment;
+  onRemove: (id: string) => void;
+}) {
+  const [dragX, setDragX] = useState(0);
+  const [removing, setRemoving] = useState(false);
+  const startX = useRef<number | null>(null);
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    startX.current = event.clientX;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (startX.current === null) return;
+    const dx = event.clientX - startX.current;
+    // Only leftward swipes are meaningful; rightward is damped so it feels
+    // like a one-direction dismiss and never fights the tray.
+    setDragX(dx < 0 ? dx : dx * 0.15);
+  };
+  const handlePointerUp = () => {
+    if (startX.current === null) return;
+    const dx = dragX;
+    startX.current = null;
+    if (dx <= -SWIPE_DISMISS_PX) {
+      setDragX(0);
+      setRemoving(true);
+      window.setTimeout(() => onRemove(attachment.id), 160);
+    } else {
+      setDragX(0);
+    }
+  };
+
+  return (
+    <div
+      className={`composer-attachment ${removing ? 'is-removing' : ''}`}
+      style={{
+        transform: dragX ? `translateX(${dragX}px)` : undefined,
+        transition: dragX ? 'none' : 'transform 0.18s ease',
+        touchAction: 'pan-y',
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+    >
+      {attachment.type === 'image' ? (
+        <img src={attachment.url} alt={attachment.name} draggable={false} />
+      ) : (
+        <div className="composer-file-preview">
+          <FileText size={18} />
+          <span>{attachment.name}</span>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => onRemove(attachment.id)}
+        aria-label={`${attachment.name} faylını sil`}
+      >
+        <X size={12} />
+      </button>
+    </div>
+  );
+}
+
 export function Composer({ onSendMessage, disabled, isGenerating, onStop, settings, jobStatus, onCancelJob, onVoiceMode }: ComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -169,23 +241,7 @@ export function Composer({ onSendMessage, disabled, isGenerating, onStop, settin
       {attachments.length > 0 && (
         <div className="composer-attachment-tray no-scrollbar" aria-label="Selected attachments">
           {attachments.map((attachment) => (
-            <div key={attachment.id} className="composer-attachment">
-              {attachment.type === 'image' ? (
-                <img src={attachment.url} alt={attachment.name} />
-              ) : (
-                <div className="composer-file-preview">
-                  <FileText size={18} />
-                  <span>{attachment.name}</span>
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => removeAttachment(attachment.id)}
-                aria-label={`${attachment.name} faylını sil`}
-              >
-                <X size={12} />
-              </button>
-            </div>
+            <AttachmentChip key={attachment.id} attachment={attachment} onRemove={removeAttachment} />
           ))}
         </div>
       )}
