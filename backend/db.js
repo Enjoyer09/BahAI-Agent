@@ -260,11 +260,109 @@ async function initDb() {
     }
 
     console.log('✅ Verilənlər bazası strukturu hazırdır.');
+
+    // Durable background job tables — turn the synchronous SSE chat flow into a
+    // queue-backed job system so work survives browser disconnect and web restart.
+    await ensureJobTables(client);
   } catch (err) {
     console.error('❌ Database Init Error:', err.message);
   } finally {
     client.release();
   }
+}
+
+// Idempotent schema for the durable job layer. Each statement is CREATE IF NOT
+// EXISTS / ADD COLUMN IF NOT EXISTS so re-running initDb on every boot is safe.
+async function ensureJobTables(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS agent_jobs (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      conversation_id TEXT,
+      status TEXT NOT NULL DEFAULT 'queued',
+      resource_class TEXT NOT NULL DEFAULT 'text',
+      priority INTEGER NOT NULL DEFAULT 1,
+      payload JSONB NOT NULL DEFAULT '{}',
+      result JSONB,
+      error_code TEXT,
+      error_message TEXT,
+      attempt INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      lease_owner TEXT,
+      lease_expires_at TIMESTAMPTZ,
+      heartbeat_at TIMESTAMPTZ,
+      cancel_requested_at TIMESTAMPTZ,
+      started_at TIMESTAMPTZ,
+      finished_at TIMESTAMPTZ,
+      idempotency_key TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_jobs_idempotency
+    ON agent_jobs (user_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS agent_job_events (
+      id BIGSERIAL PRIMARY KEY,
+      job_id TEXT NOT NULL REFERENCES agent_jobs(id) ON DELETE CASCADE,
+      seq BIGINT NOT NULL,
+      type TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (job_id, seq)
+    )
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS provider_health (
+      provider_id TEXT NOT NULL,
+      model TEXT,
+      circuit_state TEXT NOT NULL DEFAULT 'closed',
+      consecutive_failures INTEGER NOT NULL DEFAULT 0,
+      open_until TIMESTAMPTZ,
+      ewma_latency_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+      last_status INTEGER,
+      last_error_code TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (provider_id, model)
+    )
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS user_usage_windows (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      window_start TIMESTAMPTZ NOT NULL,
+      accepted_jobs INTEGER NOT NULL DEFAULT 0,
+      active_jobs INTEGER NOT NULL DEFAULT 0,
+      request_count INTEGER NOT NULL DEFAULT 0,
+      token_estimate INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, window_start)
+    )
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_agent_jobs_claim
+    ON agent_jobs (status, priority, available_at, created_at)
+    WHERE status IN ('queued', 'retrying')
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_agent_jobs_owner_status
+    ON agent_jobs (lease_owner, status) WHERE lease_owner IS NOT NULL
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_agent_job_events_job_seq
+    ON agent_job_events (job_id, seq)
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_agent_jobs_user_status
+    ON agent_jobs (user_id, status)
+  `);
 }
 
 module.exports = {

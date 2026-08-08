@@ -95,6 +95,7 @@ const { setAllowedDirs, isLocalMode } = require('./helpers');
 
 // Route modules
 const chatRouter = require('./routes/chat');
+const jobsRouter = require('./routes/jobs');
 const filesRouter = require('./routes/files');
 const projectsRouter = require('./routes/projects');
 const conversationsRouter = require('./routes/conversations');
@@ -306,7 +307,7 @@ const protectedPaths = [
   '/api/browsers', '/api/gui-capabilities', '/api/computer-use-status',
   '/api/runtime-status', '/api/interactions', '/api/tts',
   '/api/conversation-token', '/api/signed-url', '/api/admin/stats',
-  '/api/admin/users', '/api/mcp'
+  '/api/admin/users', '/api/mcp', '/api/jobs'
 ];
 protectedPaths.forEach(function(p) { app.use(p, verifyToken); });
 
@@ -339,6 +340,9 @@ function injectChatRuntime(req, res, next) {
 
 // Chat — POST /api/chat
 app.use('/api/chat', injectChatRuntime, chatRouter);
+
+// Durable job admission + status (web process only; execution runs in worker)
+app.use('/api/jobs', jobsRouter);
 
 // TTS — Fish Audio proxy (Voice Mode) — must be before filesRouter
 // which has a router.use(requireWorkspaceAccess) that would block it

@@ -25,7 +25,9 @@ if (!process.env.JWT_SECRET) {
 // Generate consistent user ID from email for local mode
 function localUserId(email) {
   const hash = crypto.createHash('md5').update(email || 'admin@bahai.local').digest('hex');
-  return parseInt(hash.substring(0, 8), 16); // 32-bit integer from first 8 hex chars
+  // Keep within PostgreSQL's signed 32-bit INTEGER range; an un-clamped MD5
+  // prefix can exceed 2,147,483,647 and overflow the users/projects id columns.
+  return (parseInt(hash.substring(0, 8), 16) % 2147483647) + 1;
 }
 
 const DEMO_EMAILS = new Set(['demo', 'demo@bahai.local', 'demo@bahai.az']);
