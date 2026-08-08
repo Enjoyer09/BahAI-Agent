@@ -217,7 +217,18 @@ export async function sendChatMessage(
   }
 
   if (!response.ok) {
-    if (response.status === 401) throw new Error('Giriş tələb olunur. Zəhmət olmasa daxil olun.');
+    if (response.status === 401) {
+      notifyAuthExpired('Sessiya vaxtı bitib. Yenidən daxil olun.');
+      throw new Error('Giriş tələb olunur. Zəhmət olmasa daxil olun.');
+    }
+    if (response.status === 403) {
+      const payload = await readErrorPayload(response);
+      const errMsg = payload?.error || '';
+      if (/sessiya|etibarsız|workspace/i.test(errMsg)) {
+        notifyAuthExpired('Sessiya vaxtı bitib. Yenidən daxil olun.');
+      }
+      throw new Error(errMsg || 'İcazə yoxdur');
+    }
     if (response.status === 409) {
       const payload = await readErrorPayload(response);
       if (payload?.code === 'CHAT_QUEUE_BUSY' || payload?.code === 'CHAT_QUEUE_DISCONNECTED') {

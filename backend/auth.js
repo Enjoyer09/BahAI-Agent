@@ -133,6 +133,21 @@ async function login(req, res) {
       recordLogin(null, normalizedEmail, false, 'local', req);
       return res.status(401).json({ error: 'Demo şifrəsi yanlışdır' });
     }
+
+    // In local mode with database, try to find the real user first
+    if (db.hasDatabase() && !isDemoLogin) {
+      try {
+        const dbResult = await db.query('SELECT id, email, name, role FROM users WHERE email = $1', [normalizedEmail || 'admin@bahai.az']);
+        if (dbResult.rows.length > 0) {
+          const dbUser = dbResult.rows[0];
+          const tokens = generateTokenPair({ id: dbUser.id, email: dbUser.email, role: dbUser.role });
+          recordLogin(dbUser.id, dbUser.email, true, 'local', req);
+          touchSession(dbUser.id, req);
+          return res.json({ token: tokens.accessToken, refreshToken: tokens.refreshToken, user: { id: dbUser.id, email: dbUser.email, name: dbUser.name, role: dbUser.role } });
+        }
+      } catch { /* fall through to local user */ }
+    }
+
     const localEmail = isDemoLogin ? 'demo@bahai.local' : (email || 'admin@bahai.local');
     const uid = localUserId(localEmail);
     const localUser = { id: uid, email: localEmail, name: isDemoLogin ? 'Demo User' : (email?.split('@')[0] || 'User'), role: 'admin' };
