@@ -52,8 +52,8 @@ export default function ChatArea({
 
   if (messages.length === 0 && !loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pb-16 sm:pb-28">
-        <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden mb-5 sm:mb-6 border-2 border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pb-16 sm:pb-28 chat-empty-enter">
+        <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden mb-5 sm:mb-6 border-2 border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.4)] chat-empty-avatar">
           <img 
             src="/assets/bahar_avatar.jpg" 
             alt="Bahar Avatar" 
@@ -87,7 +87,7 @@ export default function ChatArea({
             <button
               key={item.label}
               onClick={() => onSend(item.prompt)}
-              className="flex items-center gap-2 px-4 py-2.5 sm:py-3.5 rounded-full sm:rounded-2xl text-sm transition-all text-left whitespace-nowrap sm:whitespace-normal shrink-0"
+              className="flex items-center gap-2 px-4 py-2.5 sm:py-3.5 rounded-full sm:rounded-2xl text-sm transition-all text-left whitespace-nowrap sm:whitespace-normal shrink-0 prompt-chip"
               style={{
                 border: '1px solid var(--border)',
                 color: 'var(--fg-secondary)',

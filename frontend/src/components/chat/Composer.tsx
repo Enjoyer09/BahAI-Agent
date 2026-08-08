@@ -270,7 +270,7 @@ export function Composer({ onSendMessage, disabled, isGenerating, onStop, settin
             type="button"
             onClick={handleSubmit}
             disabled={disabled || (!text.trim() && attachments.length === 0)}
-            className="composer-send-button"
+            className={`composer-send-button ${!disabled && (text.trim() || attachments.length > 0) ? 'composer-send-button--ready' : ''}`}
             aria-label="Send message"
           >
             <Send size={18} />

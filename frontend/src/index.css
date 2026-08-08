@@ -835,7 +835,9 @@ button, a, [role="button"] {
   border-radius: 999px;
   color: var(--fg-muted);
   touch-action: manipulation;
-  transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease;
+  /* Spring overshoot on press for tactile, "bouncy" feedback. */
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease, box-shadow 0.2s ease;
+  will-change: transform;
 }
 
 .composer-icon-button:active,
@@ -859,6 +861,19 @@ button, a, [role="button"] {
 .composer-send-button.is-stop {
   color: white;
   background: var(--color-danger);
+}
+
+/* "Ready" pulse — hints that the send button is now tappable once there is
+   text or an attachment. Composer toggles .composer-send-button--ready. */
+.composer-send-button--ready {
+  box-shadow: 0 0 0 0 rgba(16, 163, 127, 0.45);
+  animation: composer-send-pulse 2.2s ease-out infinite;
+}
+
+@keyframes composer-send-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 163, 127, 0.45); }
+  70% { box-shadow: 0 0 0 11px rgba(16, 163, 127, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 163, 127, 0); }
 }
 
 /* Inline Voice Mode entry — sits left of the send button (replaces the old
@@ -993,6 +1008,8 @@ button, a, [role="button"] {
   display: flex;
   gap: 8px;
   padding: 4px 4px 8px;
+  /* Collapse/expand reveal whenever the tray mounts with attachments. */
+  animation: composer-tray-in 0.24s ease-out;
 }
 
 .composer-attachment {
@@ -1004,6 +1021,17 @@ button, a, [role="button"] {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg-surface-alt);
+  animation: composer-chip-pop 0.2s ease-out;
+}
+
+@keyframes composer-tray-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes composer-chip-pop {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .composer-attachment img {
@@ -1042,6 +1070,38 @@ button, a, [role="button"] {
   white-space: nowrap;
   font-size: 10px;
 }
+
+/* ==========================================
+   Empty-state (ChatArea) motion polish
+   ========================================== */
+.chat-empty-enter {
+  animation: chat-empty-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes chat-empty-enter {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Gentle floating avatar on the welcome screen. */
+.chat-empty-avatar {
+  animation: chat-empty-avatar-float 3.6s ease-in-out infinite;
+}
+
+@keyframes chat-empty-avatar-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* Staggered reveal for the suggestion chips. */
+.chat-empty-enter .prompt-chip {
+  opacity: 0;
+  animation: chat-empty-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.chat-empty-enter .prompt-chip:nth-child(1) { animation-delay: 0.06s; }
+.chat-empty-enter .prompt-chip:nth-child(2) { animation-delay: 0.12s; }
+.chat-empty-enter .prompt-chip:nth-child(3) { animation-delay: 0.18s; }
+.chat-empty-enter .prompt-chip:nth-child(4) { animation-delay: 0.24s; }
 
 @media (min-width: 769px) {
   .desktop-hidden {

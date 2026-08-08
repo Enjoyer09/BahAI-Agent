@@ -169,32 +169,33 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
   const hasRunningTools = productMode === 'desktop_code' && message.tool_calls?.some(tc => tc.status === 'running');
   const hasTools = productMode === 'desktop_code' && message.tool_calls && message.tool_calls.length > 0;
 
+  // web_chat shows avatars on both desktop and mobile (mirrors desktop web_chat,
+  // which already renders them). desktop_code stays avatar-less on every surface.
+  const showAvatar = !isDesktopProduct;
+  const avatarStyle = {
+    background: isBot
+      ? 'linear-gradient(135deg, #10b981 0%, #059669 60%, #047857 100%)'
+      : 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+    boxShadow: isBot
+      ? '0 0 16px rgba(16, 185, 129, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.3)'
+      : '0 0 14px rgba(139, 92, 246, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
+    border: isBot ? '1px solid rgba(52, 211, 153, 0.5)' : '1px solid rgba(167, 139, 250, 0.4)',
+  };
+  const avatarIcon = isBot
+    ? (hasRunningTools ? <Loader2 size={14} className="animate-spin text-white" /> : <Sparkles size={14} className="text-white drop-shadow-[0_0_4px_rgba(255,255,255,0.8)]" />)
+    : <User size={14} className="text-white" />;
+
   return (
     <div className="group animate-in" style={{ animationDelay: '50ms' }}>
-      <div className={`flex items-start ${isMobile ? (isBot ? 'pl-2' : 'justify-end') : 'gap-2.5 sm:gap-4'}`}>
-        {!isMobile && !isDesktopProduct && (
-        <div
-          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
-          style={{
-            background: isBot
-              ? 'linear-gradient(135deg, #10b981 0%, #059669 60%, #047857 100%)'
-              : 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-            boxShadow: isBot
-              ? '0 0 16px rgba(16, 185, 129, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.3)'
-              : '0 0 14px rgba(139, 92, 246, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
-            border: isBot ? '1px solid rgba(52, 211, 153, 0.5)' : '1px solid rgba(167, 139, 250, 0.4)',
-          }}
-        >
-          {isBot ? (
-            hasRunningTools ? (
-              <Loader2 size={14} className="animate-spin text-white" />
-            ) : (
-              <Sparkles size={14} className="text-white drop-shadow-[0_0_4px_rgba(255,255,255,0.8)]" />
-            )
-          ) : (
-            <User size={14} className="text-white" />
-          )}
-        </div>
+      <div className={`flex items-start ${isMobile ? `gap-2 ${isBot ? 'pl-2' : 'justify-end'}` : 'gap-2.5 sm:gap-4'}`}>
+        {showAvatar && (
+          <div
+            className={`w-7 h-7 ${!isMobile ? 'sm:w-8 sm:h-8' : ''} rounded-full flex items-center justify-center shrink-0 mt-0.5`}
+            style={avatarStyle}
+            aria-hidden="true"
+          >
+            {avatarIcon}
+          </div>
         )}
 
         <div className={`flex-1 min-w-0 ${(isMobile || isDesktopProduct) && !isBot ? 'max-w-[85%] ml-auto' : ''}`}>
