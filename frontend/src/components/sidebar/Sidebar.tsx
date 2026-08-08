@@ -330,7 +330,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
         {/* Top: Brand Logo + New chat + Close */}
         <div className="px-3 pb-2 shrink-0 flex items-center justify-between gap-2" style={{ paddingTop: isMobile ? '18px' : '20px' }}>
           <div className="flex items-center gap-2.5">
-            <div className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.35)]">
+            <div className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 border border-[#7F77DD]/40 shadow-[0_0_12px_rgba(127,119,221,0.35)]">
               <img 
                 src="/assets/bahar_avatar.jpg" 
                 alt="Bahar Avatar" 
@@ -338,7 +338,7 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
               />
             </div>
             <span className="font-extrabold text-base tracking-wide" style={{ color: 'var(--fg-main)' }}>
-              BAH<span style={{ color: '#10b981' }}>AI</span>
+              BAH<span style={{ color: '#7F77DD' }}>AI</span>
             </span>
           </div>
 

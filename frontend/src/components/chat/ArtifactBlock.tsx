@@ -78,7 +78,7 @@ export default function ArtifactBlock({ language, code }: Props) {
             className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition-colors"
             style={{
               color: view === 'preview' ? 'var(--fg-on-accent, #fff)' : '#9ca3af',
-              background: view === 'preview' ? '#10b981' : 'transparent',
+              background: view === 'preview' ? 'var(--color-accent)' : 'transparent',
               minHeight: '28px',
             }}
             aria-pressed={view === 'preview'}
@@ -91,7 +91,7 @@ export default function ArtifactBlock({ language, code }: Props) {
             className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition-colors"
             style={{
               color: view === 'code' ? 'var(--fg-on-accent, #fff)' : '#9ca3af',
-              background: view === 'code' ? '#10b981' : 'transparent',
+              background: view === 'code' ? 'var(--color-accent)' : 'transparent',
               minHeight: '28px',
             }}
             aria-pressed={view === 'code'}

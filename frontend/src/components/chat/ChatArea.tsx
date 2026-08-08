@@ -53,7 +53,7 @@ export default function ChatArea({
   if (messages.length === 0 && !loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pb-16 sm:pb-28 chat-empty-enter">
-        <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden mb-5 sm:mb-6 border-2 border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.4)] chat-empty-avatar">
+        <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden mb-5 sm:mb-6 border-2 border-[#7F77DD]/50 shadow-[0_0_30px_rgba(127,119,221,0.4)] chat-empty-avatar">
           <img 
             src="/assets/bahar_avatar.jpg" 
             alt="Bahar Avatar" 
@@ -187,8 +187,8 @@ export default function ChatArea({
             <div
               className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0"
               style={{
-                background: 'linear-gradient(180deg, rgba(16,163,127,0.96), rgba(16,163,127,0.78))',
-                boxShadow: '0 10px 24px rgba(16,163,127,0.18)'
+                background: 'linear-gradient(180deg, rgba(127,119,221,0.96), rgba(127,119,221,0.78))',
+                boxShadow: '0 10px 24px rgba(127,119,221,0.18)'
               }}
             >
               <Spinner size={14} className="text-white" />

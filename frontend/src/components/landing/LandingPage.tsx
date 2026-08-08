@@ -76,7 +76,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       icon: <Bot size={22} />,
       title: 'Chat-First Assistant',
       desc: 'Sual verin, fikir aydınlaşdırın, plan qurun və işinizi sürətləndirin. Web təcrübə sadə və çevikdir.',
-      color: '#10a37f',
+      color: '#7F77DD',
     },
     {
       icon: <Globe size={22} />,
@@ -142,7 +142,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         }}
       >
         <div className="flex items-center gap-2.5">
-          <div className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.35)]">
+          <div className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 border border-[#7F77DD]/40 shadow-[0_0_12px_rgba(127,119,221,0.35)]">
             <img 
               src="/assets/bahar_avatar.jpg" 
               alt="Bahar Avatar" 
@@ -150,7 +150,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
             />
           </div>
           <span className="text-base font-extrabold tracking-wide uppercase text-slate-100">
-            BAH<span style={{ color: '#10b981' }}>AI</span>
+            BAH<span style={{ color: '#7F77DD' }}>AI</span>
           </span>
         </div>
 
@@ -179,13 +179,13 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
 
         {/* Glow ambient background */}
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[500px] rounded-full pointer-events-none"
-             style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, rgba(139,92,246,0.04) 60%, transparent 80%)' }} />
+             style={{ background: 'radial-gradient(circle, rgba(127,119,221,0.12) 0%, rgba(139,92,246,0.04) 60%, transparent 80%)' }} />
 
         {/* Minimal Pre-Beta & 100% Azerbaijan product pill */}
         <AnimateIn delay={0}>
           <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium tracking-wide border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium tracking-wide border border-[#7F77DD]/30 bg-[#7F77DD]/10 text-[#b9a8f5]">
+              <span className="w-2 h-2 rounded-full bg-[#b9a8f5] animate-pulse" />
               Pre-Beta Versiya
             </div>
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide border border-amber-500/30 bg-amber-500/10 text-amber-300">
@@ -199,7 +199,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
           <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold text-center max-w-4xl leading-[1.1] tracking-tight mb-6 text-slate-100">
             Süni İntellektdə
             <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-purple-400">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#b9a8f5] via-[#9d92ec] to-[#7F77DD]">
               Bahardan ilhamlanaraq yaratdıq 🌿
             </span>
           </h1>
@@ -217,7 +217,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
           <div className="flex items-center gap-4 mb-12">
             <button
               onClick={onGetStarted}
-              className="group flex items-center gap-3 px-8 py-3.5 rounded-xl text-sm font-semibold transition-all active:scale-95 shadow-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer shadow-emerald-500/25"
+              className="group flex items-center gap-3 px-8 py-3.5 rounded-xl text-sm font-semibold transition-all active:scale-95 shadow-xl bg-[#7F77DD] hover:bg-[#534AB7] text-white cursor-pointer shadow-[#7F77DD]/25"
             >
               <Sparkles size={16} />
               İndi Sınayın
@@ -233,28 +233,28 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500/80" />
                 <div className="w-3 h-3 rounded-full bg-amber-500/80" />
-                <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+                <div className="w-3 h-3 rounded-full bg-[#7F77DD]/80" />
                 <span className="text-xs text-slate-400 ml-2 font-mono">bahAI Web Session</span>
               </div>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">Bahar Smart • Online</span>
+              <span className="text-[11px] px-2 py-0.5 rounded bg-[#7F77DD]/10 text-[#b9a8f5] border border-[#7F77DD]/20 font-mono">Bahar Smart • Online</span>
             </div>
 
             {/* User message */}
             <div className="flex items-start gap-3 justify-end">
-              <div className="bg-emerald-600/20 border border-emerald-500/30 rounded-2xl rounded-tr-sm px-4 py-2.5 text-xs sm:text-sm text-slate-200 max-w-[85%]">
+              <div className="bg-[#7F77DD]/20 border border-[#7F77DD]/30 rounded-2xl rounded-tr-sm px-4 py-2.5 text-xs sm:text-sm text-slate-200 max-w-[85%]">
                 2026-cı il idman xəbərlərini və ya Bakı havanı canlı axtara bilərsən?
               </div>
             </div>
 
             {/* AI message */}
             <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/30">
+              <div className="w-7 h-7 rounded-full bg-[#7F77DD] flex items-center justify-center shrink-0 shadow-md shadow-[#7F77DD]/30">
                 <Sparkles size={14} className="text-slate-950" />
               </div>
               <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl rounded-tl-sm px-4 py-3 text-xs sm:text-sm text-slate-300 space-y-2 max-w-[90%]">
-                <p>Bəli! Dərhal canlı <code className="bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded font-mono text-[11px]">Tavily AI Search</code> alətini işlədib ən dəqiq faktiki nəticəni təqdim edirəm.</p>
+                <p>Bəli! Dərhal canlı <code className="bg-[#1c1633] text-[#b9a8f5] px-1.5 py-0.5 rounded font-mono text-[11px]">Tavily AI Search</code> alətini işlədib ən dəqiq faktiki nəticəni təqdim edirəm.</p>
                 <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-700/40 flex items-center gap-1.5">
-                  <CheckCircle2 size={12} className="text-emerald-400" />
+                  <CheckCircle2 size={12} className="text-[#b9a8f5]" />
                   <span>Daxili monoloqsuz, birbaşa cavab qatı aktivdir.</span>
                 </div>
               </div>
@@ -276,7 +276,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       <section className="border-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
         <div className="max-w-5xl mx-auto grid grid-cols-3 divide-x" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
           <div className="py-8 md:py-12 text-center" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-            <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 text-emerald-400">
+            <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 text-[#b9a8f5]">
               Canlı
             </div>
             <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-zinc-500">
@@ -408,8 +408,8 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
             <div
               className="relative p-8 md:p-12 rounded-2xl text-center overflow-hidden"
               style={{
-                background: 'linear-gradient(180deg, rgba(16,163,127,0.12) 0%, rgba(16,163,127,0.03) 100%)',
-                border: '1px solid rgba(16,163,127,0.2)',
+                background: 'linear-gradient(180deg, rgba(127,119,221,0.12) 0%, rgba(127,119,221,0.03) 100%)',
+                border: '1px solid rgba(127,119,221,0.2)',
               }}
             >
               <div className="absolute top-0 right-0 opacity-5">
@@ -447,7 +447,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 style={{
                   background: 'var(--color-accent)',
                   color: 'white',
-                  boxShadow: '0 8px 32px rgba(16,163,127,0.3)',
+                  boxShadow: '0 8px 32px rgba(127,119,221,0.3)',
                 }}
               >
                 <Sparkles size={18} />
@@ -482,7 +482,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               style={{
                 background: 'var(--color-accent)',
                 color: 'white',
-                boxShadow: '0 8px 32px rgba(16,163,127,0.3)',
+                boxShadow: '0 8px 32px rgba(127,119,221,0.3)',
               }}
             >
               Daxil ol

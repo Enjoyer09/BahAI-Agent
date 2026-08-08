@@ -174,10 +174,10 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
   const showAvatar = !isDesktopProduct;
   const avatarStyle = {
     background: isBot
-      ? 'linear-gradient(135deg, #10b981 0%, #059669 60%, #047857 100%)'
+      ? 'linear-gradient(135deg, #7F77DD 0%, #534AB7 60%, #3C3489 100%)'
       : 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
     boxShadow: isBot
-      ? '0 0 16px rgba(16, 185, 129, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.3)'
+      ? '0 0 16px rgba(127, 119, 221, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.3)'
       : '0 0 14px rgba(139, 92, 246, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
     border: isBot ? '1px solid rgba(52, 211, 153, 0.5)' : '1px solid rgba(167, 139, 250, 0.4)',
   };

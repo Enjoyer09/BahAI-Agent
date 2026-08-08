@@ -207,7 +207,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
 
         {/* Input container — Gemini pill shape */}
         <div
-          className={`relative flex items-center transition-all ${isMobile ? 'rounded-full px-3 py-1.5 shadow-lg border border-emerald-500/15 bg-[var(--bg-surface-elevated)]' : 'rounded-3xl p-3 tahoe-glass'}`}
+          className={`relative flex items-center transition-all ${isMobile ? 'rounded-full px-3 py-1.5 shadow-lg border border-[#7F77DD]/15 bg-[var(--bg-surface-elevated)]' : 'rounded-3xl p-3 tahoe-glass'}`}
           style={{
             background: !isMobile ? (productMode === 'web_chat'
               ? 'linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.05))'
@@ -333,13 +333,13 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
                 className="rounded-full transition-all shrink-0 flex items-center justify-center tahoe-button"
                 style={{
                   background: canSend
-                    ? 'linear-gradient(180deg, rgba(16, 163, 127, 0.95), rgba(16, 163, 127, 0.78))'
+                    ? 'linear-gradient(180deg, rgba(127, 119, 221, 0.95), rgba(127, 119, 221, 0.78))'
                     : 'linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04))',
                   color: canSend ? 'white' : 'var(--fg-muted)',
                   cursor: canSend ? 'pointer' : 'default',
                   width: isMobile ? '32px' : '40px',
                   height: isMobile ? '32px' : '40px',
-                  border: canSend ? '1px solid rgba(16, 163, 127, 0.65)' : '1px solid rgba(255,255,255,0.08)',
+                  border: canSend ? '1px solid rgba(127, 119, 221, 0.65)' : '1px solid rgba(255,255,255,0.08)',
                 }}
                 aria-label="Send message"
                 tabIndex={0}

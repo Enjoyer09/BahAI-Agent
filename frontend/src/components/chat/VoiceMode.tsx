@@ -358,7 +358,7 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
     idle: { label: 'Danışmaq üçün toxunun', gradient: 'radial-gradient(circle at 35% 35%, #6b7280, #374151, #1f2937)', glow: '0 0 40px rgba(0,0,0,0.3)', ring: null },
     listening: { label: 'Dinləyir... Göndərmək üçün toxunun', gradient: 'radial-gradient(circle at 35% 35%, #60b5ff, #2563eb, #1e40af)', glow: '0 0 80px rgba(37,99,235,0.4)', ring: 'bg-blue-400' },
     processing: { label: 'Düşünür...', gradient: 'radial-gradient(circle at 35% 35%, #c4a5ff, #7c3aed, #4c1d95)', glow: '0 0 60px rgba(124,58,237,0.3)', ring: null },
-    speaking: { label: 'Danışır — kəsmək üçün toxunun', gradient: 'radial-gradient(circle at 35% 35%, #4eeac0, #10a37f, #065f46)', glow: '0 0 80px rgba(16,163,127,0.4)', ring: 'bg-emerald-400' },
+    speaking: { label: 'Danışır — kəsmək üçün toxunun', gradient: 'radial-gradient(circle at 35% 35%, #b9a8f5, #7F77DD, #3C3489)', glow: '0 0 80px rgba(127,119,221,0.4)', ring: 'bg-purple-400' },
   };
 
   const cfg = stateConfig[state];
@@ -382,7 +382,7 @@ export default function VoiceMode({ onSend, onClose, lastAssistantMessage, isLoa
           aria-label={cfg.label}
         >
           {/* Glow */}
-          <div className="absolute inset-0 rounded-full transition-all duration-700" style={{ transform: 'scale(1.5)', background: state === 'listening' ? 'radial-gradient(circle, rgba(99,179,255,0.12), transparent 70%)' : state === 'speaking' ? 'radial-gradient(circle, rgba(16,163,127,0.12), transparent 70%)' : 'transparent' }} />
+          <div className="absolute inset-0 rounded-full transition-all duration-700" style={{ transform: 'scale(1.5)', background: state === 'listening' ? 'radial-gradient(circle, rgba(99,179,255,0.12), transparent 70%)' : state === 'speaking' ? 'radial-gradient(circle, rgba(127,119,221,0.12), transparent 70%)' : 'transparent' }} />
 
           {/* Ping ring */}
           {cfg.ring && <div className={`absolute inset-0 rounded-full animate-ping opacity-15 ${cfg.ring}`} style={{ animationDuration: '2s' }} />}
