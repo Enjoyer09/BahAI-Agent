@@ -60,6 +60,66 @@ async function ensureDemoUser() {
   return inserted.rows[0];
 }
 
+// Helper: record login attempt
+async function recordLogin(userId, email, success, method, req) {
+  if (!db.hasDatabase()) return;
+  try {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+    const ua = req.headers['user-agent'] || 'unknown';
+    await db.query(
+      'INSERT INTO login_history (user_id, email, success, ip_address, user_agent, method) VALUES ($1, $2, $3, $4, $5, $6)',
+      [userId, email, success, ip, ua, method]
+    );
+  } catch { /* fire-and-forget */ }
+}
+
+// Helper: start or update a user session
+async function touchSession(userId, req) {
+  if (!db.hasDatabase()) return;
+  try {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+    const ua = req.headers['user-agent'] || 'unknown';
+    // Check if there's an active session (last_seen within 30 min)
+    const existing = await db.query(
+      `SELECT id FROM user_sessions 
+       WHERE user_id = $1 AND ended_at IS NULL AND last_seen_at > NOW() - INTERVAL '30 minutes'
+       ORDER BY started_at DESC LIMIT 1`,
+      [userId]
+    );
+    if (existing.rows.length > 0) {
+      // Update existing session
+      await db.query(
+        `UPDATE user_sessions SET last_seen_at = NOW(), duration_minutes = EXTRACT(EPOCH FROM (NOW() - started_at)) / 60
+         WHERE id = $1`,
+        [existing.rows[0].id]
+      );
+    } else {
+      // Close any old open sessions for this user
+      await db.query(
+        `UPDATE user_sessions SET ended_at = last_seen_at, duration_minutes = EXTRACT(EPOCH FROM (last_seen_at - started_at)) / 60
+         WHERE user_id = $1 AND ended_at IS NULL`,
+        [userId]
+      );
+      // Start new session
+      await db.query(
+        'INSERT INTO user_sessions (user_id, ip_address, user_agent) VALUES ($1, $2, $3)',
+        [userId, ip, ua]
+      );
+    }
+  } catch { /* fire-and-forget */ }
+}
+
+// Helper: log error for admin visibility
+async function logError(userId, email, errorType, errorMessage, endpoint, metadata) {
+  if (!db.hasDatabase()) return;
+  try {
+    await db.query(
+      'INSERT INTO error_logs (user_id, email, error_type, error_message, endpoint, metadata) VALUES ($1, $2, $3, $4, $5, $6)',
+      [userId, email, errorType, errorMessage, endpoint, JSON.stringify(metadata || {})]
+    );
+  } catch { /* fire-and-forget */ }
+}
+
 // SEC-1: Login with Role
 async function login(req, res) {
   const { email, password } = req.body;
@@ -70,22 +130,28 @@ async function login(req, res) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const isDemoLogin = normalizedEmail === 'demo' || normalizedEmail === 'demo@bahai.local';
     if (isDemoLogin && password !== 'demo123') {
+      recordLogin(null, normalizedEmail, false, 'local', req);
       return res.status(401).json({ error: 'Demo şifrəsi yanlışdır' });
     }
     const localEmail = isDemoLogin ? 'demo@bahai.local' : (email || 'admin@bahai.local');
     const uid = localUserId(localEmail);
     const localUser = { id: uid, email: localEmail, name: isDemoLogin ? 'Demo User' : (email?.split('@')[0] || 'User'), role: 'admin' };
     const tokens = generateTokenPair(localUser);
+    recordLogin(uid, localEmail, true, 'local', req);
+    touchSession(uid, req);
     return res.json({ token: tokens.accessToken, refreshToken: tokens.refreshToken, user: localUser });
   }
 
   try {
     if (isDemoEmail(email) && isDemoLoginEnabled()) {
       if (password !== DEMO_PASSWORD) {
+        recordLogin(null, email, false, 'demo', req);
         return res.status(401).json({ error: 'Demo şifrəsi yanlışdır' });
       }
       const demoUser = await ensureDemoUser();
       const tokens = generateTokenPair({ id: demoUser.id, email: demoUser.email, role: demoUser.role });
+      recordLogin(demoUser.id, demoUser.email, true, 'demo', req);
+      touchSession(demoUser.id, req);
       return res.json({
         token: tokens.accessToken,
         refreshToken: tokens.refreshToken,
@@ -97,10 +163,14 @@ async function login(req, res) {
     const user = result.rows[0];
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
+      recordLogin(user?.id || null, email, false, 'password', req);
+      logError(user?.id || null, email, 'auth_failed', 'E-poçt və ya şifrə yanlışdır', '/api/auth/login', { email });
       return res.status(401).json({ error: 'E-poçt və ya şifrə yanlışdır' });
     }
 
     const tokens = generateTokenPair({ id: user.id, email: user.email, role: user.role });
+    recordLogin(user.id, user.email, true, 'password', req);
+    touchSession(user.id, req);
 
     res.json({
       token: tokens.accessToken,
@@ -109,6 +179,7 @@ async function login(req, res) {
     });
   } catch (e) {
     console.error('Login Error:', e);
+    logError(null, email, 'server_error', e.message, '/api/auth/login', {});
     res.status(500).json({ error: 'Server xətası baş verdi' });
   }
 }
@@ -180,6 +251,8 @@ function verifyToken(req, res, next) {
       // Update last_active timestamp (fire-and-forget)
       if (decoded.id && db.hasDatabase()) {
         db.query('UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = $1', [decoded.id]).catch(() => {});
+        // Touch session to track duration
+        touchSession(decoded.id, req);
       }
       
       next();
@@ -280,6 +353,8 @@ async function googleLogin(req, res) {
 
     // Sign local JWT Token
     const tokens = generateTokenPair({ id: user.id, email: user.email, role: user.role });
+    recordLogin(user.id, user.email, true, 'google', req);
+    touchSession(user.id, req);
 
     res.json({
       token: tokens.accessToken,
@@ -288,6 +363,7 @@ async function googleLogin(req, res) {
     });
   } catch (e) {
     console.error('Google Login Error:', e);
+    logError(null, null, 'google_login_error', e.message, '/api/auth/google-login', {});
     res.status(500).json({ error: 'Google ilə daxil olarkən server xətası baş verdi' });
   }
 }
@@ -586,5 +662,6 @@ module.exports = {
   requireAdmin,
   requireWorkspaceAccess,
   generateTokenPair,
+  logError,
   JWT_SECRET
 };

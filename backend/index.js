@@ -390,6 +390,20 @@ app.use(function(err, req, res, next) {
       messagePreview: String(req.body?.message || '').slice(0, 200)
     });
   }
+  // Log to admin error_logs table
+  try {
+    const { logError } = require('./auth');
+    if (logError) {
+      logError(
+        req.user?.id || null,
+        req.user?.email || null,
+        'unhandled_error',
+        err?.message || 'Unknown error',
+        `${req.method} ${req.originalUrl}`,
+        { correlationId }
+      );
+    }
+  } catch { /* ignore */ }
   if (res.headersSent) {
     return next(err);
   }

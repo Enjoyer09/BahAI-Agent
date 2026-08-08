@@ -194,8 +194,71 @@ router.get('/admin/users', requireAdmin, async (req, res) => {
   try {
     const db = require('../db');
     if (!db.hasDatabase()) return res.json({ users: [{ id: 1, email: 'admin@local', name: 'Local Admin', role: 'admin' }] });
-    const result = await db.query('SELECT id, email, name, role, created_at, last_active FROM users ORDER BY created_at DESC LIMIT 50');
+    const result = await db.query(`
+      SELECT u.id, u.email, u.name, u.role, u.created_at, u.last_active,
+        (SELECT COUNT(*) FROM conversations WHERE user_id = u.id) as conversation_count,
+        (SELECT COUNT(*) FROM messages WHERE user_id = u.id) as message_count
+      FROM users u ORDER BY u.created_at DESC LIMIT 50
+    `);
     res.json({ users: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/login-history — Login history for all users
+router.get('/admin/login-history', requireAdmin, async (req, res) => {
+  try {
+    const db = require('../db');
+    if (!db.hasDatabase()) return res.json({ logins: [] });
+    const result = await db.query(`
+      SELECT lh.id, lh.email, lh.success, lh.ip_address, lh.user_agent, lh.method, lh.created_at,
+        u.name as user_name
+      FROM login_history lh
+      LEFT JOIN users u ON u.id = lh.user_id
+      ORDER BY lh.created_at DESC
+      LIMIT 100
+    `);
+    res.json({ logins: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/sessions — User session durations
+router.get('/admin/sessions', requireAdmin, async (req, res) => {
+  try {
+    const db = require('../db');
+    if (!db.hasDatabase()) return res.json({ sessions: [] });
+    const result = await db.query(`
+      SELECT s.id, s.user_id, s.started_at, s.last_seen_at, s.ended_at, 
+        COALESCE(s.duration_minutes, EXTRACT(EPOCH FROM (COALESCE(s.ended_at, s.last_seen_at) - s.started_at)) / 60) as duration_minutes,
+        s.ip_address, u.name as user_name, u.email
+      FROM user_sessions s
+      LEFT JOIN users u ON u.id = s.user_id
+      ORDER BY s.started_at DESC
+      LIMIT 100
+    `);
+    res.json({ sessions: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/errors — Error logs
+router.get('/admin/errors', requireAdmin, async (req, res) => {
+  try {
+    const db = require('../db');
+    if (!db.hasDatabase()) return res.json({ errors: [] });
+    const result = await db.query(`
+      SELECT e.id, e.user_id, e.email, e.error_type, e.error_message, e.endpoint, e.metadata, e.created_at,
+        u.name as user_name
+      FROM error_logs e
+      LEFT JOIN users u ON u.id = e.user_id
+      ORDER BY e.created_at DESC
+      LIMIT 100
+    `);
+    res.json({ errors: result.rows });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

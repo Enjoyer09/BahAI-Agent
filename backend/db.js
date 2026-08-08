@@ -169,6 +169,64 @@ async function initDb() {
       )
     `);
 
+    // Login history table — tracks every login attempt
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS login_history (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        email TEXT NOT NULL,
+        success BOOLEAN DEFAULT true,
+        ip_address TEXT,
+        user_agent TEXT,
+        method TEXT DEFAULT 'password',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_login_history_user_id
+      ON login_history(user_id, created_at DESC)
+    `);
+
+    // User sessions table — tracks session start/end for duration calculation
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ended_at TIMESTAMP,
+        duration_minutes INTEGER DEFAULT 0,
+        ip_address TEXT,
+        user_agent TEXT
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id
+      ON user_sessions(user_id, started_at DESC)
+    `);
+
+    // Error logs table — tracks user-facing errors
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS error_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        email TEXT,
+        error_type TEXT NOT NULL,
+        error_message TEXT NOT NULL,
+        endpoint TEXT,
+        stack_trace TEXT,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_error_logs_created
+      ON error_logs(created_at DESC)
+    `);
+
     const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;
 
