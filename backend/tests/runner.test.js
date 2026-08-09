@@ -1044,7 +1044,7 @@ describe('runner failover behavior', () => {
     });
     expect(result.errorEvent).toBeTruthy();
     expect(result.errorEvent.message).toContain('AI provider');
-    expect(result.errorEvent.message).toContain('eyni AI gateway');
+    expect(result.errorEvent.message).toContain('eyni gateway');
   });
 
   it('fails over from an OmniRoute 5xx to a configured OpenRouter candidate (cross-provider)', async () => {
@@ -1124,7 +1124,7 @@ describe('runner failover behavior', () => {
     expect(result.errorEvent.message).toContain('AI servisləri');
     // With a distinct base URL (OpenRouter) in the pool, the "all models share
     // one gateway" redundancy hint must NOT be shown.
-    expect(result.errorEvent.message).not.toContain('eyni AI gateway');
+    expect(result.errorEvent.message).not.toContain('eyni gateway');
   });
 
   it('shows the single-gateway hint on a 503 when no second provider is configured', async () => {
