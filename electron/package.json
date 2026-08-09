@@ -20,6 +20,10 @@
     },
     "files": [
       "main.js",
+      "preload.js",
+      "ptyManager.js",
+      "fsWatcher.js",
+      "ipcHandlers.js",
       "icons/**/*"
     ],
     "extraResources": [

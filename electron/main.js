@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const net = require('net');
+const ipcHandlers = require('./ipcHandlers');
+const ptyManager = require('./ptyManager');
 
 ipcMain.handle('dialog:openDirectory', async () => {
   if (!mainWindow) return null;
@@ -394,6 +396,13 @@ app.whenReady().then(async () => {
   try {
     await startBackend();
     createWindow();
+    // Register Desktop App Builder IPC handlers
+    const allowedDirs = [
+      path.join(__dirname, '..'),
+      path.join(process.env.HOME || '', 'Documents'),
+      path.join(process.env.HOME || '', 'Desktop'),
+    ].filter(d => fs.existsSync(d));
+    ipcHandlers.register(mainWindow, allowedDirs);
   } catch (err) {
     console.error('Failed to start:', err);
     dialog.showErrorBox(
@@ -417,6 +426,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  ipcHandlers.cleanup();
   stopBackend();
 });
 

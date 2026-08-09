@@ -164,7 +164,7 @@ export default function SettingsModal({
         </div>
       </div>
       
-      {!isDesktopProduct && onConnectGithub && (
+      {isDesktopProduct && onConnectGithub && (
         <>
           <hr className="border-[var(--border)]" />
           <div>

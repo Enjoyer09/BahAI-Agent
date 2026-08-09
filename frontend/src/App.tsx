@@ -16,12 +16,23 @@ import { useSettings } from './hooks/useSettings';
 import { ToastProvider, useConfirm } from './components/common/Toast';
 import { trackAppOpen } from './lib/telemetry';
 import { WORKFLOW_OPTIONS } from './lib/constants';
+import { useWorkspace } from './hooks/useWorkspace';
 
 // P2-FIX: Code-split heavy components that are not needed on initial render
 const CodeEditor = lazy(() => import('./components/chat/CodeEditor'));
 const LivePreview = lazy(() => import('./components/chat/LivePreview'));
 const OpsPanel = lazy(() => import('./components/chat/OpsPanel'));
 const Terminal = lazy(() => import('./components/chat/Terminal'));
+// Desktop App Builder workspace components (lazy — only loaded in Electron desktop_code)
+const DesktopIDELayout = lazy(() => import('./layouts/DesktopIDELayout'));
+const FileTree = lazy(() => import('./components/workspace/FileTree').then(m => ({ default: m.default })));
+const DesktopTerminal = lazy(() => import('./components/workspace/DesktopTerminal'));
+const DesktopPreview = lazy(() => import('./components/workspace/DesktopPreview'));
+const EditorTabsComponent = lazy(() => import('./components/workspace/EditorTabs'));
+const GitPanel = lazy(() => import('./components/workspace/GitPanel'));
+const OrchestrationProgress = lazy(() => import('./components/workspace/OrchestrationProgress'));
+const NewProjectDialog = lazy(() => import('./components/workspace/NewProjectDialog'));
+const DeployPanel = lazy(() => import('./components/deploy/DeployPanel'));
 // Lazy loading fallback
 function LazyFallback() {
   return (
@@ -56,6 +67,7 @@ function AppContent() {
   const { ConfirmDialog } = useConfirm();
 
   const chat = useChat(settings.settings, auth.user?.id);
+  const workspace = useWorkspace(chat.activeProject?.path || '');
 
   // Keep the latest chat handle in a ref so the global keydown listener (which
   // is registered once) never reads a stale createConversation/projects value.
@@ -225,6 +237,153 @@ function AppContent() {
   // Landing page
   if (!isChat) {
     return <LandingPage onGetStarted={navigateToChat} />;
+  }
+
+  // ─── DESKTOP IDE MODE ───────────────────────────
+  // When running in Electron with desktop_code product mode AND a project is active,
+  // render the full IDE layout instead of the simple chat-only view.
+  if (isElectron && isDesktopProduct && chat.activeProject) {
+    return (
+      <div className="dvh-screen flex overflow-hidden" style={{ background: 'var(--bg-main)' }}>
+        {/* Electron Window Drag Handle */}
+        <div 
+          className="fixed top-0 left-0 right-0 h-7 z-[9999]" 
+          style={{ WebkitAppRegion: 'drag', WebkitUserSelect: 'none' } as any}
+        />
+
+        {/* Sidebar */}
+        {sidebarOpen && (
+          <aside
+            className="flex flex-col shrink-0 overflow-hidden relative"
+            style={{ width: `${sidebarWidth}px`, background: 'var(--bg-surface)', borderRight: '1px solid var(--border)' }}
+          >
+            <Sidebar onToggle={() => setSidebarOpen(false)} chat={chat} themeCtx={themeCtx} settingsCtx={settings} isMobile={false} />
+          </aside>
+        )}
+
+        {/* IDE Layout */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden" style={{ paddingTop: '28px' }}>
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <DesktopIDELayout
+                fileTreePanel={
+                  <Suspense fallback={<LazyFallback />}>
+                    <FileTree
+                      workingDirectory={chat.activeProject.path}
+                      onFileSelect={(path) => workspace.openFile(path)}
+                      gitStatusMap={workspace.gitState.files}
+                      selectedFile={workspace.activeTab?.filePath}
+                    />
+                  </Suspense>
+                }
+                editorPanel={
+                  <div className="flex flex-col h-full overflow-hidden">
+                    <Suspense fallback={<LazyFallback />}>
+                      <EditorTabsComponent
+                        tabs={workspace.openTabs}
+                        activeTabId={workspace.activeTab?.id || null}
+                        onSelectTab={workspace.setActiveTab}
+                        onCloseTab={workspace.closeTab}
+                      />
+                    </Suspense>
+                    {workspace.activeTab ? (
+                      <Suspense fallback={<LazyFallback />}>
+                        <CodeEditor
+                          filePath={workspace.activeTab.filePath}
+                          workingDirectory={chat.activeProject.path}
+                          onClose={() => workspace.closeTab(workspace.activeTab!.id)}
+                        />
+                      </Suspense>
+                    ) : (
+                      <div className="flex-1 flex flex-col">
+                        <ChatArea
+                          messages={chat.messages}
+                          loading={chat.loading}
+                          onSend={chat.sendMessage}
+                          onStop={chat.stop}
+                          workingDirectory={chat.activeProject.path}
+                          productMode={settings.productMode}
+                          settings={settings}
+                          onEdit={chat.editMessage}
+                          onRegenerate={chat.regenerateMessage}
+                        />
+                        <div className="desktop-composer-dock shrink-0 w-full max-w-3xl mx-auto">
+                          <Composer
+                            onSendMessage={(text, attachments) => chat.sendMessage(text, attachments)}
+                            disabled={chat.loading}
+                            isGenerating={chat.loading}
+                            onStop={chat.stop}
+                            settings={settings}
+                            jobStatus={chat.jobStatus}
+                            onCancelJob={chat.stop}
+                            onVoiceMode={undefined}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                }
+                chatPanel={
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    <ChatArea
+                      messages={chat.messages}
+                      loading={chat.loading}
+                      onSend={chat.sendMessage}
+                      onStop={chat.stop}
+                      workingDirectory={chat.activeProject.path}
+                      productMode={settings.productMode}
+                      settings={settings}
+                      onEdit={chat.editMessage}
+                      onRegenerate={chat.regenerateMessage}
+                    />
+                    <div className="desktop-composer-dock shrink-0 w-full max-w-3xl mx-auto">
+                      <Composer
+                        onSendMessage={(text, attachments) => chat.sendMessage(text, attachments)}
+                        disabled={chat.loading}
+                        isGenerating={chat.loading}
+                        onStop={chat.stop}
+                        settings={settings}
+                        jobStatus={chat.jobStatus}
+                        onCancelJob={chat.stop}
+                        onVoiceMode={undefined}
+                      />
+                    </div>
+                  </div>
+                }
+                terminalPanel={
+                  <Suspense fallback={<LazyFallback />}>
+                    <DesktopTerminal
+                      projectPath={chat.activeProject.path}
+                      isVisible={true}
+                    />
+                  </Suspense>
+                }
+                previewPanel={
+                  <Suspense fallback={<LazyFallback />}>
+                    <DesktopPreview
+                      port={chat.activeProject.lastPort}
+                      isVisible={true}
+                      autoReloadSignal={workspace.fileChangeSignal}
+                    />
+                  </Suspense>
+                }
+              />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+
+        {/* Modals */}
+        <KeyboardShortcutsDialog isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
+        <ActionCenterModal
+          interactions={chat.actionCenterInteractions}
+          history={chat.actionCenterHistory}
+          onResolveCheckpoint={chat.resolveHumanCheckpoint}
+          onApprove={chat.decideApproval}
+        />
+        <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} productMode={settings.productMode} />
+        {ConfirmDialog}
+      </div>
+    );
   }
 
   return (
