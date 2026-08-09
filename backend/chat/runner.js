@@ -448,6 +448,8 @@ async function openAiStreamWithFallback({
 
         console.error(`❌ API Error [${status}]:`, currentErr.message);
         console.error(`❌ Full error:`, JSON.stringify({ status: currentErr.status, headers: currentErr.headers, body: currentErr.error || currentErr.body }, null, 2));
+        console.error(`❌ Provider chain exhausted. Tried: ${(providerCandidates || []).map(c => `${c.id}(${c.model}@${(c.baseURL||'').replace(/https?:\/\//, '').slice(0,30)})`).join(' → ')}`);
+        console.error(`❌ Last provider: ${nextProvider?.id}, model: ${nextModel}, status: ${status}`);
         // If every candidate routes through the SAME gateway/base URL, the
         // "alternative models" the system "auto-checked" are not real backups —
         // they share one point of failure. Say so, and point at the actual fix.
@@ -457,7 +459,7 @@ async function openAiStreamWithFallback({
         const singleGateway = distinctBases.length <= 1;
         let userMsg = isGenericFailoverCandidate(providerCandidates)
           ? ('AI provider-lər hazırda cavab qaytarmadı. Sistem alternativ modelləri avtomatik yoxladı. Bir az sonra yenidən cəhd edin.'
-            + (singleGateway ? ' (Qeyd: bütün modellər eyni AI gateway-dən keçir — ehtiyat provider, məsələn OpenRouter və ya NVIDIA, qoşulu olarsa avtomatik keçid olunar.)' : ''))
+            + (singleGateway ? ' (Bütün modellər eyni gateway-dən keçir — əlavə provider qoşulu deyil.)' : ` (${providerCandidates.length} provider yoxlanıldı, status: ${status})`))
           : `API xətası: ${currentErr.message}`;
         const errLower = String(currentErr.message || '').toLowerCase();
         const isOllamaUrl = String(nextProvider.baseURL || '').includes('11434') || String(nextProvider.baseURL || '').includes('ollama');

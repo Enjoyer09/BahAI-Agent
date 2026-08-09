@@ -796,8 +796,8 @@ ${generateToolsSystemPrompt(TOOLS)}`;
         // healthy cloud models can legitimately exceed 8s TTFT, so desktop keeps
         // a conservative 25s default unless overridden via env.
         firstTokenTimeoutMs: hasImageAttachment
-          ? Math.max(1000, parseInt(process.env.VISION_LLM_FIRST_TOKEN_MS || (productMode === 'web_chat' ? '15000' : '25000'), 10))
-          : Math.max(1000, parseInt(process.env.LLM_FIRST_TOKEN_MS || (productMode === 'web_chat' ? '8000' : '25000'), 10)),
+          ? Math.max(1000, parseInt(process.env.VISION_LLM_FIRST_TOKEN_MS || (productMode === 'web_chat' ? '20000' : '25000'), 10))
+          : Math.max(1000, parseInt(process.env.LLM_FIRST_TOKEN_MS || (productMode === 'web_chat' ? '15000' : '25000'), 10)),
         hasImageAttachment,
         handleToolCall, normalizeToolName, extractTextToolCalls,
         buildToolCallCacheKey, flattenResponseJsonText,
@@ -811,7 +811,7 @@ ${generateToolsSystemPrompt(TOOLS)}`;
         // a healthy provider fallback without burning the whole budget; the old
         // 30s/45s deadlines made late fallbacks fail with a bogus 1s "timeout".
         requestTimeoutMs: productMode === 'web_chat'
-          ? (hasImageAttachment ? 60000 : 45000)
+          ? (hasImageAttachment ? 75000 : 60000)
           : Math.max(LLM_TIMEOUT_MS, 90000),
         onProviderTelemetry: (payload) => {
           const safePayload = {
