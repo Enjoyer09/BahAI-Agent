@@ -346,9 +346,26 @@ function buildProviderCandidates({
     const candidates = [];
     const seenKeys = new Set();
     const nvidiaCandidates = buildNvidiaProviders(primaryTask);
-    const orderedCandidates = primaryTask === 'vision'
-      ? [...nvidiaCandidates, ...cloudCandidates]
-      : [...cloudCandidates, ...nvidiaCandidates];
+    const openRouterCandidates = buildOpenRouterFallbackCandidates('web_auto');
+
+    // Vision failover ordering: a blind gateway 'auto' must never be tried
+    // before a known vision-capable model. Keep the explicit WEB_CHAT_VISION_MODEL
+    // (web_vision_primary_omniroute) first, then NVIDIA vision, then the
+    // OpenRouter vision fallback, and only afterwards any remaining gateway
+    // fallback models (e.g. 'auto'). When WEB_CHAT_VISION_MODEL is not set the
+    // explicit primary slot is empty, so NVIDIA/OpenRouter vision candidates are
+    // still guaranteed ahead of the gateway 'auto' (which the gateway may
+    // resolve to a text-only model that silently ignores the image).
+    let orderedCandidates;
+    if (primaryTask === 'vision') {
+      const [primaryCloud, ...restCloud] = cloudCandidates;
+      orderedCandidates = webVisionModel
+        ? [primaryCloud, ...nvidiaCandidates, ...openRouterCandidates, ...restCloud]
+        : [...nvidiaCandidates, ...openRouterCandidates, ...cloudCandidates];
+    } else {
+      orderedCandidates = [...cloudCandidates, ...nvidiaCandidates];
+    }
+    orderedCandidates = orderedCandidates.filter(Boolean);
 
     for (const cand of orderedCandidates) {
       const key = `${cand.baseURL}|${cand.model}`;
@@ -359,13 +376,16 @@ function buildProviderCandidates({
     }
 
     // Cloud Fallback: OpenRouter Free Models (only if valid key is configured).
-    // Env-driven chain: OPENROUTER_FALLBACK_MODELS first, then the task-matched
-    // default (text vs vision). Each entry is a separate failover candidate.
-    for (const cand of buildOpenRouterFallbackCandidates('web_auto')) {
-      const key = `${cand.baseURL}|${cand.model}`;
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        candidates.push(cand);
+    // For vision tasks these are already positioned above (ahead of any blind
+    // gateway 'auto'); for non-vision tasks append them here to keep the
+    // original assembly path unchanged.
+    if (primaryTask !== 'vision') {
+      for (const cand of openRouterCandidates) {
+        const key = `${cand.baseURL}|${cand.model}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          candidates.push(cand);
+        }
       }
     }
 

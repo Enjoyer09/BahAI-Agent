@@ -202,8 +202,9 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
     sumqayıtda: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
     sumgayitda: { wttr: 'Sumqayit', label: 'Sumqayıtda' },
   };
-  const isWeatherQuery = /\b(hava|weather|temperatur|temperature|dərəcə|derece)\b/i.test(text);
+  const isWeatherQuery = /\b(hava|weather|temperatur|temperature|dərəcə|derece|isti|soyuq|yağış|yagis|qar|küləkli|bulud)\b/i.test(text);
   const isTomorrowQuery = /\b(sabah|sabahkı|sabahki|tomorrow)\b/i.test(text);
+  const isTodayQuery = /\b(bugün|bugun|bu gün|today|günorta|gunorta|gündüz|gunduz)\b/i.test(text);
   const weatherCityMatch = text.match(/\b(baku|bakı|baki|bakida|bakıda|gence|gəncə|ganja|gencede|gəncədə|sumqayit|sumqayıt|sumgayit|sumqayitda|sumqayıtda|sumgayitda)\b/i);
 
   if (isWeatherQuery && weatherCityMatch) {
@@ -212,7 +213,7 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
     if (cityMeta) {
       if (isTomorrowQuery) {
         try {
-          // Fetch tomorrow's forecast format (%C|%t|%w|%h for day 2) from wttr.in/Baku?format=j1
+          // Fetch tomorrow's forecast from wttr.in
           const forecastUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=j1`;
           const fRes = await fetch(forecastUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } });
           if (fRes.ok) {
@@ -230,8 +231,16 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
         }
       } else {
         try {
+          // Fetch full JSON forecast for richer data
+          const forecastUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=j1`;
           const wttrUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=%C|%t|%w|%h`;
-          const wttrRes = await fetch(wttrUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } });
+
+          // Parallel requests: current conditions + full forecast
+          const [wttrRes, forecastRes] = await Promise.all([
+            fetch(wttrUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } }),
+            fetch(forecastUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } }).catch(() => null)
+          ]);
+
           if (wttrRes.ok) {
             const raw = (await wttrRes.text()).trim();
             const [conditionRaw = '', tempRaw = '', windRaw = '', humidityRaw = ''] = raw.split('|');
@@ -242,11 +251,43 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
             const windMetric = wind
               .replace(/mph/gi, 'km/saat')
               .replace(/(\d+(?:\.\d+)?)\s*km\/h/gi, '$1 km/saat');
+
+            // Try to get today's forecast high/low
+            let todayMax = '';
+            let todayMin = '';
+            let todayDesc = '';
+            if (forecastRes && forecastRes.ok) {
+              try {
+                const data = await forecastRes.json();
+                const todayData = data?.weather?.[0];
+                if (todayData) {
+                  todayMax = todayData.maxtempC || '';
+                  todayMin = todayData.mintempC || '';
+                  // Use midday (12:00) description for today's general weather
+                  todayDesc = todayData.hourly?.[4]?.weatherDesc?.[0]?.value 
+                    || todayData.hourly?.[3]?.weatherDesc?.[0]?.value 
+                    || '';
+                }
+              } catch { /* ignore forecast parse error */ }
+            }
+
             const pieces = [];
-            if (condition) pieces.push(`${cityMeta.label} hazırda ${condition.toLowerCase()} müşahidə olunur.`);
-            if (tempC) pieces.push(`Temperatur təxminən ${tempC.replace(/°?[FC]/gi, '')}°C-dir.`);
-            if (windMetric) pieces.push(`Külək ${windMetric} təşkil edir.`);
-            if (humidity) pieces.push(`Rütubət ${humidity.replace('%', '')}%-dir.`);
+
+            if (isTodayQuery && todayMax) {
+              // User asks about "today" — lead with forecast, then current
+              pieces.push(`Bugün ${cityMeta.label} hava ${todayDesc ? todayDesc.toLowerCase() + ' olacaq' : ''}.`);
+              pieces.push(`Gün ərzində temperatur ${todayMin}°C — ${todayMax}°C arasında dəyişəcək.`);
+              if (tempC) pieces.push(`Hazırda isə ${tempC.replace(/°?[FC]/gi, '')}°C-dir.`);
+              if (windMetric) pieces.push(`Külək ${windMetric} təşkil edir.`);
+            } else {
+              // General weather query — current + today's range as bonus
+              if (condition) pieces.push(`${cityMeta.label} hazırda ${condition.toLowerCase()} müşahidə olunur.`);
+              if (tempC) pieces.push(`Temperatur təxminən ${tempC.replace(/°?[FC]/gi, '')}°C-dir.`);
+              if (todayMax && todayMin) pieces.push(`Bugün gün ərzində ${todayMin}°C — ${todayMax}°C gözlənilir.`);
+              if (windMetric) pieces.push(`Külək ${windMetric} təşkil edir.`);
+              if (humidity) pieces.push(`Rütubət ${humidity.replace('%', '')}%-dir.`);
+            }
+
             return pieces.join(' ');
           }
         } catch {

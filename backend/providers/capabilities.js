@@ -42,6 +42,26 @@ const capabilityMap = {
     Capabilities.IMAGE_VISION,
     Capabilities.JSON_MODE
   ],
+  // Gateways/routers are model-agnostic: they forward to whichever upstream
+  // model the request names, so they must be treated as vision- and tool-capable.
+  // Previously they fell through to `defaultCapabilities` (no image_vision),
+  // which wrongly excluded them from VISION tasks in OmniRoute.route() admission
+  // and would have made BaseProvider.formatAttachments() strip attachments.
+  'omniroute': [
+    ...defaultCapabilities,
+    Capabilities.TOOLS,
+    Capabilities.IMAGE_VISION
+  ],
+  'openrouter': [
+    ...defaultCapabilities,
+    Capabilities.TOOLS,
+    Capabilities.IMAGE_VISION
+  ],
+  'nvidia': [
+    ...defaultCapabilities,
+    Capabilities.TOOLS,
+    Capabilities.IMAGE_VISION
+  ],
   'local': [
     ...defaultCapabilities
   ] // E.g., Ollama, which might not reliably support tools depending on the model
