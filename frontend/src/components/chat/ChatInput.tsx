@@ -285,7 +285,8 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
               }
             `}</style>
             
-            {!disableMobileMic && (
+            {/* Voice input disabled */}
+            {false && !disableMobileMic && (
               <button
                 onClick={toggleListening}
                 type="button"

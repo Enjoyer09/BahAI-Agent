@@ -442,7 +442,7 @@ function AppContent() {
             settings={settings}
             jobStatus={chat.jobStatus}
             onCancelJob={chat.stop}
-            onVoiceMode={settings.productMode === 'web_chat' && (speechSupported || mediaRecordingSupported) ? () => setShowVoiceMode(true) : undefined}
+            onVoiceMode={undefined}
           />
         </div>
 
