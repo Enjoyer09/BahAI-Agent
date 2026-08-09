@@ -211,89 +211,47 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
     const cityKey = weatherCityMatch[1].toLowerCase();
     const cityMeta = weatherCityMap[cityKey];
     if (cityMeta) {
-      if (isTomorrowQuery) {
-        try {
-          // Fetch tomorrow's forecast from wttr.in
-          const forecastUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=j1`;
-          const fRes = await fetch(forecastUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } });
-          if (fRes.ok) {
-            const data = await fRes.json();
-            const tomorrowData = data?.weather?.[1];
-            if (tomorrowData) {
-              const maxC = tomorrowData.maxtempC || '';
-              const minC = tomorrowData.mintempC || '';
-              const desc = tomorrowData.hourly?.[4]?.weatherDesc?.[0]?.value || tomorrowData.hourly?.[0]?.weatherDesc?.[0]?.value || 'açıq';
-              return `Sabah ${cityMeta.label} havanın ${desc.toLowerCase()} olacağı gözlənilir. Temperatur minimum ${minC}°C, maksimum ${maxC}°C ətrafında olacaq.`;
-            }
+      // Fetch weather data, then let LLM answer naturally
+      try {
+        const forecastUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=j1`;
+        const wttrUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=%C|%t|%w|%h`;
+
+        const [wttrRes, forecastRes] = await Promise.all([
+          fetch(wttrUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } }),
+          fetch(forecastUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } }).catch(() => null)
+        ]);
+
+        if (wttrRes.ok) {
+          const raw = (await wttrRes.text()).trim();
+          const [conditionRaw = '', tempRaw = '', windRaw = '', humidityRaw = ''] = raw.split('|');
+          const condition = String(conditionRaw).replace(/\s+/g, ' ').trim();
+          const tempC = formatTemperatureCelsius(String(tempRaw).replace(/\+/g, '').replace(/\s+/g, '').trim());
+          const wind = String(windRaw).replace(/\s+/g, ' ').trim();
+          const humidity = String(humidityRaw).replace(/\s+/g, '').trim();
+
+          const wCtx = { city: cityMeta.label, condition, tempC, wind, humidity };
+
+          if (forecastRes && forecastRes.ok) {
+            try {
+              const data = await forecastRes.json();
+              const todayData = data?.weather?.[0];
+              const tomorrowData = data?.weather?.[1];
+              if (todayData) {
+                wCtx.todayMax = todayData.maxtempC || '';
+                wCtx.todayMin = todayData.mintempC || '';
+                wCtx.todayDesc = todayData.hourly?.[4]?.weatherDesc?.[0]?.value || todayData.hourly?.[0]?.weatherDesc?.[0]?.value || '';
+              }
+              if (tomorrowData) {
+                wCtx.tomorrowMax = tomorrowData.maxtempC || '';
+                wCtx.tomorrowMin = tomorrowData.mintempC || '';
+                wCtx.tomorrowDesc = tomorrowData.hourly?.[4]?.weatherDesc?.[0]?.value || tomorrowData.hourly?.[0]?.weatherDesc?.[0]?.value || '';
+              }
+            } catch { /* ignore */ }
           }
-        } catch {
-          // Fallthrough to model web_search if wttr.in fails
+          // Return special object so caller knows it's weather context, not a direct reply
+          return { __weatherContext: wCtx };
         }
-      } else {
-        try {
-          // Fetch full JSON forecast for richer data
-          const forecastUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=j1`;
-          const wttrUrl = `https://wttr.in/${encodeURIComponent(cityMeta.wttr)}?format=%C|%t|%w|%h`;
-
-          // Parallel requests: current conditions + full forecast
-          const [wttrRes, forecastRes] = await Promise.all([
-            fetch(wttrUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } }),
-            fetch(forecastUrl, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'BahAI/1.0' } }).catch(() => null)
-          ]);
-
-          if (wttrRes.ok) {
-            const raw = (await wttrRes.text()).trim();
-            const [conditionRaw = '', tempRaw = '', windRaw = '', humidityRaw = ''] = raw.split('|');
-            const condition = String(conditionRaw).replace(/\s+/g, ' ').trim();
-            const tempC = formatTemperatureCelsius(String(tempRaw).replace(/\+/g, '').replace(/\s+/g, '').trim());
-            const wind = String(windRaw).replace(/\s+/g, ' ').trim();
-            const humidity = String(humidityRaw).replace(/\s+/g, '').trim();
-            const windMetric = wind
-              .replace(/mph/gi, 'km/saat')
-              .replace(/(\d+(?:\.\d+)?)\s*km\/h/gi, '$1 km/saat');
-
-            // Try to get today's forecast high/low
-            let todayMax = '';
-            let todayMin = '';
-            let todayDesc = '';
-            if (forecastRes && forecastRes.ok) {
-              try {
-                const data = await forecastRes.json();
-                const todayData = data?.weather?.[0];
-                if (todayData) {
-                  todayMax = todayData.maxtempC || '';
-                  todayMin = todayData.mintempC || '';
-                  // Use midday (12:00) description for today's general weather
-                  todayDesc = todayData.hourly?.[4]?.weatherDesc?.[0]?.value 
-                    || todayData.hourly?.[3]?.weatherDesc?.[0]?.value 
-                    || '';
-                }
-              } catch { /* ignore forecast parse error */ }
-            }
-
-            const pieces = [];
-
-            if (isTodayQuery && todayMax) {
-              // User asks about "today" — lead with forecast, then current
-              pieces.push(`Bugün ${cityMeta.label} hava ${todayDesc ? todayDesc.toLowerCase() + ' olacaq' : ''}.`);
-              pieces.push(`Gün ərzində temperatur ${todayMin}°C — ${todayMax}°C arasında dəyişəcək.`);
-              if (tempC) pieces.push(`Hazırda isə ${tempC.replace(/°?[FC]/gi, '')}°C-dir.`);
-              if (windMetric) pieces.push(`Külək ${windMetric} təşkil edir.`);
-            } else {
-              // General weather query — current + today's range as bonus
-              if (condition) pieces.push(`${cityMeta.label} hazırda ${condition.toLowerCase()} müşahidə olunur.`);
-              if (tempC) pieces.push(`Temperatur təxminən ${tempC.replace(/°?[FC]/gi, '')}°C-dir.`);
-              if (todayMax && todayMin) pieces.push(`Bugün gün ərzində ${todayMin}°C — ${todayMax}°C gözlənilir.`);
-              if (windMetric) pieces.push(`Külək ${windMetric} təşkil edir.`);
-              if (humidity) pieces.push(`Rütubət ${humidity.replace('%', '')}%-dir.`);
-            }
-
-            return pieces.join(' ');
-          }
-        } catch {
-          return `${cityMeta.label} hava məlumatını hazırda birbaşa götürə bilmədim. Bir neçə dəqiqə sonra yenidən yoxlayaq.`;
-        }
-      }
+      } catch { /* weather fetch failed, let LLM handle with web_search */ }
     }
   }
   const previousAssistant = [...(Array.isArray(messages) ? messages : [])]
@@ -614,7 +572,12 @@ router.post('/', async (req, res) => {
   const safeReferentSummary = productMode === 'web_chat' && historyMessageCount >= 2 ? (referentSummary || null) : null;
   const directWebReply = productMode === 'web_chat' ? await getDirectWebChatReply(latestUserText, normalizedMessages, safeReferentSummary) : '';
 
-  if (directWebReply) {
+  // Check if we got a weather context object instead of a direct string reply
+  let weatherContextData = null;
+  if (directWebReply && typeof directWebReply === 'object' && directWebReply.__weatherContext) {
+    weatherContextData = directWebReply.__weatherContext;
+    // Don't return early — let LLM handle with the weather data injected
+  } else if (directWebReply) {
     initSse(res);
     writeSse(res, {
       type: 'assistant_message',
@@ -702,6 +665,24 @@ ${generateToolsSystemPrompt(TOOLS)}`;
 
   const historyMessages = Array.isArray(messages) && messages.length > 1 ? messages.slice(0, -1) : [];
 
+  // Inject live weather data as system context if available
+  const weatherInjection = [];
+  if (weatherContextData) {
+    const w = weatherContextData;
+    let weatherInfo = `Canlı hava məlumatı (wttr.in-dən indi alınıb, istifadəçiyə təbii dildə danış):\n`;
+    weatherInfo += `Şəhər: ${w.city}\n`;
+    weatherInfo += `Hazırkı vəziyyət: ${w.condition}\n`;
+    weatherInfo += `Hazırkı temperatur: ${w.tempC}°C\n`;
+    if (w.wind) weatherInfo += `Külək: ${w.wind}\n`;
+    if (w.humidity) weatherInfo += `Rütubət: ${w.humidity}\n`;
+    if (w.todayMax) weatherInfo += `Bugün maks: ${w.todayMax}°C, min: ${w.todayMin}°C\n`;
+    if (w.todayDesc) weatherInfo += `Bugünkü proqnoz: ${w.todayDesc}\n`;
+    if (w.tomorrowMax) weatherInfo += `Sabah maks: ${w.tomorrowMax}°C, min: ${w.tomorrowMin}°C\n`;
+    if (w.tomorrowDesc) weatherInfo += `Sabahkı proqnoz: ${w.tomorrowDesc}\n`;
+    weatherInfo += `\nBu data-nı istifadə edib istifadəçinin sualına təbii, qısa, insani dildə cavab ver. Şablon cümlələr istifadə etmə — sanki dost kimi danış. Məlumatı əzbər deyil, söhbət kimi çatdır. Lazım olmayan detalları sıralama, yalnız istifadəçinin soruşduğunu cavabla.`;
+    weatherInjection.push({ role: 'system', content: weatherInfo });
+  }
+
   const apiMessages = [
     { role: 'system', content: systemPrompt },
     ...(productMode === 'web_chat' && safeReferentSummary?.previousAssistant ? [{
@@ -728,6 +709,7 @@ ${generateToolsSystemPrompt(TOOLS)}`;
       role: 'system',
       content: `İstifadəçi profili: ${JSON.stringify(safeReferentSummary.userProfile)}. Bu dili və üslubu söhbət boyu saxla.`
     }] : []),
+    ...weatherInjection,
     ...historyMessages,
     {
       role: 'user',

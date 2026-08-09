@@ -59,14 +59,16 @@ describe('web direct replies', () => {
   it('handles inflected Azerbaijani weather city names', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
-      text: async () => 'Sunny|+29°C|11 km/h|43%'
+      text: async () => 'Sunny|+29°C|11 km/h|43%',
+      json: async () => ({ weather: [{ maxtempC: '33', mintempC: '22', hourly: [{ weatherDesc: [{ value: 'Sunny' }] }] }] })
     }));
 
     const reply = await getDirectWebChatReply('Sumqayıtda hava necədir?', []);
-    expect(reply).toContain('Sumqayıtda');
-    expect(reply).toContain('29°C');
-    expect(reply).toContain('11 km/saat');
-    expect(reply).toContain('43%');
+    // Now returns a weather context object for LLM to process naturally
+    expect(reply).toHaveProperty('__weatherContext');
+    expect(reply.__weatherContext.city).toBe('Sumqayıtda');
+    expect(reply.__weatherContext.tempC).toBe('29');
+    expect(reply.__weatherContext.condition).toBe('Sunny');
   });
 
   it('passes generic world championship queries to LLM and search', async () => {
