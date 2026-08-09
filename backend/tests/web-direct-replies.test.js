@@ -64,11 +64,8 @@ describe('web direct replies', () => {
     }));
 
     const reply = await getDirectWebChatReply('Sumqayıtda hava necədir?', []);
-    // Now returns a weather context object for LLM to process naturally
-    expect(reply).toHaveProperty('__weatherContext');
-    expect(reply.__weatherContext.city).toBe('Sumqayıtda');
-    expect(reply.__weatherContext.tempC).toBe('29');
-    expect(reply.__weatherContext.condition).toBe('Sunny');
+    expect(reply).toContain('Sumqayıtda');
+    expect(reply).toContain('29');
   });
 
   it('passes generic world championship queries to LLM and search', async () => {
