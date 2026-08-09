@@ -187,7 +187,9 @@ export function Composer({ onSendMessage, disabled, isGenerating, onStop, settin
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = 'auto';
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+    const isMobileView = window.innerWidth < 768;
+    const maxH = isMobileView ? 120 : 160;
+    textarea.style.height = `${Math.min(textarea.scrollHeight, maxH)}px`;
   }, [text]);
 
   const addFiles = useCallback(async (files: FileList | File[] | null) => {

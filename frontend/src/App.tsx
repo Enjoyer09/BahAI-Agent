@@ -89,23 +89,39 @@ function AppContent() {
     if (!isMobile) return;
     const vv = window.visualViewport;
     if (!vv) return;
+    let prevKb = 0;
     const apply = () => {
-      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      document.documentElement.style.setProperty('--kb', `${kb}px`);
+      // Calculate keyboard height — works on both iOS Safari and Android Chrome
+      const kb = Math.max(0, Math.round(window.innerHeight - vv.height - (vv.offsetTop || 0)));
+      // Only update if changed significantly (avoids jitter from small layout shifts)
+      if (Math.abs(kb - prevKb) > 5 || kb === 0) {
+        prevKb = kb;
+        document.documentElement.style.setProperty('--kb', `${kb}px`);
+      }
       // While typing, keep the latest messages visible above the keyboard.
       if (kb > 0 && document.activeElement?.classList?.contains('composer-textarea')) {
         const scroller = document.querySelector<HTMLElement>('.mobile-chat-scroll');
-        if (scroller) scroller.scrollTop = scroller.scrollHeight;
+        if (scroller) {
+          requestAnimationFrame(() => { scroller.scrollTop = scroller.scrollHeight; });
+        }
       }
     };
     vv.addEventListener('resize', apply);
     vv.addEventListener('scroll', apply);
-    window.addEventListener('resize', apply);
+    // iOS: focusin/focusout are more reliable triggers for keyboard show/hide
+    document.addEventListener('focusin', apply);
+    document.addEventListener('focusout', () => {
+      // Small delay to let iOS finish animating keyboard away
+      setTimeout(() => {
+        document.documentElement.style.setProperty('--kb', '0px');
+        prevKb = 0;
+      }, 100);
+    });
     apply();
     return () => {
       vv.removeEventListener('resize', apply);
       vv.removeEventListener('scroll', apply);
-      window.removeEventListener('resize', apply);
+      document.removeEventListener('focusin', apply);
       document.documentElement.style.removeProperty('--kb');
     };
   }, [isMobile]);
