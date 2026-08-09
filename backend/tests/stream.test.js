@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { collectStreamOutput, detectRepetitionLoop, truncateAtRepetition } from '../chat/stream.js';
+import helpers from '../helpers.js';
+const { extractTextToolCalls } = helpers;
 
 function makeStream(modelName) {
   return {
@@ -152,5 +154,79 @@ describe('collectStreamOutput provider/model leak guard', () => {
   it('still streams assistant deltas to web chat', async () => {
     const events = await runCollect('web_chat', 'auto-gpt-5.5');
     expect(events.some((e) => e.type === 'assistant_delta' && e.content === 'Salam')).toBe(true);
+  });
+});
+
+// Real extractTextToolCalls so tool-call extraction behaves like production.
+async function runCollectWithStreamAndTools(stream, phaseTools = [{ function: { name: 'web_search' } }], productMode = 'web_chat') {
+  const events = [];
+  const res = { writableEnded: false };
+  const output = await collectStreamOutput({
+    stream,
+    wireApi: 'chat_completions',
+    res,
+    writeSse: (_r, payload) => events.push(payload),
+    normalizeToolName: (name) => name,
+    extractTextToolCalls,
+    buildToolCallCacheKey: (name, args) => `${name}::${args}`,
+    flattenResponseJsonText: (text) => text,
+    normalizeFinalAssistantReport: (text) => text,
+    productMode,
+    auditStyleRequest: false,
+    plannerArtifact: null,
+    executionArtifacts: [],
+    executionMemory: null,
+    phaseTools,
+    step: 1
+  });
+  return { events, output };
+}
+
+describe('(b) tool-call JSON leak guard', () => {
+  it('withholds a complete text tool call from the live stream and extracts it', async () => {
+    const callText = 'Məlumatı yoxlayıram.\n```json\n{"name":"web_search","arguments":{"query":"Bakı hava"}}\n```\n';
+    const stream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield { choices: [{ delta: { content: callText, finish_reason: null } }] };
+        yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
+      }
+    };
+    const { events, output } = await runCollectWithStreamAndTools(stream);
+
+    // The raw JSON must never appear in any streamed delta.
+    const leaked = events.some((e) => e.type === 'assistant_delta' && /web_search/.test(e.content || ''));
+    expect(leaked).toBe(false);
+    // The final message content must not contain the tool-call JSON.
+    expect(output.accumulatedContent).not.toMatch(/web_search/);
+    // The tool call must have been extracted into a real tool call.
+    expect(output.normalizedToolCalls.some((tc) => tc.function.name === 'web_search')).toBe(true);
+  });
+
+  it('strips a truncated tool-call fragment so it never reaches the final message', async () => {
+    // Stream cut off mid-frame — exactly the `"{` symptom from the screenshot.
+    const fragment = '```json\n{"name":"web_search","arguments":';
+    const stream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield { choices: [{ delta: { content: fragment, finish_reason: 'stop' } }] };
+      }
+    };
+    const { events, output } = await runCollectWithStreamAndTools(stream);
+
+    const leaked = events.some((e) => e.type === 'assistant_delta' && /web_search|```json/.test(e.content || ''));
+    expect(leaked).toBe(false);
+    expect(output.accumulatedContent).not.toMatch(/web_search/);
+    expect(output.accumulatedContent).not.toMatch(/```json/);
+    expect(output.accumulatedContent).not.toMatch(/\{"/);
+  });
+
+  it('still streams normal prose that merely contains braces', async () => {
+    const stream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield { choices: [{ delta: { content: 'Set x = { "a": 1 } and continue.', finish_reason: 'stop' } }] };
+      }
+    };
+    const { events, output } = await runCollectWithStreamAndTools(stream);
+    expect(events.some((e) => e.type === 'assistant_delta' && /Set x/.test(e.content || ''))).toBe(true);
+    expect(output.accumulatedContent).toBe('Set x = { "a": 1 } and continue.');
   });
 });

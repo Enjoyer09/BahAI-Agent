@@ -61,6 +61,107 @@ function filterToolCallsByPhase(toolCalls = [], phaseTools = [], normalizeToolNa
   ));
 }
 
+/**
+ * Returns the index in `text` where a tool-call JSON frame begins, or
+ * text.length when no tool-call-looking content is present.
+ *
+ * A "frame" is the textual form of a tool call the model may emit as plain
+ * text (instead of via delta.tool_calls): a ```json fence introducing an
+ * object, a bare object carrying a "name" key, or a bracket-tuple call like
+ * ["web_search", "query"]. We match on the *opening* shape only — completeness
+ * is decided later by extractTextToolCalls — so a truncated/partial frame is
+ * still detected and withheld from the live stream.
+ */
+function findToolCallFrameStart(text = '') {
+  const t = String(text || '');
+  if (!t) return t.length;
+
+  const candidates = [];
+
+  // ```json ... or ``` ... immediately followed by an object
+  const fence = t.match(/```(?:json)?\s*\{/i);
+  if (fence) candidates.push(fence.index);
+
+  // Bare object that looks like a tool call: { ... "name": ... }
+  const brace = t.search(/\{\s*"(?:name|tool|function|action)"\s*:/i);
+  if (brace !== -1) candidates.push(brace);
+
+  // Bracket-tuple tool call: [ "tool_name", ... ]
+  const arr = t.search(/\[\s*"[a-z0-9_]+"\s*,\s*(?:"|\{)/i);
+  if (arr !== -1) candidates.push(arr);
+
+  return candidates.length === 0 ? t.length : Math.min(...candidates);
+}
+
+/**
+ * FINAL SAFETY NET for the (b) fix: strips any leftover partial/truncated
+ * tool-call JSON that extractTextToolCalls could not parse (a complete tool call
+ * is already removed by it). This guarantees a cut-off stream — which leaves a
+ * dangling `{"` or an unterminated ```json fence — never reaches the user as
+ * visible text in the final message.
+ */
+function stripPartialToolCallFragments(text = '') {
+  if (!text) return text;
+  let out = String(text);
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < 6) {
+    changed = false;
+    guard += 1;
+
+    // (1) Unterminated ```json (or ```) fence that introduces an object but was
+    //     never closed (the stream was cut off mid-frame).
+    const openFence = /```(?:json)?\s*\{/i.exec(out);
+    if (openFence && !out.slice(openFence.index + 3).includes('```')) {
+      out = out.slice(0, openFence.index).replace(/\s+$/, '');
+      changed = true;
+      continue;
+    }
+    // (1b) A bare trailing fence with nothing after it.
+    const trailingFence = /\n?```(?:json)?\s*$/i.exec(out);
+    if (trailingFence) {
+      out = out.slice(0, trailingFence.index).replace(/\s+$/, '');
+      changed = true;
+      continue;
+    }
+
+    // (2) A trailing object that looks like a tool call but is not balanced
+    //     (truncated before its closing "}").
+    const objStart = out.search(/\{\s*"(?:name|tool|function|action)"\s*:/i);
+    if (objStart !== -1) {
+      let depth = 0;
+      let inStr = false;
+      let esc = false;
+      let closed = false;
+      for (let i = objStart; i < out.length; i += 1) {
+        const c = out[i];
+        if (esc) { esc = false; continue; }
+        if (c === '\\') { esc = true; continue; }
+        if (c === '"') { inStr = !inStr; continue; }
+        if (inStr) continue;
+        if (c === '{') depth += 1;
+        else if (c === '}') { depth -= 1; if (depth === 0) { closed = true; break; } }
+      }
+      if (!closed) {
+        out = out.slice(0, objStart).replace(/\s+$/, '');
+        changed = true;
+        continue;
+      }
+    }
+
+    // (3) A bare dangling "{" at the very end (an even more truncated fragment).
+    if (/\{\s*$/.test(out)) {
+      const idx = out.lastIndexOf('{');
+      if (idx !== -1) {
+        out = out.slice(0, idx).replace(/\s+$/, '');
+        changed = true;
+        continue;
+      }
+    }
+  }
+  return out;
+}
+
 async function collectStreamOutput({
   stream,
   wireApi,
@@ -86,7 +187,8 @@ async function collectStreamOutput({
   let sawAssistantDelta = false;
   let sawCompletedEvent = false;
   let resolvedModel = null;
-  let deferStructuredOutput = false;
+  let emittedLen = 0;
+  let holdFrom = -1;
   let degenerateLoop = null;
   // Only re-run the (slightly costly) repetition scan when the buffer has
   // grown by ~160 chars since the last check — every-chunk scanning is wasted
@@ -170,20 +272,39 @@ async function collectStreamOutput({
     if (!delta) continue;
 
     if (delta.content) {
-      const nextContent = accumulatedContent + delta.content;
-      // Only defer when the opening really looks like a tool-call JSON block
-      // (extractTextToolCalls requires a "name"/"arguments" pair). A normal
-      // answer that merely starts with "{" or a ```json example must stream
-      // immediately — full deferral made slow models feel frozen.
-      if (!accumulatedContent && /^\s*(?:```(?:json)?\s*)?\{\s*"(?:name|tool|function|action)"/.test(nextContent)) {
-        deferStructuredOutput = true;
-      }
       accumulatedContent += delta.content;
       sawAssistantDelta = true;
       maybeDetectRepetition();
       if (degenerateLoop) break;
-      if (!deferStructuredOutput) {
-        writeSse(res, { type: 'assistant_delta', content: delta.content });
+
+      // (b) Never stream a (possibly partial/truncated) tool-call JSON frame as
+      // visible text. Withhold any content that sits inside a tool-call frame
+      // (detected by findToolCallFrameStart): the frame is either extracted into a
+      // real tool call — whose result alone is shown to the user — or, if it is
+      // genuine prose after all, flushed once it no longer looks like a frame. A
+      // truncated frame is simply never emitted as visible text.
+      const frameStart = findToolCallFrameStart(accumulatedContent);
+      if (frameStart < accumulatedContent.length) {
+        // Emit the safe prose that precedes the frame (only up to the first time
+        // we cross into it).
+        if (frameStart > emittedLen) {
+          const safePrefix = accumulatedContent.slice(emittedLen, frameStart);
+          if (safePrefix.length) {
+            writeSse(res, { type: 'assistant_delta', content: safePrefix });
+            emittedLen += safePrefix.length;
+          }
+        }
+        if (holdFrom === -1 || frameStart > holdFrom) holdFrom = frameStart;
+      } else {
+        // No tool-call frame anywhere — emit everything not yet streamed.
+        if (emittedLen < accumulatedContent.length) {
+          const safe = accumulatedContent.slice(emittedLen);
+          if (safe.length) {
+            writeSse(res, { type: 'assistant_delta', content: safe });
+            emittedLen = accumulatedContent.length;
+          }
+        }
+        holdFrom = -1;
       }
     }
 
@@ -287,6 +408,26 @@ async function collectStreamOutput({
       executionArtifacts,
       executionMemory
     });
+  }
+
+  // (b) FINAL SAFETY NET — strip any leftover partial/truncated tool-call JSON
+  // fragment so it can never reach the user as visible text. Even though the
+  // streaming guard withholds tool-call frames live, a stream cut off before
+  // extractTextToolCalls can parse a complete call would otherwise leave the raw
+  // fragment in the final message.
+  accumulatedContent = stripPartialToolCallFragments(accumulatedContent);
+
+  // (b) Flush any trailing prose that was withheld during streaming because it
+  // sat behind a tool-call frame. The frame has since been extracted (complete
+  // call) or stripped (partial), so only the surrounding prose remains — emit it
+  // so the user still sees the full answer.
+  if (holdFrom !== -1 && emittedLen < accumulatedContent.length) {
+    const trailing = accumulatedContent.slice(emittedLen);
+    if (trailing.trim().length) {
+      writeSse(res, { type: 'assistant_delta', content: trailing });
+      emittedLen = accumulatedContent.length;
+    }
+    holdFrom = -1;
   }
 
   // Web chat never receives provider/model internals: token usage is a desktop
