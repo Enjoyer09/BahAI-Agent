@@ -419,6 +419,23 @@ function buildProviderCandidates({
     if (productMode === 'web_chat') {
       list.push(...resolveWebAutoPlan());
     } else {
+      // Desktop smart mode: use OmniRoute if enabled (same as web), then NVIDIA, then local
+      const useOmniRouteForDesktop = omniRouteEnabled && Boolean(omniRouteBase) && omniRouteApiKey;
+
+      if (useOmniRouteForDesktop) {
+        // OmniRoute primary (same cloud gateway as web)
+        const omniModels = omniRouteFallbackModels.length > 0 ? omniRouteFallbackModels : ['auto'];
+        for (let i = 0; i < omniModels.length; i++) {
+          list.push({
+            id: i === 0 ? 'desktop_smart_omniroute' : `desktop_smart_omniroute_fb_${i}`,
+            apiKey: omniRouteApiKey,
+            baseURL: omniRouteBase,
+            model: omniModels[i],
+            wireApi: detectWireApi(omniRouteBase),
+          });
+        }
+      }
+
       const cloudKey = frontendApiKey || env.OPENAI_API_KEY || '';
       const normalizedEnvBase = normalizeProviderBaseUrl(env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1');
       const frontendLooksLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));
@@ -429,7 +446,9 @@ function buildProviderCandidates({
       const smartCloud = env.AUTO_SMART_MODEL || 'anthropic/claude-sonnet-4.5';
 
       const localProvider = { id: 'auto_ollama_fast', apiKey: 'ollama', baseURL: OLLAMA_BASE, model: fastLocal };
-      const cloudProvider = cloudKey ? { id: 'auto_cloud_smart', apiKey: cloudKey, baseURL: cloudBase, model: smartCloud, wireApi: detectWireApi(cloudBase) } : null;
+      // Only create cloudProvider if it's NOT pointing to Ollama (avoid sending cloud model names to local Ollama)
+      const cloudBaseIsLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(cloudBase);
+      const cloudProvider = (cloudKey && !cloudBaseIsLocal) ? { id: 'auto_cloud_smart', apiKey: cloudKey, baseURL: cloudBase, model: smartCloud, wireApi: detectWireApi(cloudBase) } : null;
 
       if (cloudOnly) {
         if (cloudProvider) list.push(cloudProvider);
@@ -441,6 +460,7 @@ function buildProviderCandidates({
         list.push(...buildOpenRouterFallbackCandidates('auto'));
         list.push(localProvider);
       } else {
+        // No valid cloud provider — go local first, then NVIDIA/OpenRouter as fallback
         list.push(localProvider);
         if (cloudProvider) list.push(cloudProvider);
         list.push(...buildNvidiaProviders('code'));
