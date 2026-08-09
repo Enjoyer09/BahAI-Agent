@@ -405,6 +405,21 @@ function buildProviderCandidates({
   }
 
   if (localOnly) {
+    // Even in local mode, if OmniRoute is configured, prepend it as primary
+    // so the user gets cloud quality when online, with local as fallback
+    const useOmniRouteEvenInLocal = omniRouteEnabled && Boolean(omniRouteBase) && omniRouteApiKey;
+    if (useOmniRouteEvenInLocal) {
+      const omniModels = omniRouteFallbackModels.length > 0 ? omniRouteFallbackModels : ['auto'];
+      for (let i = 0; i < omniModels.length; i++) {
+        list.push({
+          id: i === 0 ? 'local_omniroute_primary' : `local_omniroute_fb_${i}`,
+          apiKey: omniRouteApiKey,
+          baseURL: omniRouteBase,
+          model: omniModels[i],
+          wireApi: detectWireApi(omniRouteBase),
+        });
+      }
+    }
     const chosenLocalModel = looksLikeOllamaModel(frontendModel) ? frontendModel : defaultLocalModel;
     list.push({
       id: 'desktop_local_primary',

@@ -53,7 +53,7 @@ export const MODELS: ModelOption[] = [
 
 export const DEFAULT_SETTINGS = {
   productMode: (typeof window !== 'undefined' && window.navigator.userAgent.includes('Electron')) ? 'desktop_code' : 'web_chat',
-  executionMode: (typeof window !== 'undefined' && window.navigator.userAgent.includes('Electron')) ? 'local' : 'cloud',
+  executionMode: 'cloud',
   apiKey: 'ollama',
   baseUrl: 'http://localhost:11434/v1',
   model: 'gemma4:12b',

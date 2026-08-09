@@ -211,7 +211,7 @@ async function startBackend() {
     backendProcess.stdout.on('data', (data) => {
       const str = data.toString().trim();
       backendLogs.push(`[stdout] ${str}`);
-      if (verboseDesktopLogs) console.log(`[backend] ${str}`);
+      console.log(`[backend] ${str}`);
     });
 
     backendProcess.stderr.on('data', (data) => {
