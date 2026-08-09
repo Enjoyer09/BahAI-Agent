@@ -56,16 +56,10 @@ describe('web direct replies', () => {
     expect(reply).not.toContain('60 qəpik');
   });
 
-  it('handles inflected Azerbaijani weather city names', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => 'Sunny|+29°C|11 km/h|43%',
-      json: async () => ({ weather: [{ maxtempC: '33', mintempC: '22', hourly: [{ weatherDesc: [{ value: 'Sunny' }] }] }] })
-    }));
-
+  it('passes weather queries to LLM with web_search for natural response', async () => {
+    // Weather fast-path removed — LLM handles all weather queries via web_search
     const reply = await getDirectWebChatReply('Sumqayıtda hava necədir?', []);
-    expect(reply).toContain('Sumqayıtda');
-    expect(reply).toContain('29');
+    expect(reply).toBe('');
   });
 
   it('passes generic world championship queries to LLM and search', async () => {
