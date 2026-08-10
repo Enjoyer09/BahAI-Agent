@@ -12,7 +12,8 @@ const db = require('../db');
 router.get('/', async (req, res) => {
   try {
     if (!db.hasDatabase()) {
-      return res.json({ projects: [{ id: 'default', name: 'Local Workspace', path: process.cwd(), archived: false, createdAt: Date.now() }] });
+      const defaultPath = process.env.WORKSPACE_ROOT || process.cwd();
+      return res.json({ projects: [{ id: 'default', name: 'Local Workspace', path: defaultPath, archived: false, createdAt: Date.now() }] });
     }
     const result = await db.query('SELECT * FROM projects WHERE user_id = $1 AND archived = false ORDER BY created_at DESC', [req.user.id]);
     res.json({ projects: result.rows.map(serializeProject) });

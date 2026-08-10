@@ -162,7 +162,20 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         dispatch({ type: 'SET_ACTIVE_CONV_ID', id: result.activeConvId });
         dispatch({ type: 'SET_SERVER_BACKED', backed: true });
       } else {
-        const localProjects = loadFromStorage<Project[]>('projects', []);
+        // loadWorkspace returned serverBacked=false but may still carry projects
+        // from the backend (Desktop LOCAL_MODE without DB). Prefer those over
+        // stale localStorage data so the active project path stays correct.
+        const serverProjects = result.projects && result.projects.length > 0 ? result.projects : null;
+        let localProjects = loadFromStorage<Project[]>('projects', []);
+        // Desktop: if server returned fresh projects, merge them ensuring the
+        // default workspace is always present. Remove localStorage projects
+        // whose path is clearly virtual (workspace://) to prevent stale state.
+        if (serverProjects) {
+          localProjects = [
+            ...serverProjects,
+            ...localProjects.filter(p => !p.path.startsWith('workspace://') && !serverProjects.some(sp => sp.id === p.id))
+          ];
+        }
         const localConvs = loadFromStorage<Conversation[]>('conversations', []);
         dispatch({ type: 'SET_PROJECTS', projects: localProjects });
         dispatch({ type: 'SET_CONVERSATIONS', conversations: localConvs });
@@ -207,6 +220,27 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       };
       dispatch({ type: 'SET_PROJECTS', projects: [defaultProj] });
       dispatch({ type: 'SET_CONVERSATIONS', conversations: [defaultConv] });
+      dispatch({ type: 'SET_ACTIVE_CONV_ID', id: defaultConvId });
+    } else if (state.conversations.length === 0 && state.projects.length > 0) {
+      // Projects exist (from backend default) but no conversations — create one
+      const projectId = state.projects[0].id;
+      const defaultConvId = generateId();
+      const defaultConv: Conversation = {
+        id: defaultConvId,
+        projectId,
+        title: settings.productMode === 'web_chat' ? 'Yeni chat' : 'Xoş Gəlmisiniz!',
+        messages: settings.productMode === 'web_chat'
+          ? []
+          : [{
+              id: generateId(),
+              role: 'assistant',
+              content: getWelcomeMessage(settings.productMode, false),
+              timestamp: Date.now(),
+            }],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      dispatch({ type: 'ADD_CONVERSATION', conversation: defaultConv });
       dispatch({ type: 'SET_ACTIVE_CONV_ID', id: defaultConvId });
     } else if (!state.activeConvId && state.conversations.length > 0) {
       dispatch({ type: 'SET_ACTIVE_CONV_ID', id: state.conversations[0].id });
@@ -434,7 +468,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
 
     addSystemMessage: (content: string) => {
       const convId = activeConvIdRef.current;
-      if (!convId) return;
+      if (!convId) {
+        console.warn('[eventSink] addSystemMessage: convId is null, dropping:', content.slice(0, 80));
+        return;
+      }
       const msg: Message = { id: generateId(), role: 'system', content, timestamp: Date.now() };
       // Keep the ref in sync with the reducer so retry/regenerate actions can
       // always find the latest message (e.g. the "❌ Xəta" error message).
@@ -446,7 +483,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
 
     updateAssistantMessage: (content: string) => {
       const convId = activeConvIdRef.current;
-      if (!convId) return;
+      if (!convId) {
+        console.warn('[eventSink] updateAssistantMessage: convId is null, dropping update');
+        return;
+      }
       if (isToolCallLikeText(content)) return;
       const now = Date.now();
       // PERF: 50ms throttle (~20fps) is smooth enough for streaming text while
@@ -487,7 +527,10 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
 
     finalizeAssistantMessage: (msg: Message) => {
       const convId = activeConvIdRef.current;
-      if (!convId) return;
+      if (!convId) {
+        console.warn('[eventSink] finalizeAssistantMessage: convId is null, dropping message:', msg.content?.slice(0, 80));
+        return;
+      }
       const conv = conversationsRef.current.find(c => c.id === convId);
       if (!conv) return;
       const msgs = [...conv.messages];

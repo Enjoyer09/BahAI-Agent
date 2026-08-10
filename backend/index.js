@@ -24,8 +24,8 @@ for (const p of extraModulePaths) {
 
 // Safe dotenv loading with zero-dependency fallback
 try {
-  require('dotenv').config({ path: path.resolve(__dirname, '.env') });
-  require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+  require('dotenv').config({ path: path.resolve(__dirname, '.env'), override: true });
+  require('dotenv').config({ path: path.resolve(__dirname, '..', '.env'), override: true });
 } catch {
   const envFiles = [
     path.resolve(__dirname, '.env'),

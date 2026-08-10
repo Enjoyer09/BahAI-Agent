@@ -80,7 +80,7 @@ export function useWorkspace(workingDirectory: string): UseWorkspaceReturn {
 
   // ─── File Tree ─────────────────────────────────
   const refreshFileTree = useCallback(async () => {
-    if (!workingDirectory) return;
+    if (!workingDirectory || workingDirectory.startsWith('workspace://')) return;
     try {
       const electron = (window as any).electron;
       if (electron?.fs?.readDirectory) {
@@ -94,7 +94,7 @@ export function useWorkspace(workingDirectory: string): UseWorkspaceReturn {
 
   // Initial load + file watcher
   useEffect(() => {
-    if (!workingDirectory) return;
+    if (!workingDirectory || workingDirectory.startsWith('workspace://')) return;
     refreshFileTree();
 
     const electron = (window as any).electron;
@@ -148,7 +148,7 @@ export function useWorkspace(workingDirectory: string): UseWorkspaceReturn {
 
   // ─── Git Status ────────────────────────────────
   const refreshGitStatus = useCallback(async () => {
-    if (!workingDirectory) return;
+    if (!workingDirectory || workingDirectory.startsWith('workspace://')) return;
     const electron = (window as any).electron;
     if (!electron?.git?.status) return;
     try {
@@ -161,7 +161,7 @@ export function useWorkspace(workingDirectory: string): UseWorkspaceReturn {
 
   // Periodic git refresh (every 10s)
   useEffect(() => {
-    if (!workingDirectory) return;
+    if (!workingDirectory || workingDirectory.startsWith('workspace://')) return;
     refreshGitStatus();
     gitTimerRef.current = setInterval(refreshGitStatus, 10000);
     return () => {

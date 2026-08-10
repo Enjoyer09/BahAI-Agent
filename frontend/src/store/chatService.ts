@@ -963,6 +963,14 @@ export async function loadWorkspace(
         conversationsHasMore: false,
       };
     }
+
+    // Desktop LOCAL_MODE without database: server returns projects (default)
+    // but conversations are always empty because there's no persistence layer.
+    // In this case, treat as NOT server-backed so localStorage handles state.
+    if (state.conversations.length === 0 && settings.productMode === 'desktop_code') {
+      return { projects: state.projects, conversations: [], serverBacked: false, activeConvId: null };
+    }
+
     return {
       projects: state.projects,
       conversations: state.conversations,

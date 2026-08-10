@@ -269,6 +269,8 @@ export async function sendChatMessage(
   let sawFinalAssistantMessage = false;
   let sawStreamingAssistantDelta = false;
   let sawTerminalError = false;
+  const isDesktop = typeof window !== 'undefined' && window.navigator.userAgent.includes('Electron');
+  if (isDesktop) console.log('[SSE] Stream başladı, response status:', response.status);
 
   try {
     while (!done) {
@@ -302,6 +304,7 @@ export async function sendChatMessage(
             if (data?.type === 'error') {
               sawTerminalError = true;
             }
+            if (isDesktop) console.log('[SSE] Event:', data.type, data.type === 'assistant_delta' ? `(${String(data.content || '').slice(0, 40)}...)` : '');
             onEvent(data);
           } catch {
             // ignore

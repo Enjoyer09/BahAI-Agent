@@ -20,6 +20,10 @@ export const MODELS: ModelOption[] = [
   { id: 'qwen2.5-coder:14b', name: 'Qwen 2.5 Coder 14B', provider: 'Ollama (Lokal)' },
   { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', provider: 'Ollama (Lokal)' },
   { id: 'llama3:8b', name: 'Llama 3 8B', provider: 'Ollama (Lokal)' },
+  // AirLLM (70B+ on 4GB GPU)
+  { id: 'meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B (AirLLM) 🧠', provider: 'AirLLM (Lokal)' },
+  { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen 2.5 72B (AirLLM) 🧠', provider: 'AirLLM (Lokal)' },
+  { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3 671B (AirLLM) 🧠', provider: 'AirLLM (Lokal)' },
   // Cloud / frontier
   { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5 ⭐', provider: 'Cloud (Frontier)' },
   { id: 'openai/gpt-5.2', name: 'GPT-5.2 ⭐', provider: 'Cloud (Frontier)' },
@@ -41,6 +45,7 @@ export const MODELS: ModelOption[] = [
   { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex (FreeModel)', provider: 'FreeModel' },
   { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini ⚡ (FreeModel)', provider: 'FreeModel' },
   // OpenRouter 90+ Free Models
+  { id: 'tencent/hy3:free', name: 'Tencent Hy3 295B (Pulsuz) ⭐🧠', provider: 'OpenRouter Free' },
   { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash (Pulsuz) ⚡', provider: 'OpenRouter Free' },
   { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B (Pulsuz) ⭐', provider: 'OpenRouter Free' },
   { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1 Reasoning (Pulsuz) ⭐', provider: 'OpenRouter Free' },
