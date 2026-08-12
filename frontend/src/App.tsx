@@ -240,9 +240,16 @@ function AppContent() {
   }
 
   // ─── DESKTOP IDE MODE ───────────────────────────
-  // When running in Electron with desktop_code product mode AND a project is active,
-  // render the full IDE layout instead of the simple chat-only view.
-  if (isElectron && isDesktopProduct && chat.activeProject) {
+  // When running in Electron with desktop_code product mode AND a REAL project
+  // directory is active (not the default sandbox/workspace), render the full
+  // IDE layout. Otherwise fall through to the simple chat-only view.
+  const hasRealProjectPath = Boolean(
+    chat.activeProject?.path
+    && !chat.activeProject.path.startsWith('workspace://')
+    && !chat.activeProject.path.endsWith('/sandbox')
+    && chat.activeProject.id !== 'default'
+  );
+  if (isElectron && isDesktopProduct && chat.activeProject && hasRealProjectPath) {
     return (
       <div className="dvh-screen flex overflow-hidden" style={{ background: 'var(--bg-main)' }}>
         {/* Electron Window Drag Handle */}
@@ -277,7 +284,7 @@ function AppContent() {
                   </Suspense>
                 }
                 editorPanel={
-                  <div className="flex flex-col h-full overflow-hidden">
+                  <div className="flex flex-col h-full min-h-0 overflow-hidden">
                     <Suspense fallback={<LazyFallback />}>
                       <EditorTabsComponent
                         tabs={workspace.openTabs}
@@ -295,7 +302,7 @@ function AppContent() {
                         />
                       </Suspense>
                     ) : (
-                      <div className="flex-1 flex flex-col">
+                      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                         <ChatArea
                           messages={chat.messages}
                           loading={chat.loading}
@@ -307,7 +314,7 @@ function AppContent() {
                           onEdit={chat.editMessage}
                           onRegenerate={chat.regenerateMessage}
                         />
-                        <div className="desktop-composer-dock shrink-0 w-full max-w-3xl mx-auto">
+                        <div className="desktop-composer-dock shrink-0 w-full max-w-3xl mx-auto px-3 py-2">
                           <Composer
                             onSendMessage={(text, attachments) => chat.sendMessage(text, attachments)}
                             disabled={chat.loading}
@@ -324,7 +331,7 @@ function AppContent() {
                   </div>
                 }
                 chatPanel={
-                  <div className="flex-1 flex flex-col overflow-hidden">
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                     <ChatArea
                       messages={chat.messages}
                       loading={chat.loading}
@@ -336,7 +343,7 @@ function AppContent() {
                       onEdit={chat.editMessage}
                       onRegenerate={chat.regenerateMessage}
                     />
-                    <div className="desktop-composer-dock shrink-0 w-full max-w-3xl mx-auto">
+                    <div className="desktop-composer-dock shrink-0 w-full max-w-3xl mx-auto px-3 py-2">
                       <Composer
                         onSendMessage={(text, attachments) => chat.sendMessage(text, attachments)}
                         disabled={chat.loading}
@@ -572,7 +579,7 @@ function AppContent() {
         )}
 
         {isDesktopProduct && !isMobile && (
-          <div className="desktop-contextbar">
+          <div className="desktop-contextbar shrink-0">
             <div className="desktop-contextbar-copy">
               <strong>{chat.activeConversation?.title || 'Yeni söhbət'}</strong>
               <span>

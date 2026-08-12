@@ -118,7 +118,7 @@ export default function ChatArea({
       ref={scrollRef}
       onScroll={handleScroll}
       className="flex-1 overflow-y-auto premium-scroll relative mobile-chat-scroll"
-      style={{ scrollBehavior: 'smooth', direction: settings?.chatDirection === 'rtl' ? 'rtl' : 'ltr' }}
+      style={{ scrollBehavior: 'smooth', direction: settings?.chatDirection === 'rtl' ? 'rtl' : 'ltr', minHeight: 0, WebkitOverflowScrolling: 'touch' }}
     >
       <div className={`mobile-message-list mx-auto px-3 sm:px-4 py-3 sm:py-7 space-y-5 sm:space-y-6 ${settings?.maximizeChatSpace ? 'w-full px-6' : 'max-w-3xl'}`}>
         <style>{`

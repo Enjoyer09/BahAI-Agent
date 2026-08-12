@@ -27,7 +27,7 @@ interface DesktopIDELayoutProps {
 const DEFAULT_CONFIG: PanelConfig = {
   fileTree: { visible: true, width: 240 },
   editor: { visible: true },
-  terminal: { visible: true, height: 200 },
+  terminal: { visible: false, height: 200 },
   preview: { visible: false, width: 400 },
 };
 
@@ -36,9 +36,26 @@ const STORAGE_KEY = 'bahai-ide-panel-config';
 function loadConfig(): PanelConfig {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_CONFIG, ...parsed };
+    }
   } catch {}
   return DEFAULT_CONFIG;
+}
+
+// One-time migration: hide terminal panel if it was auto-shown by old defaults
+function migrateConfig(config: PanelConfig): PanelConfig {
+  const migrationKey = 'bahai-ide-terminal-migrated-v1';
+  try {
+    if (localStorage.getItem(migrationKey)) return config;
+    localStorage.setItem(migrationKey, '1');
+    // Reset terminal to hidden (old default was visible:true)
+    const updated = { ...config, terminal: { ...config.terminal, visible: false } };
+    saveConfig(updated);
+    return updated;
+  } catch {}
+  return config;
 }
 
 function saveConfig(config: PanelConfig) {
@@ -95,7 +112,7 @@ export default function DesktopIDELayout({
   previewPanel,
   toolbar,
 }: DesktopIDELayoutProps) {
-  const [config, setConfig] = useState<PanelConfig>(loadConfig);
+  const [config, setConfig] = useState<PanelConfig>(() => migrateConfig(loadConfig()));
 
   const updateConfig = useCallback((updates: Partial<PanelConfig>) => {
     setConfig(prev => {
@@ -161,10 +178,10 @@ export default function DesktopIDELayout({
         )}
 
         {/* Center: Editor/Chat + Terminal (vertical split) */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
           {/* Top: Editor or Chat */}
           <div className="flex-1 min-h-0 overflow-hidden flex">
-            <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
               {config.editor.visible ? editorPanel : chatPanel}
             </div>
           </div>

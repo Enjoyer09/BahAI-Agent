@@ -269,14 +269,15 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
             {(() => {
               const displayContent = (message.content || '')
                 .replace(/```(?:json)?[\s\S]*?```/gi, (match) => {
-                  // Remove only actual tool-call JSON blocks. Do not hide a
-                  // legitimate Python/JS/HTML block just because game code
-                  // contains variables such as `name`, `query`, or `arguments`.
+                  // Remove tool-call JSON blocks that the model sometimes emits
+                  // inline. Keep legitimate code blocks (Python/JS/HTML etc).
                   const body = match.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+                  // Pure JSON object that looks like a tool call or tool result
                   const isJsonToolBlock = /^\{[\s\S]*\}$/.test(body)
-                    && /"(?:name|arguments|query|tool|function)"\s*:/.test(body)
-                    && /web_search|browser_open|browser_eval|gui_step|run_terminal_command/i.test(body);
+                    && /"(?:name|arguments|query|tool|function|path|content|result)"\s*:/.test(body);
                   if (isJsonToolBlock) return '';
+                  // JSON array (e.g. directory listing result)
+                  if (/^\[[\s\S]*\]$/.test(body) && body.length > 200) return '';
                   return match;
                 })
                 .replace(/\{\s*"name"\s*:[\s\S]*?\}/gi, '')
