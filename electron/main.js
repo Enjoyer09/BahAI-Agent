@@ -270,20 +270,13 @@ function createWindow() {
     icon: path.join(__dirname, 'icons', 'icon.png')
   });
 
-  // Load the app
-  if (process.argv.includes('--dev') && !useBackendUiInDev) {
-    // Dev mode: use Vite dev server
-    mainWindow.loadURL('http://localhost:5173');
-    if (process.env.BAHAI_DESKTOP_DEVTOOLS === 'true') {
-      mainWindow.webContents.openDevTools({ mode: 'detach' });
-    }
-  } else {
-    // Production/desktop mode: use backend-served frontend build so the app
-    // is not coupled to a stale or conflicting Vite dev server.
-    mainWindow.loadURL(`http://localhost:${BACKEND_PORT}`);
-    if (process.argv.includes('--dev') && process.env.BAHAI_DESKTOP_DEVTOOLS === 'true') {
-      mainWindow.webContents.openDevTools({ mode: 'detach' });
-    }
+  const targetUrl = (process.argv.includes('--dev') && !useBackendUiInDev)
+    ? 'http://localhost:5173'
+    : `http://localhost:${BACKEND_PORT}`;
+
+  mainWindow.loadURL(targetUrl);
+  if (process.argv.includes('--dev') && process.env.BAHAI_DESKTOP_DEVTOOLS === 'true') {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
   // Show window when ready
@@ -291,11 +284,14 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // Retry loading if page fails (backend might not be fully ready)
+  // Retry loading if page fails (dev server or backend might not be fully ready)
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    if (verboseDesktopLogs) console.log('Page load failed, retrying in 1s...', errorDescription);
+    if (errorCode === -3) return; // ignore ERR_ABORTED
+    console.log('[Electron] Page load failed:', errorDescription, 'Retrying in 1s...');
     setTimeout(() => {
-      mainWindow.loadURL(`http://localhost:${BACKEND_PORT}/chat`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadURL(targetUrl);
+      }
     }, 1000);
   });
 

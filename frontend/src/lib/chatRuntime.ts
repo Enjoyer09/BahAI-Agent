@@ -1,6 +1,12 @@
 import type { ActiveGuiSession, ApprovalRequest, ExecutionArtifact, GateReceipt, GovernanceEntryPath, GuiCapabilityStatus, HumanCheckpoint, PlannerArtifact, ProviderTelemetryEvent, RuntimeArtifact } from './types';
-// Single source of truth for web privacy keys (shared/contract.js).
-import { WEB_PRIVACY_MEMORY_KEYS } from '@bahai/shared';
+import * as contract from '@bahai/shared';
+const WEB_PRIVACY_MEMORY_KEYS = (contract as any)?.WEB_PRIVACY_MEMORY_KEYS || [
+  'providerTelemetry',
+  'lastProviderTelemetry',
+  'tokenUsage',
+  'guiCapabilities',
+  'guiCapabilitiesUpdatedAt',
+];
 
 export function isToolCallLikeText(content: string): boolean {
   const text = String(content || '').trim();

@@ -51,9 +51,18 @@ const WEB_PRIVACY_MEMORY_KEYS = [
   'guiCapabilitiesUpdatedAt',
 ];
 
-module.exports = {
-  SSE_EVENT_TYPES,
-  MESSAGE_ROLES,
-  ATTACHMENT_TYPES,
-  WEB_PRIVACY_MEMORY_KEYS,
-};
+if (typeof exports !== 'undefined') {
+  exports.SSE_EVENT_TYPES = SSE_EVENT_TYPES;
+  exports.MESSAGE_ROLES = MESSAGE_ROLES;
+  exports.ATTACHMENT_TYPES = ATTACHMENT_TYPES;
+  exports.WEB_PRIVACY_MEMORY_KEYS = WEB_PRIVACY_MEMORY_KEYS;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    SSE_EVENT_TYPES,
+    MESSAGE_ROLES,
+    ATTACHMENT_TYPES,
+    WEB_PRIVACY_MEMORY_KEYS,
+  };
+}

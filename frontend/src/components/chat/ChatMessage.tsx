@@ -293,13 +293,17 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
                   const body = match.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
                   // Pure JSON object that looks like a tool call or tool result
                   const isJsonToolBlock = /^\{[\s\S]*\}$/.test(body)
-                    && /"(?:name|arguments|query|tool|function|path|content|result)"\s*:/.test(body);
+                    && /"(?:name|namerl|arguments|query|tool|function|path|content|result)"\s*:/.test(body);
                   if (isJsonToolBlock) return '';
                   // JSON array (e.g. directory listing result)
                   if (/^\[[\s\S]*\]$/.test(body) && body.length > 200) return '';
                   return match;
                 })
-                .replace(/\{\s*"name"\s*:[\s\S]*?\}/gi, '')
+                .replace(/\{\s*"(?:name|namerl|arguments|tool|function|path|content|result|url)"\s*:[\s\S]*?\}/gi, (match) => {
+                  // If it's a raw JSON payload dump (e.g. scraped web page or tool payload), strip it completely
+                  if (match.includes('"namerl"') || match.includes('<!DOCTYPE') || match.includes('<html')) return '';
+                  return '';
+                })
                 .trim();
               if (!displayContent && message.tool_calls && message.tool_calls.length > 0) return null;
               return (
