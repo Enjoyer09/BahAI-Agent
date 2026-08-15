@@ -729,9 +729,7 @@ ${generateToolsSystemPrompt(TOOLS)}`;
             status: safePayload.status,
             wireApi: safePayload.wireApi
           }));
-          if (productMode !== 'web_chat') {
-            emitProviderTelemetry(res, safePayload);
-          }
+          emitProviderTelemetry(res, safePayload);
         },
         buildFinalGateReceipt: ({ plannerArtifact, executionArtifacts }) => buildGateReceipt({ plannerArtifact, executionArtifacts }),
         finishSse

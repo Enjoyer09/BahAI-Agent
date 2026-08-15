@@ -37,6 +37,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
   const isDesktopProduct = productMode === 'desktop_code';
   const isBot = message.role === 'assistant';
+  const showModelBadge = typeof window !== 'undefined' && localStorage.getItem('showModelBadge') !== 'false';
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const copyToClipboard = useCallback(() => {
@@ -262,6 +263,24 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Debug Provider Badge */}
+            {isBot && (showModelBadge || message.providerInfo) && (
+              <div
+                className="mb-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono tracking-tight"
+                style={{
+                  background: 'rgba(99, 102, 241, 0.12)',
+                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                  color: '#818cf8',
+                }}
+              >
+                <Sparkles size={12} className="text-indigo-400 shrink-0" />
+                <span>
+                  ⚡ Mənbə: <strong>{message.providerInfo?.providerId || 'OmniRoute'}</strong>
+                  {message.providerInfo?.model ? ` (${message.providerInfo.model})` : ''}
+                </span>
               </div>
             )}
 

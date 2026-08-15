@@ -499,6 +499,7 @@ export async function handleSendMessage(
   const isWebChat = settings.productMode === 'web_chat';
   const currentMsgs: any[] = [];
   const streamBufferRef = { current: '' };
+  const latestProviderInfoRef = { current: null };
 
   // Dispatch user message to store
   sink.incrementPreviewKey();
@@ -539,6 +540,7 @@ export async function handleSendMessage(
         sink,
         currentMsgs: { current: currentMsgs },
         streamBufferRef,
+        latestProviderInfoRef,
       }),
       ctx.signal
     );
@@ -596,6 +598,7 @@ interface SSEEventContext {
   sink: EventSink;
   currentMsgs: { current: Message[] };
   streamBufferRef: { current: string };
+  latestProviderInfoRef?: { current: any };
 }
 
 function handleSSEEvent(event: any, ctx: SSEEventContext): void {
@@ -656,8 +659,14 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
   }
 
   if (event.type === 'provider_telemetry') {
-    // Web chat must never persist provider routing telemetry into project
-    // memory (desktop ops-panel detail only).
+    if (ctx.latestProviderInfoRef) {
+      ctx.latestProviderInfoRef.current = {
+        providerId: event.providerId || event.toProviderId,
+        model: event.model || event.toModel,
+        status: event.status || event.event,
+        wireApi: event.wireApi,
+      };
+    }
     if (isWebChat) return;
     if (!activeProject?.id) return;
     const mergedMemory = mergeProviderTelemetryIntoMemory(projectMemory, event);
@@ -776,6 +785,7 @@ function handleSSEEvent(event: any, ctx: SSEEventContext): void {
       content,
       tool_calls: isWebChat ? undefined : event.message.tool_calls?.map((tc: any) => ({ ...tc, status: 'done' })),
       timestamp: Date.now(),
+      providerInfo: ctx.latestProviderInfoRef?.current || undefined,
     };
     streamBufferRef.current = '';
     sink.finalizeAssistantMessage(assistantMsg);

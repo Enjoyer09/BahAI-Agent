@@ -74,6 +74,7 @@ export default function SettingsModal({
     keepScreenAwake, setKeepScreenAwake, enterToSend, setEnterToSend,
     enableMarkdown, setEnableMarkdown, showThinking, setShowThinking,
     autoScroll, setAutoScroll,
+    showModelBadge, setShowModelBadge,
     aiMode, setAiMode,
   } = settingsCtx;
 
@@ -244,6 +245,13 @@ export default function SettingsModal({
               <div style={descStyle}>Yeni cavab gəldikcə pəncərəni aşağı endirir.</div>
             </div>
             <Switch checked={autoScroll} onChange={setAutoScroll} />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div style={labelStyle}><Zap size={14}/> Model Mənbəyini Göstər (Debug)</div>
+              <div style={descStyle}>Hər bir cavabın hansı provider və ya modeldən gəldiyini göstərir.</div>
+            </div>
+            <Switch checked={showModelBadge} onChange={setShowModelBadge} />
           </div>
         </div>
       </div>

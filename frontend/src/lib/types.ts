@@ -27,6 +27,12 @@ export interface Message {
   timestamp: number;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  providerInfo?: {
+    providerId?: string;
+    model?: string;
+    status?: string;
+    wireApi?: string;
+  };
 }
 
 export interface ToolCall {
