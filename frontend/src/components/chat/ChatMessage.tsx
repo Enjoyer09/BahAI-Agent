@@ -37,7 +37,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
   const isDesktopProduct = productMode === 'desktop_code';
   const isBot = message.role === 'assistant';
-  const showModelBadge = typeof window !== 'undefined' && localStorage.getItem('showModelBadge') !== 'false';
+  const showModelBadge = typeof window !== 'undefined' && localStorage.getItem('showModelBadge') === 'true';
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const copyToClipboard = useCallback(() => {

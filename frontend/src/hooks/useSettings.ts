@@ -88,7 +88,7 @@ export function useSettings() {
   const [enableMarkdown, setEnableMarkdown] = useState(() => loadBoolSetting('enableMarkdown', true));
   const [showThinking, setShowThinking] = useState(() => loadBoolSetting('showThinking', true));
   const [autoScroll, setAutoScroll] = useState(() => loadBoolSetting('autoScroll', true));
-  const [showModelBadge, setShowModelBadge] = useState(() => loadBoolSetting('showModelBadge', true));
+  const [showModelBadge, setShowModelBadge] = useState(() => loadBoolSetting('showModelBadge', false));
 
   useEffect(() => {
     localStorage.setItem('showModelBadge', String(showModelBadge));
