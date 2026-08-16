@@ -179,7 +179,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
         const localConvs = loadFromStorage<Conversation[]>('conversations', []);
         dispatch({ type: 'SET_PROJECTS', projects: localProjects });
         dispatch({ type: 'SET_CONVERSATIONS', conversations: localConvs });
-        if (localConvs.length > 0) {
+        if (localConvs.length > 0 && !activeConvIdRef.current) {
           dispatch({ type: 'SET_ACTIVE_CONV_ID', id: localConvs[0].id });
         }
       }
@@ -883,6 +883,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       }
     };
 
+    let jobFailed = false;
     try {
       if (useJobTransport) {
         applyJobStatus({ jobId: '', status: 'queued' });
@@ -896,8 +897,14 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
       } else {
         await handleSendMessage(input, attachments, ctx);
       }
+    } catch (err) {
+      if (useJobTransport) {
+        jobFailed = true;
+        applyJobStatus(null);
+      }
+      console.error('[useChat] Send message error:', err);
     } finally {
-      if (!useJobTransport) {
+      if (!useJobTransport || jobFailed) {
         dispatch({ type: 'SET_LOADING', loading: false });
         dispatch({ type: 'SET_ABORT_CONTROLLER', controller: null });
         const responseTime = Date.now() - userMsg.timestamp;
@@ -971,6 +978,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
     dispatch({ type: 'SET_ACTIVE_CONV_ID', id: newConv.id });
     conversationsRef.current = [newConv, ...conversationsRef.current];
     activeConvIdRef.current = newConv.id;
+    persistLocalWorkspace(projectsRef.current, conversationsRef.current);
     if (serverBackedRef.current) {
       createConversationOnServer(projectId, title)
         .then(serverConv => {
