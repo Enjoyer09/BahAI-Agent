@@ -17,10 +17,6 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
       if (isInline) return <CodeBlock inline>{String(children)}</CodeBlock>;
       const language = (match?.[1] || '').toLowerCase();
       const code = String(children).replace(/\n$/, '');
-      // HTML/SVG blocks render as interactive artifacts (Preview ⇄ Code).
-      if (language === 'html' || language === 'htm' || language === 'svg' || language === 'html+svg') {
-        return <ArtifactBlock language={language} code={code} />;
-      }
       return <CodeBlock language={language}>{code}</CodeBlock>;
     },
     table({ children }) {

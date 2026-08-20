@@ -95,6 +95,19 @@ function AppContent() {
     window.addEventListener('mouseup', onMouseUp);
   }, [previewWidth]);
 
+  const [activePreviewCode, setActivePreviewCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handlePreviewEvent = (e: any) => {
+      if (e.detail?.code) {
+        setActivePreviewCode(e.detail.code);
+        setShowPreview(true);
+      }
+    };
+    window.addEventListener('open-live-preview', handlePreviewEvent);
+    return () => window.removeEventListener('open-live-preview', handlePreviewEvent);
+  }, []);
+
   const chat = useChat(settings.settings, auth.user?.id);
   const workspace = useWorkspace(chat.activeProject?.path || '');
 
@@ -731,6 +744,7 @@ function AppContent() {
             <Suspense fallback={<LazyFallback />}>
               <LivePreview
                 port={chat.activeProject?.lastPort}
+                code={activePreviewCode || undefined}
                 isVisible={showPreview}
                 onClose={() => setShowPreview(false)}
               />

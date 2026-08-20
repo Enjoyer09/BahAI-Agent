@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Copy, Check, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { Copy, Check, ChevronDown, ChevronUp, Download, Eye } from 'lucide-react';
 
 
 interface CodeBlockProps {
@@ -24,6 +24,12 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
   const code = children.replace(/\n$/, '');
   const lineCount = code.split('\n').length;
   const isLong = lineCount > 30;
+  const langStr = String(language || '').toLowerCase();
+  const isPreviewable = /^(html|htm|svg|js|jsx|ts|tsx)$/i.test(langStr);
+
+  const handleOpenPreview = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('open-live-preview', { detail: { code, language: langStr } }));
+  }, [code, langStr]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -106,7 +112,18 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {isPreviewable && (
+            <button
+              onClick={handleOpenPreview}
+              type="button"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 shadow-sm transition-all active:scale-95"
+              title="Sağ paneldə canlı preview göstər"
+            >
+              <Eye size={13} />
+              <span>Sağ Paneldə Aç (Live Preview)</span>
+            </button>
+          )}
           {isLong && (
             <button
               onClick={() => setCollapsed(!collapsed)}
