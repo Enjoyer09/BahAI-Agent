@@ -123,52 +123,58 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopy}
+            type="button"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-gray-200 bg-neutral-800 hover:bg-neutral-700 hover:text-white border border-neutral-700 transition-all active:scale-95"
+            title={copied ? 'Kopyalandı' : 'Kodu buferə kopyala'}
+          >
+            {copied ? (
+              <>
+                <Check size={14} className="text-green-400" />
+                <span className="text-green-400 font-semibold">Kopyalandı!</span>
+              </>
+            ) : (
+              <>
+                <Copy size={14} className="text-gray-400" />
+                <span>Kodu Kopyala</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handleDownload}
+            type="button"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-gray-200 bg-neutral-800 hover:bg-neutral-700 hover:text-white border border-neutral-700 transition-all active:scale-95"
+            title="Kodu fayl kimi yüklə"
+          >
+            <Download size={14} className="text-gray-400" />
+            <span>Yüklə</span>
+          </button>
+
           {isPreviewable && (
             <button
               onClick={handleOpenPreview}
               type="button"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 shadow-sm transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 shadow-sm transition-all active:scale-95"
               title="Sağ paneldə canlı preview göstər"
             >
-              <Eye size={13} />
+              <Eye size={14} />
               <span>Sağ Paneldə Aç (Live Preview)</span>
             </button>
           )}
+
           {isLong && (
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
-              style={{ minHeight: '44px', minWidth: '44px' }}
+              type="button"
+              className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-neutral-800 transition-colors"
               title={collapsed ? 'Genişlət' : 'Yığ'}
             >
               {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
             </button>
           )}
-          <button
-            onClick={handleDownload}
-            className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
-            style={{ minHeight: '44px', minWidth: '44px' }}
-            title="Yüklə"
-          >
-            <Download size={16} />
-          </button>
-          <button
-            onClick={handleCopy}
-            className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
-            style={{ minHeight: '44px', minWidth: '44px' }}
-            title={copied ? 'Kopyalandı' : 'Kodu kopyala'}
-            aria-label={copied ? 'Kod kopyalandı' : 'Kodu kopyala'}
-          >
-            {copied ? (
-              <span className="inline-flex items-center gap-1 text-[11px] text-green-400">
-                <Check size={16} />
-                <span className="hidden sm:inline">Kopyalandı</span>
-              </span>
-            ) : (
-              <Copy size={16} />
-            )}
-          </button>
         </div>
       </div>
 
