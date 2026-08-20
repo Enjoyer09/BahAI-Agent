@@ -469,15 +469,15 @@ router.post('/', async (req, res) => {
     });
   }
 
-  // --- Computer Use fast paths ---
-  if (isComputerUseOpenRequest(latestUserText, orchestration.workflow)) {
+  // --- Computer Use fast paths (Desktop mode only) ---
+  if (productMode !== 'web_chat' && isComputerUseOpenRequest(latestUserText, orchestration.workflow)) {
     const target = extractComputerUseTarget(latestUserText);
     return handleComputerUseOpenAndAwait({
       res, orchestration, runManager, target, promptText: latestUserText
     });
   }
 
-  if (isComputerUseContinuationRequest(latestUserText, orchestration.workflow)) {
+  if (productMode !== 'web_chat' && isComputerUseContinuationRequest(latestUserText, orchestration.workflow)) {
     return handleComputerUseContinuation({
       res, orchestration, runManager, promptText: latestUserText
     });
