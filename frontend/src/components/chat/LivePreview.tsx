@@ -26,51 +26,55 @@ export default function LivePreview({ port, isVisible, onClose }: Props) {
     if (isVisible && url) reload();
   }, [isVisible, url, reload]);
 
+  const openExternalBrowser = useCallback(() => {
+    const target = url || 'http://localhost:5173';
+    if ((window as any).electronAPI?.openExternal) {
+      (window as any).electronAPI.openExternal(target);
+    } else {
+      window.open(target, '_blank', 'noopener,noreferrer');
+    }
+  }, [url]);
+
   if (!isVisible) return null;
 
   return (
     <div className="h-full flex flex-col" style={{ background: 'var(--bg-surface)' }}>
       {/* Header */}
       <div
-        className="h-9 flex items-center justify-between px-3 shrink-0"
+        className="h-10 flex items-center justify-between px-3 shrink-0"
         style={{ borderBottom: '1px solid var(--border)' }}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <Globe size={13} style={{ color: 'var(--color-accent)' }} />
-          <span className="text-[11px] font-medium truncate" style={{ color: 'var(--fg-secondary)' }}>
-            {url || 'No port'}
+          <Globe size={14} className="text-amber-500 shrink-0" />
+          <span className="text-xs font-mono font-medium truncate" style={{ color: 'var(--fg-secondary)' }}>
+            {url || 'http://localhost:5173'}
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={reload}
-            className="p-1 rounded transition-colors"
+            className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors"
             style={{ color: 'var(--fg-muted)' }}
-            title="Refresh"
+            title="Yenilə"
             aria-label="Refresh preview"
           >
-            <RefreshCcw size={12} className={loading ? 'animate-spin' : ''} />
+            <RefreshCcw size={13} className={loading ? 'animate-spin' : ''} />
           </button>
-          {url && (
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              className="p-1 rounded transition-colors"
-              style={{ color: 'var(--fg-muted)' }}
-              title="Open in new tab"
-              aria-label="Open in new tab"
-            >
-              <ExternalLink size={12} />
-            </a>
-          )}
+          <button
+            onClick={openExternalBrowser}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 shadow-sm transition-all active:scale-95"
+            title="Sistem brauzerində / Chrome-da aç"
+          >
+            <ExternalLink size={13} />
+            <span>Chrome-da Aç</span>
+          </button>
           <button
             onClick={onClose}
-            className="p-1 rounded transition-colors"
+            className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors"
             style={{ color: 'var(--fg-muted)' }}
             aria-label="Close preview"
           >
-            <X size={12} />
+            <X size={14} />
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { Code, Terminal as TermIcon, Settings, PanelRight, X, Menu, SquarePen, Keyboard as KeyboardIcon } from 'lucide-react';
 import ChatArea from './components/chat/ChatArea';
 import KeyboardShortcutsDialog from './components/chat/KeyboardShortcutsDialog';
@@ -65,6 +65,35 @@ function AppContent() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   void setSelectedFile;
   const { ConfirmDialog } = useConfirm();
+  const [previewWidth, setPreviewWidth] = useState(() => {
+    const saved = localStorage.getItem('previewWidth');
+    return saved ? Math.max(340, parseInt(saved, 10)) : 560;
+  });
+  const [isResizingPreview, setIsResizingPreview] = useState(false);
+  void isResizingPreview;
+
+  const startResizingPreview = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingPreview(true);
+    const startX = e.clientX;
+    const startWidth = previewWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = startX - moveEvent.clientX;
+      const newWidth = Math.min(Math.max(320, startWidth + deltaX), Math.round(window.innerWidth * 0.85));
+      setPreviewWidth(newWidth);
+      localStorage.setItem('previewWidth', String(newWidth));
+    };
+
+    const onMouseUp = () => {
+      setIsResizingPreview(false);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [previewWidth]);
 
   const chat = useChat(settings.settings, auth.user?.id);
   const workspace = useWorkspace(chat.activeProject?.path || '');
@@ -682,22 +711,22 @@ function AppContent() {
         <div
           className={isMobile
             ? 'fixed inset-0 z-30 flex flex-col animate-in-right'
-            : 'flex flex-col shrink-0 overflow-hidden animate-in-right'
+            : 'relative flex flex-col shrink-0 overflow-hidden animate-in-right'
           }
           style={{
-            width: isMobile ? undefined : '420px',
+            width: isMobile ? undefined : `${previewWidth}px`,
             background: 'var(--bg-surface)',
             borderLeft: isMobile ? undefined : '1px solid var(--border)',
           }}
         >
-          <div className="flex items-center justify-between h-12 px-4 shrink-0 safe-top"
-               style={{ borderBottom: '1px solid var(--border)' }}>
-            <span className="text-sm font-medium" style={{ color: 'var(--fg-secondary)' }}>Preview</span>
-            <button onClick={() => setShowPreview(false)} className="p-2 rounded"
-                    style={{ color: 'var(--fg-muted)' }}>
-              <X size={18} />
-            </button>
-          </div>
+          {/* Splitter Resize Handle (Left edge) */}
+          {!isMobile && (
+            <div
+              onMouseDown={startResizingPreview}
+              className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-40 hover:bg-amber-500/60 transition-colors"
+              title="Ekranı dartaraq genişləndirin"
+            />
+          )}
           <ErrorBoundary>
             <Suspense fallback={<LazyFallback />}>
               <LivePreview
