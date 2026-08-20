@@ -299,11 +299,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
                   if (/^\[[\s\S]*\]$/.test(body) && body.length > 200) return '';
                   return match;
                 })
-                .replace(/\{\s*"(?:name|namerl|arguments|tool|function|path|content|result|url)"\s*:[\s\S]*?\}/gi, (match) => {
-                  // If it's a raw JSON payload dump (e.g. scraped web page or tool payload), strip it completely
-                  if (match.includes('"namerl"') || match.includes('<!DOCTYPE') || match.includes('<html')) return '';
-                  return '';
-                })
+                .replace(/\{\s*"namerl"\s*:[\s\S]*?\}/gi, '')
                 .trim();
               if (!displayContent && message.tool_calls && message.tool_calls.length > 0) return null;
               return (

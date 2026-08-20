@@ -11,6 +11,9 @@ const WEB_PRIVACY_MEMORY_KEYS = (contract as any)?.WEB_PRIVACY_MEMORY_KEYS || [
 export function isToolCallLikeText(content: string): boolean {
   const text = String(content || '').trim();
   if (!text) return false;
+  // If it contains markdown code blocks, HTML tags, or normal text sentences, it is NEVER a tool call payload!
+  if (text.includes('```') || /<!DOCTYPE|<html|<div|<body/i.test(text)) return false;
+  if (/\b(?:İşte|Salam|Əlbəttə|Təbii|Bu|Bəli|İstifadə|Mənbə|Tövsiyə)\b/i.test(text)) return false;
   return (
     /^(?:https?:\/\/)?wttr\.in\/[^\s]+$/i.test(text) ||
     /^(?:["`{[]\s*)?web_search["']?,?\s*$/i.test(text) ||
