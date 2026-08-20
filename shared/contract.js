@@ -27,6 +27,7 @@ const SSE_EVENT_TYPES = [
   'governance_state',
   'workspace_updated',
   'token_usage',
+  'trajectory_log',
   'error',
   'debug',
 ];

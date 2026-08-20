@@ -309,7 +309,7 @@ const protectedPaths = [
   '/api/browsers', '/api/gui-capabilities', '/api/computer-use-status',
   '/api/runtime-status', '/api/interactions', '/api/tts',
   '/api/conversation-token', '/api/signed-url', '/api/admin/stats',
-  '/api/admin/users', '/api/mcp', '/api/jobs'
+  '/api/admin/users', '/api/mcp', '/api/jobs', '/api/dsh'
 ];
 protectedPaths.forEach(function(p) { app.use(p, verifyToken); });
 
@@ -375,6 +375,10 @@ app.use('/api', browserRouter);
 
 // Misc routes — task-plan, diff, terminal, project-health, etc.
 app.use('/api', miscRouter);
+
+// DSH Features (Plugins, Sub-Agent Profiles, Stress Test)
+const dshRouter = require('./routes/dsh');
+app.use('/api/dsh', dshRouter);
 
 // Approvals — POST /api/approvals/:id, POST /api/checkpoints/:id, GET /api/interactions
 app.use('/api', injectChatRuntime, approvalsRouter);

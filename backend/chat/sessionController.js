@@ -248,6 +248,17 @@ async function runChatSession({
         message: msg
       } = streamOutput;
 
+      // Emit Unified Trajectory Event (DeepSeek Harness Trajectory Pattern)
+      writeSse(res, {
+        type: 'trajectory_log',
+        timestamp: new Date().toISOString(),
+        step,
+        activeRole: phaseContext.activePhase?.role || 'Solo Agent',
+        hasToolCalls: normalizedToolCalls.length > 0,
+        contentLength: accumulatedContent.length,
+        contentSnippet: accumulatedContent.slice(0, 100).replace(/\n/g, ' ')
+      });
+
       // The model fell into a degenerate repetition loop (same sentence
       // repeated many times). Never finalize that garbage into the
       // conversation; drop it and hand the user a clean retry instead.

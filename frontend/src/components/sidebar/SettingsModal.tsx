@@ -373,6 +373,35 @@ export default function SettingsModal({
             </div>
             <p style={descStyle}>Mürəkkəb layihələr üçün sub-agentlər şəbəkəsi yaradır (Beta).</p>
           </div>
+
+          <hr className="border-[var(--border)]" />
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label style={labelStyle} className="mb-0"><Zap size={14} /> 🧪 DSH 100-Prompt Stress & Audit Test</label>
+              <button
+                onClick={async () => {
+                  try {
+                    const token = localStorage.getItem('bahai_auth_token');
+                    const res = await fetch('/api/dsh/stress-test', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                      }
+                    });
+                    const data = await res.json();
+                    alert(data.message || '100+ Stress Test Başladıldı!');
+                  } catch (err) {
+                    alert('Xəta yarandı: ' + err.message);
+                  }
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold transition-colors"
+              >
+                Testi Başlat 🚀
+              </button>
+            </div>
+            <p style={descStyle}>Agenti 100 ağır alqoritmik, riyazi və veb tətbiq sorğusu ilə fonda sınaqdan keçirir.</p>
+          </div>
         </>
       )}
     </div>
