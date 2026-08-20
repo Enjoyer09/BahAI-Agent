@@ -194,7 +194,13 @@ print("OK")
  * Open a URL in the default browser (normal, not automated).
  */
 async function openUrl(url) {
-  await execFileAsync('open', [url]);
+  if (process.platform === 'darwin') {
+    await execFileAsync('/usr/bin/open', [url]).catch(() => execFileAsync('open', [url]));
+  } else if (process.platform === 'win32') {
+    await execFileAsync('cmd.exe', ['/c', 'start', '', url]);
+  } else {
+    await execFileAsync('xdg-open', [url]).catch(() => execFileAsync('sensible-browser', [url]));
+  }
   // Wait for browser to open and page to start loading
   await new Promise(r => setTimeout(r, 3000));
   return { ok: true, action: 'open_url', url };
@@ -204,7 +210,13 @@ async function openUrl(url) {
  * Open an application by name.
  */
 async function openApp(appName) {
-  await execFileAsync('open', ['-a', appName]);
+  if (process.platform === 'darwin') {
+    await execFileAsync('/usr/bin/open', ['-a', appName]).catch(() => execFileAsync('open', ['-a', appName]));
+  } else if (process.platform === 'win32') {
+    await execFileAsync('cmd.exe', ['/c', 'start', '', appName]);
+  } else {
+    await execFileAsync('xdg-open', [appName]).catch(() => execFileAsync('gtk-launch', [appName]));
+  }
   await new Promise(r => setTimeout(r, 2000));
   return { ok: true, action: 'open_app', app: appName };
 }
