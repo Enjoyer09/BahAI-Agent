@@ -102,23 +102,16 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
 
   return (
     <div
-      className="group relative my-3 rounded-lg overflow-hidden shadow-lg"
-      style={{
-        border: '1px solid var(--border)',
-        background: '#1e1e1e',
-      }}
+      className="group relative my-3 rounded-xl overflow-hidden shadow-xl border border-neutral-800 bg-[#0d1117]"
     >
-      {/* Header */}
+      {/* Sleek Header */}
       <div
-        className="flex items-center justify-between px-3 sm:px-4 py-2"
-        style={{
-          background: '#171717',
-          borderBottom: '1px solid var(--border)',
-        }}
+        className="flex items-center justify-between px-3.5 sm:px-4 py-2 bg-[#161b22] border-b border-neutral-800/80"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 select-none">
+          <span className="w-2.5 h-2.5 rounded-full bg-neutral-700/80 group-hover:bg-amber-500/80 transition-colors" />
           {language && (
-            <span className="text-[11px] text-gray-500 font-mono uppercase tracking-wider">
+            <span className="text-xs font-mono font-semibold uppercase tracking-wider text-neutral-400">
               {language}
             </span>
           )}
@@ -127,17 +120,21 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
           <button
             onClick={handleCopy}
             type="button"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-gray-200 bg-neutral-800 hover:bg-neutral-700 hover:text-white border border-neutral-700 transition-all active:scale-95"
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all active:scale-95 cursor-pointer ${
+              copied
+                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 shadow-sm'
+                : 'text-neutral-300 hover:text-white bg-neutral-800/60 hover:bg-neutral-700/80 border border-neutral-700/50'
+            }`}
             title={copied ? 'Kopyalandı' : 'Kodu buferə kopyala'}
           >
             {copied ? (
               <>
-                <Check size={14} className="text-green-400" />
-                <span className="text-green-400 font-semibold">Kopyalandı!</span>
+                <Check size={13} className="text-emerald-400" />
+                <span className="font-semibold">Kopyalandı!</span>
               </>
             ) : (
               <>
-                <Copy size={14} className="text-gray-400" />
+                <Copy size={13} className="text-neutral-400" />
                 <span>Kodu Kopyala</span>
               </>
             )}
@@ -146,10 +143,10 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
           <button
             onClick={handleDownload}
             type="button"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-gray-200 bg-neutral-800 hover:bg-neutral-700 hover:text-white border border-neutral-700 transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-neutral-300 hover:text-white bg-neutral-800/60 hover:bg-neutral-700/80 border border-neutral-700/50 transition-all active:scale-95 cursor-pointer"
             title="Kodu fayl kimi yüklə"
           >
-            <Download size={14} className="text-gray-400" />
+            <Download size={13} className="text-neutral-400" />
             <span>Yüklə</span>
           </button>
 
@@ -157,11 +154,11 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
             <button
               onClick={handleOpenPreview}
               type="button"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 shadow-sm transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 border border-amber-500/50 shadow-sm transition-all active:scale-95 cursor-pointer"
               title="Sağ paneldə canlı preview göstər"
             >
-              <Eye size={14} />
-              <span>Sağ Paneldə Aç (Live Preview)</span>
+              <Eye size={13} />
+              <span>Live Preview</span>
             </button>
           )}
 
@@ -169,10 +166,10 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
             <button
               onClick={() => setCollapsed(!collapsed)}
               type="button"
-              className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors ml-0.5"
               title={collapsed ? 'Genişlət' : 'Yığ'}
             >
-              {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+              {collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
             </button>
           )}
         </div>
