@@ -348,14 +348,6 @@ function buildProviderCandidates({
     const nvidiaCandidates = buildNvidiaProviders(primaryTask);
     const openRouterCandidates = buildOpenRouterFallbackCandidates('web_auto');
 
-    // Vision failover ordering: a blind gateway 'auto' must never be tried
-    // before a known vision-capable model. Keep the explicit WEB_CHAT_VISION_MODEL
-    // (web_vision_primary_omniroute) first, then NVIDIA vision, then the
-    // OpenRouter vision fallback, and only afterwards any remaining gateway
-    // fallback models (e.g. 'auto'). When WEB_CHAT_VISION_MODEL is not set the
-    // explicit primary slot is empty, so NVIDIA/OpenRouter vision candidates are
-    // still guaranteed ahead of the gateway 'auto' (which the gateway may
-    // resolve to a text-only model that silently ignores the image).
     let orderedCandidates;
     if (primaryTask === 'vision') {
       const [primaryCloud, ...restCloud] = cloudCandidates;
@@ -363,7 +355,7 @@ function buildProviderCandidates({
         ? [primaryCloud, ...nvidiaCandidates, ...openRouterCandidates, ...restCloud]
         : [...nvidiaCandidates, ...openRouterCandidates, ...cloudCandidates];
     } else {
-      orderedCandidates = [...cloudCandidates, ...nvidiaCandidates];
+      orderedCandidates = [...cloudCandidates, ...nvidiaCandidates, ...openRouterCandidates];
     }
     orderedCandidates = orderedCandidates.filter(Boolean);
 
