@@ -269,17 +269,26 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
             {/* Debug Provider Badge */}
             {isBot && (showModelBadge || message.providerInfo) && (
               <div
-                className="mb-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono tracking-tight"
+                className="mb-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono tracking-tight shadow-sm"
                 style={{
                   background: 'rgba(99, 102, 241, 0.12)',
                   border: '1px solid rgba(99, 102, 241, 0.25)',
                   color: '#818cf8',
                 }}
               >
-                <Sparkles size={12} className="text-indigo-400 shrink-0" />
+                <Sparkles size={13} className="text-indigo-400 shrink-0" />
                 <span>
-                  ⚡ Mənbə: <strong>{message.providerInfo?.providerId || 'Smart Router'}</strong>
-                  {message.providerInfo?.model ? ` (${message.providerInfo.model})` : ''}
+                  ⚡ Mənbə: <strong className="font-semibold">{(() => {
+                    const info = message.providerInfo;
+                    if (!info) return 'Smart Router (Auto)';
+                    const pid = String(info.providerId || '');
+                    let label = pid;
+                    if (pid.includes('openrouter')) label = 'OpenRouter Free';
+                    else if (pid.includes('nvidia')) label = 'NVIDIA NIM';
+                    else if (pid.includes('ollama') || pid.includes('local')) label = 'Local Model';
+                    else if (pid.includes('smart') || pid.includes('auto')) label = 'Smart Router';
+                    return info.model ? `${label} (${info.model})` : label;
+                  })()}</strong>
                 </span>
               </div>
             )}
