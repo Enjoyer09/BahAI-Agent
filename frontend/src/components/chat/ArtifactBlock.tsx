@@ -52,7 +52,7 @@ export default function ArtifactBlock({ language, code }: Props) {
   // Wrap fragments (no <html>/<body>) in a minimal document so the iframe
   // always renders something sensible.
   const doc = useCallback(() => {
-    const previewGuard = `<script>(function(){window.addEventListener('error',function(e){var box=document.createElement('div');box.style.cssText='position:fixed;inset:12px;background:#fff7ed;color:#9a3412;border:1px solid #fdba74;border-radius:10px;padding:12px;font:14px system-ui;z-index:2147483647;white-space:pre-wrap';box.textContent='Preview xətası: '+(e.message||'JavaScript xətası')+(e.lineno?'\\nSətir: '+e.lineno+(e.colno?' | Sütun: '+e.colno:'' ):'');document.body&&document.body.appendChild(box);});})();</script>`;
+    const previewGuard = `<script>(function(){window.addEventListener('error',function(e){var msg=(e.message||'JavaScript xətası')+(e.lineno?' (Sətir: '+e.lineno+(e.colno?' | Sütun: '+e.colno:''):'');var box=document.createElement('div');box.style.cssText='position:fixed;inset:12px;background:#fff7ed;color:#9a3412;border:1px solid #fdba74;border-radius:12px;padding:14px;font:13px system-ui,sans-serif;z-index:2147483647;white-space:pre-wrap;box-shadow:0 10px 25px rgba(0,0,0,0.2)';box.innerHTML='<div style="font-weight:bold;margin-bottom:6px">⚠️ Preview Sintaksis Xətası</div><div>'+msg+'</div><div style="margin-top:10px;font-size:11px;color:#c2410c">💡 Yuxarıdakı <b>&amp;lt;/&amp;gt; Kode</b> düyməsinə basaraq kodu kopyalaya bilərsiniz.</div>';document.body&&document.body.appendChild(box);});})();</script>`;
     if (isHtml) {
       const hasFullDoc = /<(html|body|!doctype)\b/i.test(code);
       if (hasFullDoc) {
@@ -100,12 +100,12 @@ export default function ArtifactBlock({ language, code }: Props) {
             Kode
           </button>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {view === 'preview' && (
             <button
               onClick={() => setReloadKey(k => k + 1)}
-              className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
-              style={{ minHeight: '44px', minWidth: '44px' }}
+              className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+              style={{ minHeight: '32px', minWidth: '32px' }}
               title="Yenilə"
             >
               <RefreshCcw size={14} />
@@ -113,11 +113,12 @@ export default function ArtifactBlock({ language, code }: Props) {
           )}
           <button
             onClick={handleCopy}
-            className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
-            style={{ minHeight: '44px', minWidth: '44px' }}
-            title="Kopyala"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-white transition-all bg-amber-600 hover:bg-amber-500 shadow-sm active:scale-95"
+            style={{ minHeight: '32px' }}
+            title="Kodu kopyala"
           >
-            {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+            {copied ? <Check size={14} className="text-green-300" /> : <Copy size={14} />}
+            <span>{copied ? 'Kopyalandı' : 'Kodu Kopyala'}</span>
           </button>
         </div>
       </div>
