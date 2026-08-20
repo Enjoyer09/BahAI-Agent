@@ -61,7 +61,8 @@ function decideManagerRoute({ latestUserText = '', orchestrationMode = false, wo
     };
   }
 
-  if (workflow === 'computer_use' || /(computer use|desktop app|real desktop|mac app|mouse|keyboard|window|finder|system settings|local app)/i.test(intent.normalized)) {
+  const isCodeGenPrompt = /(?:html|css|kod|code|script|prompt|yazmaq isteyirem|app yaz|tətbiq yaz|tatbiq yaz|create app|build app|generate app|loyalty app)/i.test(intent.normalized);
+  if (!isCodeGenPrompt && (workflow === 'computer_use' || /(computer use|desktop app|real desktop|mac app|mouse|keyboard|window|finder|system settings|local app)/i.test(intent.normalized))) {
     return {
       mode: 'delegated',
       primaryAgent: 'Computer Use Operator',

@@ -278,7 +278,7 @@ export default function ChatMessage({ message, workingDirectory, productMode = '
               >
                 <Sparkles size={12} className="text-indigo-400 shrink-0" />
                 <span>
-                  ⚡ Mənbə: <strong>{message.providerInfo?.providerId || 'OmniRoute'}</strong>
+                  ⚡ Mənbə: <strong>{message.providerInfo?.providerId || 'Smart Router'}</strong>
                   {message.providerInfo?.model ? ` (${message.providerInfo.model})` : ''}
                 </span>
               </div>

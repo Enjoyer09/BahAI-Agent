@@ -1,5 +1,10 @@
+function isCodeGenerationRequest(value = '') {
+  return /(?:html|css|kod|code|script|prompt|yazmaq isteyirem|app yaz|tətbiq yaz|tatbiq yaz|create app|build app|generate app|loyalty app)/i.test(value);
+}
+
 function isComputerUseOpenRequest(text = '', workflow = '') {
   const value = String(text || '').toLowerCase();
+  if (isCodeGenerationRequest(value)) return false;
   if (!(workflow === 'computer_use' || /(computer use|desktop|finder|system settings|open app|mac app|real desktop)/i.test(value))) {
     return false;
   }
@@ -8,10 +13,11 @@ function isComputerUseOpenRequest(text = '', workflow = '') {
 
 function isComputerUseContinuationRequest(text = '', workflow = '') {
   const value = String(text || '').toLowerCase();
+  if (isCodeGenerationRequest(value)) return false;
   if (!(workflow === 'computer_use' || /(computer use|desktop|finder|system settings|mac app|real desktop)/i.test(value))) {
     return false;
   }
-  return /(klik|click|type|yaz|press|bas|scroll|axtar|tap|select|sec|seç)/i.test(value);
+  return /(klik|click|type|press|bas|scroll|axtar|tap|select|sec|seç)/i.test(value);
 }
 
 function extractComputerUseTarget(text = '') {
