@@ -12,12 +12,22 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
   const [copied, setCopied] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
     setIsMobile(mq.matches);
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mq.addEventListener('change', handler);
+
+    const hasElectron = Boolean(
+      (window as any).electronAPI ||
+      (window as any).windowControls ||
+      window.navigator.userAgent.includes('Electron') ||
+      window.location.search.includes('desktop=true')
+    );
+    setIsDesktop(hasElectron);
+
     return () => mq.removeEventListener('change', handler);
   }, []);
 
@@ -25,7 +35,8 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
   const lineCount = code.split('\n').length;
   const isLong = lineCount > 30;
   const langStr = String(language || '').toLowerCase();
-  const isPreviewable = /^(html|htm|svg|js|jsx|ts|tsx)$/i.test(langStr);
+  // Live Preview is ONLY enabled in Desktop/Electron mode
+  const isPreviewable = isDesktop && /^(html|htm|svg|js|jsx|ts|tsx)$/i.test(langStr);
 
   const handleOpenPreview = useCallback(() => {
     window.dispatchEvent(new CustomEvent('open-live-preview', { detail: { code, language: langStr } }));
