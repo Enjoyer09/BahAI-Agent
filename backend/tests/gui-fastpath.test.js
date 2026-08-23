@@ -1,7 +1,10 @@
+import path from 'node:path';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { existsSync } from 'node:fs';
 import { spawnTestServer, stopTestServer } from './testServer.js';
 import * as fastpath from '../gui/fastpath.js';
+import browserSession from '../browserSession.js';
 
 let server;
 let base;
@@ -21,7 +24,16 @@ beforeAll(async () => {
       // failure path becomes deterministic and side-effect-free instead of
       // spawning visible Chrome with the user's profile (which also raced the
       // 10s CDP reachability deadline against the 10s test timeout).
-      GUI_BROWSER_NO_AUTO_LAUNCH: 'true'
+      GUI_BROWSER_NO_AUTO_LAUNCH: 'true',
+      // Layered guards: if the NO_AUTO_LAUNCH gate were ever removed, these
+      // force a throwaway profile dir, headless/non-visible mode, no channel
+      // and no executable path — so even a persistent launch could never open
+      // the user's real Chrome window or touch their real profile.
+      GUI_BROWSER_USER_DATA_DIR: '/tmp/bahai_gui_fastpath_test/chrome-profile',
+      GUI_BROWSER_VISIBLE: 'false',
+      GUI_BROWSER_PERSISTENT: 'false',
+      GUI_BROWSER_CHANNEL: '',
+      GUI_BROWSER_EXECUTABLE_PATH: ''
     }
   });
   server = booted.child;
@@ -65,6 +77,70 @@ describe('GUI fast-path SSE', () => {
     expect(response.status).toBe(200);
     expect(response.text.includes('"type":"human_checkpoint"') || response.text.includes('Browser açıla bilmədi')).toBe(true);
   }, 15000);
+});
+
+// Profile isolation: the CDP debug-Chrome launcher defaults to the user's REAL
+// Chrome profile (so Google OAuth keeps cookies/history). Any env used by
+// automated runs must resolve to a throwaway profile instead — tests set
+// GUI_BROWSER_CHROME_PROFILE via testServer.js, and this verifies both that
+// the override wins AND that the production default is unchanged.
+describe('GUI profile isolation', () => {
+  it('GUI_BROWSER_CHROME_PROFILE overrides the real Chrome profile default', () => {
+    const resolved = browserSession.resolveChromeDebugProfileDir({
+      GUI_BROWSER_CHROME_PROFILE: '/tmp/bahai-test-chrome-profile-42420',
+      HOME: '/Users/fake-user'
+    });
+    expect(resolved).toBe('/tmp/bahai-test-chrome-profile-42420');
+  });
+
+  it('production default stays the real Chrome profile (no override)', () => {
+    const resolved = browserSession.resolveChromeDebugProfileDir({ HOME: '/Users/fake-user' });
+    expect(resolved).toBe(path.join('/Users/fake-user', 'Library', 'Application Support', 'Google', 'Chrome'));
+  });
+});
+
+// Launch-gate guard: with GUI_BROWSER_NO_AUTO_LAUNCH=true, getSession must
+// NEVER open a browser — even when the caller explicitly asks for
+// persistent + visible + the real Chrome executable (the exact combo the wix
+// checkpoint path sends). Regression guard for the gap where the guard only
+// covered CDP auto-launch and the persistent+visible path opened real Chrome,
+// navigating to www.wix.com during test runs.
+describe('GUI launch-gate (no real browser in tests)', () => {
+  it('blocks persistent+visible real-Chrome launches with cdp_unreachable and leaves no trace', async () => {
+    const prev = process.env.GUI_BROWSER_NO_AUTO_LAUNCH;
+    process.env.GUI_BROWSER_NO_AUTO_LAUNCH = 'true';
+    const sessionId = `launch-track-${Date.now()}`;
+    const profileDir = `/tmp/bahai-gui-launch-track-${Date.now()}`;
+    const startedAt = Date.now();
+    let error = null;
+    try {
+      try {
+        await browserSession.getSession(sessionId, {
+          visible: true,
+          persistent: true,
+          browserChannel: 'chrome',
+          executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+          userDataDir: profileDir,
+          url: 'https://www.wix.com'
+        });
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error).not.toBeNull();
+      expect(error.browserLaunchCode).toBe('cdp_unreachable');
+      expect(String(error.message)).toContain('GUI_BROWSER_NO_AUTO_LAUNCH');
+      // Block fail-fast: must never wait out the 10s CDP reachability deadline
+      // or spin up a persistent context.
+      expect(Date.now() - startedAt).toBeLessThan(3000);
+      // No session recorded and the persistent profile dir was never created.
+      expect(browserSession.hasSession(sessionId)).toBe(false);
+      expect(existsSync(profileDir)).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.GUI_BROWSER_NO_AUTO_LAUNCH;
+      else process.env.GUI_BROWSER_NO_AUTO_LAUNCH = prev;
+    }
+  }, 10000);
 });
 
 // Unit coverage of the happy path (human_checkpoint SSE) that the integration

@@ -105,7 +105,7 @@ async function spawnTestServer({ base, envOverrides = {}, bootTimeoutMs = 12000 
     throw new Error(`Test port ${port} is already in use before spawning; refusing to race a stale server.`);
   }
 
-  // index.js loads root/backend .env with override:true — a checked-in PORT
+  // index.js loads root .env with --override:true — a checked-in PORT
   // entry would clobber the unique test port. Skip dotenv for test children so
   // the spawn env (PORT, provider keys, etc.) is authoritative. The generic
   // provider env keeps /api/chat from short-circuiting with "no providers" 503
@@ -117,7 +117,11 @@ async function spawnTestServer({ base, envOverrides = {}, bootTimeoutMs = 12000 
     OPENAI_MODEL: 'test-model',
     ...envOverrides,
     PORT: String(port),
-    BAHAI_DOTENV_SKIP: '1'
+    BAHAI_DOTENV_SKIP: '1',
+    // Profile isolation: any GUI browser launch in tests must use a unique
+    // throwaway Chrome profile, never the user's real ~/Library/.../Google/Chrome.
+    GUI_BROWSER_CHROME_PROFILE: path.join('/tmp', `bahai-test-chrome-profile-${port}`),
+    GUI_BROWSER_USER_DATA_DIR: path.join('/tmp', `bahai-test-user-data-${port}`)
   };
   const child = spawn(process.execPath, ['index.js'], {
     cwd: backendRoot,

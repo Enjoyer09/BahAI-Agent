@@ -58,6 +58,13 @@ async function isCdpReachable(cdpUrl) {
   }
 }
 
+function resolveChromeDebugProfileDir(env = process.env) {
+  return String(
+    env.GUI_BROWSER_CHROME_PROFILE ||
+    path.join(env.HOME || '/tmp', 'Library', 'Application Support', 'Google', 'Chrome')
+  );
+}
+
 async function ensureDebugChrome(cdpUrl, userDataDir) {
   if (!cdpUrl) return { launched: false };
   if (await isCdpReachable(cdpUrl)) return { launched: false };
@@ -89,10 +96,11 @@ async function ensureDebugChrome(cdpUrl, userDataDir) {
   // By launching real Chrome with minimal flags + a persistent user-data-dir,
   // Google treats it as a normal browser and allows OAuth login.
   //
-  // IMPORTANT: Use the user's REAL Chrome profile directory so Google sees
-  // existing cookies/history and doesn't flag it as "unsafe browser".
-  const realProfileDir = process.env.GUI_BROWSER_CHROME_PROFILE 
-    || path.join(process.env.HOME || '/tmp', 'Library', 'Application Support', 'Google', 'Chrome');
+  // IMPORTANT: Use the user's REAL Chrome profile so Google sees existing
+  // cookies/history and doesn't flag it as "unsafe browser". Tests/CI must
+  // override via GUI_BROWSER_CHROME_PROFILE (resolveChromeDebugProfileDir) so
+  // automated runs never touch the real profile.
+  const realProfileDir = resolveChromeDebugProfileDir(process.env);
   // Don't create this dir — it must already exist (user's real profile)
 
   const child = spawn(chromePath, [
@@ -236,6 +244,21 @@ async function getSession(sessionId = 'default', options = {}) {
   let openedVia = 'bundled';
   const preferRealChrome = isRealChromePreferred({ browserChannel, executablePath, persistent, cdpUrl });
 
+  // Test/CI guard: GUI_BROWSER_NO_AUTO_LAUNCH=true means NO browser subprocess
+  // may be spawned from an automated environment — applied here to the
+  // persistent (real Chrome via launchPersistentContext) and bundled Playwright
+  // paths, mirroring the existing guard inside ensureDebugChrome for CDP
+  // auto-launch. Placed after the session cache check (existing live sessions
+  // are reused) and before the lock-file/profile dir cleanup so tests stay
+  // fully side-effect-free.
+  if (process.env.GUI_BROWSER_NO_AUTO_LAUNCH === 'true' && !hasCdpUrl) {
+    throw createBrowserLaunchError(
+      'cdp_unreachable',
+      `Code: cdp_unreachable. Browser launch is disabled in this environment (GUI_BROWSER_NO_AUTO_LAUNCH=true); no browser process was opened (persistent/bundled mode).`,
+      { cdpUrl, browserChannel, executablePath, persistent, userDataDir }
+    );
+  }
+
   // FIX: Clear stale Chrome singleton lock files before launching persistent context.
   // These locks remain if Chrome crashed or was force-killed, preventing relaunch.
   if (persistent && userDataDir) {
@@ -273,6 +296,15 @@ async function getSession(sessionId = 'default', options = {}) {
               persistent,
               userDataDir
             }
+          );
+        }
+        // Test/CI guard: never fall back to spawning Chrome from an automated
+        // environment (mirrors the guard against persistent/bundled launches).
+        if (process.env.GUI_BROWSER_NO_AUTO_LAUNCH === 'true') {
+          throw createBrowserLaunchError(
+            'cdp_unreachable',
+            `Code: cdp_unreachable. Browser launch is disabled in this environment (GUI_BROWSER_NO_AUTO_LAUNCH=true); refusing persistent fallback launch after CDP attach failure.`,
+            { cdpUrl, browserChannel, executablePath, persistent, userDataDir }
           );
         }
         launchWarning = [
@@ -440,6 +472,7 @@ module.exports = {
   closeAllSessions,
   findInstalledChromePath,
   buildDefaultBahaiChromeProfileDir,
+  resolveChromeDebugProfileDir,
   listInstalledBrowsers,
   isCdpContextManagementError,
   createBrowserLaunchError
