@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// OmniRoute durable-job load test harness (staged + stop-gated)
+// Durable-job load test harness (staged + stop-gated)
 // ============================================================
 // Drives the NEW durable background-agent API end to end:
 //
@@ -17,8 +17,8 @@
 // Do NOT point it at production without explicit sign-off, a raised
 // JOB_MAX_ACTIVE_PER_USER cap (>= stage size), and a valid ADMIN_OPS_TOKEN.
 //
-// Self-test: `node scripts/loadtest-omniroute.mjs --mock` spins up an
-// embedded fake server and exercises the full stage/stop-gate/report
+// Self-test: `node scripts/loadtest-jobs.mjs --mock` spins up an
+// embedded fake backend and exercises the full stage/stop-gate/report
 // path with zero external dependencies.
 //
 // Config (env or CLI):
@@ -333,7 +333,7 @@ async function snapshotOps() {
 function writeReports(run) {
   if (!fs.existsSync(CONFIG.outDir)) fs.mkdirSync(CONFIG.outDir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  const tag = CONFIG.authMode === 'mock' ? `omniroute-mock-${ts}` : `omniroute-${ts}`;
+  const tag = CONFIG.authMode === 'mock' ? `durable-mock-${ts}` : `durable-${ts}`;
   const jsonPath = path.join(CONFIG.outDir, `agent-stress-${tag}.json`);
   const mdPath = path.join(CONFIG.outDir, `agent-stress-${tag}.md`);
   fs.writeFileSync(jsonPath, JSON.stringify(run, null, 2));
@@ -344,7 +344,7 @@ function writeReports(run) {
 
 function renderMarkdown(run) {
   const lines = [];
-  lines.push(`# OmniRoute Durable-Job Load Test`);
+  lines.push(`# BahAI Durable-Job Load Test`);
   lines.push('');
   lines.push(`- Generated: ${run.generatedAt}`);
   lines.push(`- Target: \`${run.target}\``);

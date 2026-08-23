@@ -1,7 +1,7 @@
 // Regression guards for the web vision fix:
-// 1) providers.js — OmniRoute-enabled vision requests must route to the
-//    configured WEB_CHAT_VISION_MODEL first (previously ignored → text-only
-//    model hallucinated image descriptions from OCR hints + prompt fragments).
+// 1) providers.js — vision requests must route to the configured
+//    WEB_CHAT_VISION_MODEL first (previously ignored → text-only model
+//    hallucinated image descriptions from OCR hints + prompt fragments).
 // 2) helpers.js normalizeMessagesForModel — the injected image instruction
 //    must stay compact so weak models do not parrot it verbatim into the
 //    user-visible answer ("Əmin olmadığım hissələr", "yazı seçilmir demək yeterli").
@@ -38,12 +38,8 @@ function visionCandidates(env) {
 }
 
 describe('web vision routing (providers.js)', () => {
-  it('OmniRoute vision requests use WEB_CHAT_VISION_MODEL as the first cloud candidate', () => {
+  it('vision requests use WEB_CHAT_VISION_MODEL as the first cloud candidate when configured', () => {
     const candidates = visionCandidates({
-      OMNIROUTE_ENABLED: 'true',
-      OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
-      OMNIROUTE_API_KEY: 'omni-key',
-      OMNIROUTE_MODEL: 'auto',
       WEB_CHAT_VISION_MODEL: 'gpt-5.5-vision',
       WEB_CHAT_FAST_MODEL: 'gpt-5.5-mini',
       WEB_CHAT_SMART_MODEL: 'gpt-5.5',
@@ -51,56 +47,45 @@ describe('web vision routing (providers.js)', () => {
       OPENAI_BASE_URL: 'https://api.freemodel.dev/v1'
     });
 
-    // Primary cloud candidate must be the vision model on the OmniRoute base —
-    // not the text-oriented 'auto' that cannot see the image.
+    // Primary cloud candidate must be the vision model, not a text-oriented
+    // model that cannot see the image.
     expect(candidates[0]).toMatchObject({
-      id: 'web_vision_primary_omniroute',
+      id: 'web_vision_primary',
       model: 'gpt-5.5-vision',
-      baseURL: 'https://omniroute.example/v1'
+      baseURL: 'https://api.freemodel.dev/v1'
     });
   });
 
-  it('OmniRoute vision still falls back to OmniRoute fallback models after the vision model', () => {
+  it('vision still falls back to the other web models after the vision model', () => {
     const candidates = visionCandidates({
-      OMNIROUTE_ENABLED: 'true',
-      OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
-      OMNIROUTE_API_KEY: 'omni-key',
-      OMNIROUTE_MODEL: 'auto',
-      OMNIROUTE_FALLBACK_MODELS: 'meta-llama/llama-3.3-70b-instruct:free',
       WEB_CHAT_VISION_MODEL: 'gpt-5.5-vision',
+      WEB_CHAT_FAST_MODEL: 'gpt-5.5-mini',
       OPENAI_API_KEY: 'env-key',
       OPENAI_BASE_URL: 'https://api.freemodel.dev/v1'
     });
 
     const models = candidates.map((c) => c.model);
     expect(models[0]).toBe('gpt-5.5-vision');
-    expect(models).toContain('meta-llama/llama-3.3-70b-instruct:free');
+    expect(candidates.some((c) => c.baseURL === 'https://api.freemodel.dev/v1' && c.model === 'gpt-5.5-mini')).toBe(true);
     // No duplicate vision model entries.
     expect(models.filter((m) => m === 'gpt-5.5-vision')).toHaveLength(1);
   });
 
-  it('OmniRoute vision without WEB_CHAT_VISION_MODEL keeps the gateway auto routing (no NVIDIA id forced onto the gateway)', () => {
-    // The NVIDIA default model id belongs to the NVIDIA endpoint, not the
-    // OmniRoute gateway — forcing it onto the gateway base would guarantee a
-    // failed first attempt. Without an explicit vision model, keep the plain
-    // gateway fallback list so the gateway's own auto routing applies.
+  it('vision without WEB_CHAT_VISION_MODEL prefers an NVIDIA vision candidate first', () => {
     const candidates = visionCandidates({
-      OMNIROUTE_ENABLED: 'true',
-      OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
-      OMNIROUTE_API_KEY: 'omni-key',
-      OMNIROUTE_MODEL: 'auto',
       OPENAI_API_KEY: 'env-key',
-      OPENAI_BASE_URL: 'https://api.freemodel.dev/v1'
+      OPENAI_BASE_URL: 'https://api.freemodel.dev/v1',
+      NVIDIA_API_KEY: 'nvapi-test',
+      NVIDIA_VISION_MODEL: 'meta/llama-3.2-11b-vision-instruct'
     });
 
     expect(candidates[0]).toMatchObject({
-      id: 'web_vision_primary_omniroute',
-      model: 'auto',
-      baseURL: 'https://omniroute.example/v1'
+      id: 'nvidia_vision_1',
+      model: 'meta/llama-3.2-11b-vision-instruct'
     });
   });
 
-  it('non-vision OmniRoute requests keep the plain OmniRoute fallback list (unchanged)', () => {
+  it('non-vision requests keep the plain web fallback list (unchanged)', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: '',
       frontendBaseUrl: '',
@@ -111,20 +96,17 @@ describe('web vision routing (providers.js)', () => {
       productMode: 'web_chat',
       executionMode: 'cloud',
       env: {
-        OMNIROUTE_ENABLED: 'true',
-        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
-        OMNIROUTE_API_KEY: 'omni-key',
-        OMNIROUTE_MODEL: 'auto',
-        OMNIROUTE_FALLBACK_MODELS: 'qwen/qwen3-coder:free',
         OPENAI_API_KEY: 'env-key',
-        OPENAI_BASE_URL: 'https://api.freemodel.dev/v1'
+        OPENAI_BASE_URL: 'https://api.freemodel.dev/v1',
+        WEB_CHAT_FAST_MODEL: 'gpt-5.5-mini',
+        WEB_CHAT_SMART_MODEL: 'gpt-5.5'
       },
       parseProviderPoolFromEnv: () => [],
       looksLikeOllamaModel
     });
 
-    expect(candidates[0].model).toBe('auto');
-    expect(candidates.map((c) => c.model)).toContain('qwen/qwen3-coder:free');
+    expect(candidates[0].model).toBe('gpt-5.5-mini');
+    expect(candidates.map((c) => c.model)).toContain('gpt-5.5');
   });
 });
 

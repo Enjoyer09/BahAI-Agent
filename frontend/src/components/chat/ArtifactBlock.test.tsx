@@ -19,9 +19,11 @@ describe('ArtifactBlock', () => {
   it('switches to Code view when the Kode toggle is clicked', () => {
     render(<ArtifactBlock language="html" code={'<h1>Salam</h1>'} />);
     fireEvent.click(screen.getByText('Kode'));
-    // Code view shows the raw source
+    // Code view shows the raw source; the preview iframe is hidden (the
+    // component keeps it mounted with display:none so switching back does not
+    // reload the sandboxed document).
     expect(screen.getByText('<h1>Salam</h1>')).toBeInTheDocument();
-    expect(document.querySelector('iframe')).not.toBeInTheDocument();
+    expect(document.querySelector('iframe')).not.toBeVisible();
   });
 
   it('wraps html fragments in a full document with proper charset', () => {

@@ -153,18 +153,13 @@ async function openAiStreamWithFallback({
       throw Object.assign(new Error('Request deadline exceeded'), { name: 'AbortError' });
     }
     // Vision requests (image attachments or vision-flavored models) get their
-    // own, longer attempt budget. The old hard 5s OmniRoute cap made healthy
+    // own, longer attempt budget. The old hard 5s gateway cap made healthy
     // providers — and any image ingestion — time out on simple text questions.
     const requestIsVision = Boolean(isVisionRequest) || isVisionModel(model);
     const attemptBudget = requestIsVision ? Math.max(llmTimeoutMs, visionTimeoutMs) : llmTimeoutMs;
-    const isOmniRouteProvider = /omniroute/i.test(String(provider.id || ''));
     const providerTimeoutMs = isLocalProvider
       ? Math.max(attemptBudget, 90000)
-      : isOmniRouteProvider
-        // Keep OmniRoute attempts short enough to fail over quickly, but never
-        // so short that a healthy provider misses the deadline.
-        ? (requestIsVision ? Math.min(attemptBudget, 45000) : Math.min(attemptBudget, 15000))
-        : attemptBudget;
+      : attemptBudget;
     lastAttemptTimeoutMs = Math.max(1, Math.min(providerTimeoutMs, remainingRequestMs));
     const attemptController = new AbortController();
     const attemptTimer = setTimeout(() => attemptController.abort(), lastAttemptTimeoutMs);
@@ -216,7 +211,7 @@ async function openAiStreamWithFallback({
   }
 
   // Retry a single candidate once on transient errors before failing over. This
-  // absorbs short gateway blips (e.g. a transient 5xx from OmniRoute) that would
+  // absorbs short gateway blips (e.g. a transient 5xx from a provider) that would
   // otherwise burn the whole candidate pool and surface the generic failure.
   async function callCreateStream(provider, client, model, messages, forceDisableTools, deadlineAt) {
     const MAX_ATTEMPTS = 2;

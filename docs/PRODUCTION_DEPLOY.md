@@ -26,9 +26,7 @@ OPENAI_BASE_URL=https://api.freemodel.dev/v1   # or https://openrouter.ai/api/v1
 OPENAI_MODEL=gpt-5.5
 # OPENROUTER_API_KEY=<sk-or-...>               # optional free-model fallback
 # OPENROUTER_FALLBACK_MODELS='deepseek/deepseek-v4-flash:free,qwen/qwen3-coder:free'
-# OMNIROUTE_ENABLED=true                       # optional gateway control plane
-# OMNIROUTE_BASE_URL=https://your-omniroute-host/v1
-# OMNIROUTE_API_KEY=<key>
+# NVIDIA_API_KEY=<nvapi-...>                    # optional second cloud provider
 ```
 
 ## 2. Forbidden in production

@@ -164,7 +164,7 @@ describe('provider candidate routing', () => {
     expect(candidates[0].model).toBe('qwen3-coder-free');
   });
 
-  it('omniroute takes precedence for web auto routing when enabled', () => {
+  it('web auto routing prefers the env-driven cloud provider when no browser override exists', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: 'frontend-key-ignored',
       frontendBaseUrl: '',
@@ -176,20 +176,17 @@ describe('provider candidate routing', () => {
       env: {
         OPENAI_API_KEY: 'env-key',
         OPENAI_BASE_URL: 'https://api.freemodel.dev/v1',
-        WEB_CHAT_SMART_MODEL: 'gpt-5.5',
-        OMNIROUTE_ENABLED: 'true',
-        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
-        OMNIROUTE_API_KEY: 'omni-key'
+        WEB_CHAT_SMART_MODEL: 'gpt-5.5'
       },
       parseProviderPoolFromEnv: () => [],
       looksLikeOllamaModel
     });
 
-    expect(candidates[0].baseURL).toBe('https://omniroute.example/v1');
-    expect(candidates[0].apiKey).toBe('omni-key');
+    expect(candidates[0].baseURL).toBe('https://api.freemodel.dev/v1');
+    expect(candidates[0].apiKey).toBe('env-key');
   });
 
-  it('adds task-aware NVIDIA NIM models after OmniRoute candidates', () => {
+  it('adds task-aware NVIDIA NIM models after env-driven web candidates', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: '',
       frontendBaseUrl: '',
@@ -199,10 +196,6 @@ describe('provider candidate routing', () => {
       productMode: 'web_chat',
       executionMode: 'cloud',
       env: {
-        OMNIROUTE_ENABLED: 'true',
-        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
-        OMNIROUTE_API_KEY: 'omni-key',
-        OMNIROUTE_MODEL: 'auto',
         NVIDIA_API_KEY: 'nvapi-test',
         NVIDIA_CODE_MODEL: 'qwen/code-model',
         NVIDIA_SMART_MODEL: 'meta/smart-model',
@@ -212,7 +205,6 @@ describe('provider candidate routing', () => {
       looksLikeOllamaModel
     });
 
-    expect(candidates[0].id).toContain('omniroute');
     expect(candidates.find((provider) => provider.id === 'nvidia_code_1')).toMatchObject({
       baseURL: 'https://integrate.api.nvidia.com/v1',
       apiKey: 'nvapi-test',
@@ -266,67 +258,6 @@ describe('provider candidate routing', () => {
     });
   });
 
-  it('expands OmniRoute fallback models for 401 model rotation', () => {
-    const candidates = buildProviderCandidates({
-      frontendApiKey: 'frontend-key-ignored',
-      frontendBaseUrl: '',
-      frontendModel: 'auto',
-      autoIntent: 'fast',
-      webTaskType: 'general',
-      productMode: 'web_chat',
-      executionMode: 'cloud',
-      env: {
-        OMNIROUTE_ENABLED: 'true',
-        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
-        OMNIROUTE_API_KEY: 'omni-key',
-        OMNIROUTE_MODEL: 'auto',
-        OMNIROUTE_FALLBACK_MODELS: 'qwen/qwen3-coder:free, meta-llama/llama-3.3-70b-instruct:free, auto'
-      },
-      parseProviderPoolFromEnv: () => [],
-      looksLikeOllamaModel
-    });
-
-    expect(candidates.slice(0, 3).map((provider) => provider.model)).toEqual([
-      'auto',
-      'qwen/qwen3-coder:free',
-      'meta-llama/llama-3.3-70b-instruct:free'
-    ]);
-    expect(candidates.slice(0, 3).every((provider) => provider.baseURL === 'https://omniroute.example/v1')).toBe(true);
-    expect(new Set(candidates.slice(0, 3).map((provider) => provider.id)).size).toBe(3);
-  });
-
-  it('keeps local OmniRoute gateway as OmniRoute instead of Ollama', () => {
-    const candidates = buildProviderCandidates({
-      frontendApiKey: '',
-      frontendBaseUrl: '',
-      frontendModel: 'auto',
-      autoIntent: 'fast',
-      webTaskType: 'general',
-      productMode: 'web_chat',
-      executionMode: 'cloud',
-      env: {
-        OMNIROUTE_ENABLED: 'true',
-        OMNIROUTE_BASE_URL: 'http://localhost:20128/v1',
-        OMNIROUTE_API_KEY: 'omni-key',
-        OMNIROUTE_MODEL: 'auto',
-        OMNIROUTE_FALLBACK_MODELS: 'qwen/qwen3-coder:free'
-      },
-      parseProviderPoolFromEnv: () => [],
-      looksLikeOllamaModel
-    });
-
-    expect(candidates[0]).toMatchObject({
-      id: 'web_general_primary_omniroute',
-      baseURL: 'http://localhost:20128/v1',
-      model: 'auto',
-      wireApi: 'chat_completions'
-    });
-    expect(candidates[1]).toMatchObject({
-      baseURL: 'http://localhost:20128/v1',
-      model: 'qwen/qwen3-coder:free'
-    });
-  });
-
   it('uses the configured fast Ollama model for local web fallback', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: '',
@@ -338,10 +269,6 @@ describe('provider candidate routing', () => {
       executionMode: 'cloud',
       env: {
         LOCAL_MODE: 'true',
-        OMNIROUTE_ENABLED: 'true',
-        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
-        OMNIROUTE_API_KEY: 'omni-key',
-        OMNIROUTE_MODEL: 'gpt-5.5',
         AUTO_FAST_MODEL: 'qwen2.5-coder:latest',
         OPENAI_MODEL: 'qwen2.5-coder:latest',
         OLLAMA_BASE_URL: 'http://localhost:11434/v1'
@@ -356,9 +283,9 @@ describe('provider candidate routing', () => {
     });
   });
 
-  it('ignores stale browser cloud settings when web OmniRoute is enabled', () => {
+  it('web chat keeps a non-local browser cloud override when provided', () => {
     const candidates = buildProviderCandidates({
-      frontendApiKey: 'stale-browser-key',
+      frontendApiKey: 'browser-key',
       frontendBaseUrl: 'https://agentrouter.example/v1',
       frontendModel: 'auto',
       autoIntent: 'fast',
@@ -369,17 +296,14 @@ describe('provider candidate routing', () => {
         OPENAI_API_KEY: 'legacy-key',
         OPENAI_BASE_URL: 'https://legacy.example/v1',
         OPENAI_MODEL: 'qwen2.5-coder:latest',
-        WEB_CHAT_FAST_MODEL: 'qwen2.5-coder:latest',
-        OMNIROUTE_ENABLED: 'true',
-        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
+        WEB_CHAT_FAST_MODEL: 'qwen2.5-coder:latest'
       },
       parseProviderPoolFromEnv: () => [],
       looksLikeOllamaModel
     });
 
-    expect(candidates[0].id).toContain('omniroute');
-    expect(candidates[0].baseURL).toBe('https://omniroute.example/v1');
-    expect(candidates[0].model).toBe('auto');
+    expect(candidates[0].id).toBe('web_general_primary');
+    expect(candidates[0].baseURL).toBe('https://agentrouter.example/v1');
   });
 
   it('desktop local mode forces ollama provider', () => {
@@ -516,7 +440,7 @@ describe('provider candidate routing', () => {
     expect(candidates[0].id).toBe('desktop_local_primary');
   });
 
-  it('mixes OmniRoute models with a real OpenRouter cross-provider candidate when both are configured', () => {
+  it('mixes env-driven web candidates with a real OpenRouter cross-provider candidate when both are configured', () => {
     const candidates = buildProviderCandidates({
       frontendApiKey: '',
       frontendBaseUrl: '',
@@ -526,19 +450,17 @@ describe('provider candidate routing', () => {
       productMode: 'web_chat',
       executionMode: 'cloud',
       env: {
-        OMNIROUTE_ENABLED: 'true',
-        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
-        OMNIROUTE_API_KEY: 'omni-key',
-        OMNIROUTE_MODEL: 'auto',
+        OPENAI_API_KEY: 'env-key',
+        OPENAI_BASE_URL: 'https://api.freemodel.dev/v1',
         OPENROUTER_API_KEY: 'sk-or-test'
       },
       parseProviderPoolFromEnv: () => [],
       looksLikeOllamaModel
     });
 
-    const omniCandidates = candidates.filter((p) => p.baseURL === 'https://omniroute.example/v1');
+    const cloudCandidates = candidates.filter((p) => p.baseURL === 'https://api.freemodel.dev/v1');
     const openRouterCandidates = candidates.filter((p) => p.baseURL === 'https://openrouter.ai/api/v1');
-    expect(omniCandidates.length).toBeGreaterThan(0);
+    expect(cloudCandidates.length).toBeGreaterThan(0);
     expect(openRouterCandidates.length).toBeGreaterThan(0);
     // Cross-provider failover only helps if the pool spans more than one base URL.
     const distinctBases = new Set(candidates.map((p) => String(p.baseURL).replace(/\/+$/, '').toLowerCase()));

@@ -340,7 +340,7 @@ export async function buildPreparedMessages(ctx: SendMessageContext, input: stri
   const isSmartMode = settings.aiMode === 'smart';
   const isWebChat = settings.productMode === 'web_chat';
   // Web provider credentials and routing belong to the BahAI backend. Do not
-  // let stale browser settings override Railway's OmniRoute configuration.
+  // let stale browser settings override the server-side cloud configuration.
   const effectiveBaseUrl = isWebChat ? '' : settings.baseUrl;
   const effectiveApiKey = isWebChat ? '' : settings.apiKey;
   const effectiveModel = (isWebChat || isSmartMode) ? 'auto' : settings.model;

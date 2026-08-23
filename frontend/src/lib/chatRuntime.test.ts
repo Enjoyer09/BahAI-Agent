@@ -473,7 +473,7 @@ describe('mergeGuiCapabilitiesIntoMemory', () => {
 describe('stripProviderDetailsFromMemory', () => {
   it('strips provider telemetry + token usage + guiCapabilities (web scrub)', () => {
     const memory = {
-      providerTelemetry: [{ event: 'provider_failure', providerId: 'web_omniroute' }],
+      providerTelemetry: [{ event: 'provider_failure', providerId: 'web_general_primary' }],
       lastProviderTelemetry: { event: 'provider_failover' },
       tokenUsage: { promptTokens: 1, completionTokens: 2 },
       guiCapabilities: { summary: { status: 'ok' } },

@@ -223,10 +223,10 @@ describe('runner failover behavior', () => {
     );
   });
 
-  it('gives a hanging OmniRoute text attempt a real 15s budget before fallback (no more 5s cap)', async () => {
+  it('gives a hanging primary attempt the full llmTimeoutMs budget before fallback', async () => {
     vi.useFakeTimers();
     const runtime = createProviderRuntime();
-    const primary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
+    const primary = { id: 'web_general_primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://cloud.example/v1', apiKey: 'a' };
     const fallback = { id: 'nvidia_general_1', wireApi: 'chat_completions', model: 'meta/llama-3.3-70b-instruct', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
     const hangingClient = {
       chat: {
@@ -261,23 +261,23 @@ describe('runner failover behavior', () => {
       providerSessionKey: 'web:anon:omni-timeout'
     });
 
-    // A healthy provider must not be cut at 5s: nothing should settle yet.
+    // A healthy provider must not be cut early: nothing should settle yet.
     let settled = false;
     resultPromise.then(() => { settled = true; });
     await vi.advanceTimersByTimeAsync(5001);
     expect(settled).toBe(false);
 
-    // The text attempt cap is now 15s — fallback happens after that.
-    await vi.advanceTimersByTimeAsync(10001);
+    // The attempt gets the full llmTimeoutMs (20s) — fallback happens after that.
+    await vi.advanceTimersByTimeAsync(15001);
     const result = await resultPromise;
     expect(result.activeProvider.id).toBe(fallback.id);
     vi.useRealTimers();
   });
 
-  it('gives vision requests a longer OmniRoute attempt timeout (30s floor)', async () => {
+  it('gives vision requests a longer attempt timeout (30s floor)', async () => {
     vi.useFakeTimers();
     const runtime = createProviderRuntime();
-    const primary = { id: 'web_vision_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
+    const primary = { id: 'web_vision_primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://cloud.example/v1', apiKey: 'a' };
     const fallback = { id: 'nvidia_vision_1', wireApi: 'chat_completions', model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
     const hangingClient = {
       chat: {
@@ -474,7 +474,7 @@ describe('runner failover behavior', () => {
 
   it('fails over when a provider opens an empty stream without any chunks', async () => {
     const runtime = createProviderRuntime();
-    const primary = { id: 'omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
+    const primary = { id: 'web_general_primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
     const fallback = { id: 'nvidia', wireApi: 'chat_completions', model: 'meta/llama-3.3-70b-instruct', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
     const emptyClient = {
       chat: {
@@ -559,10 +559,10 @@ describe('runner failover behavior', () => {
     expect(runtime.markProviderFailure).toHaveBeenCalledWith(primary.id, expect.objectContaining({ status: 502 }));
   });
 
-  it('switches to the next OmniRoute model when a model returns 401', async () => {
+  it('switches to the next fallback model when a model returns 401', async () => {
     const runtime = createProviderRuntime();
-    const primary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'omni-key' };
-    const fallback = { id: 'web_general_fallback_1', wireApi: 'chat_completions', model: 'qwen/qwen3-coder:free', baseURL: 'https://omni.example/v1', apiKey: 'omni-key' };
+    const primary = { id: 'web_general_primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://cloud.example/v1', apiKey: 'cloud-key' };
+    const fallback = { id: 'web_general_fallback_1', wireApi: 'chat_completions', model: 'qwen/qwen3-coder:free', baseURL: 'https://cloud.example/v1', apiKey: 'cloud-key' };
     const clients = {
       [primary.id]: createClientThatFails({ status: 401, message: 'Insufficient balance' }),
       [fallback.id]: createStreamingClient('omni-model-ok')
@@ -600,7 +600,7 @@ describe('runner failover behavior', () => {
   it('fails over at the first-token cap when a provider never emits its first chunk', async () => {
     vi.useFakeTimers();
     const runtime = createProviderRuntime();
-    const primary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
+    const primary = { id: 'web_general_primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
     const fallback = { id: 'nvidia_general_1', wireApi: 'chat_completions', model: 'meta/llama-3.3-70b-instruct', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
     // Provider opens the stream but the first chunk never arrives: this is the
     // slow-cold-gateway case where the whole attempt budget used to burn in
@@ -901,7 +901,7 @@ describe('runner failover behavior', () => {
 
   it('emits the real error as a debug event after multi-provider failover', async () => {
     const runtime = createProviderRuntime();
-    const primary = { id: 'omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
+    const primary = { id: 'web_general_primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omni.example/v1', apiKey: 'a' };
     const fallback = { id: 'nvidia', wireApi: 'chat_completions', model: 'meta/llama-3.3-70b-instruct', baseURL: 'https://integrate.api.nvidia.com/v1', apiKey: 'b' };
     const error = { status: 402, message: 'Insufficient Credits' };
     const events = [];
@@ -976,7 +976,7 @@ describe('runner failover behavior', () => {
 
   it('retries a single candidate once on a transient 5xx before succeeding', async () => {
     const runtime = createProviderRuntime();
-    const provider = { id: 'web_text_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://api.freemodel.dev/v1', apiKey: 'key' };
+    const provider = { id: 'web_text_primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://api.freemodel.dev/v1', apiKey: 'key' };
     const okStream = {
       [Symbol.asyncIterator]: async function* () {
         yield { choices: [{ delta: { content: 'retry-ok' }, finish_reason: 'stop' }] };
@@ -1016,7 +1016,7 @@ describe('runner failover behavior', () => {
   it('notes single-gateway redundancy when all candidates share one base URL', async () => {
     const runtime = createProviderRuntime();
     const base = 'https://api.freemodel.dev/v1';
-    const primary = { id: 'web_text_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: base, apiKey: 'key' };
+    const primary = { id: 'web_text_primary', wireApi: 'chat_completions', model: 'auto', baseURL: base, apiKey: 'key' };
     const fallback = { id: 'web_text_fallback_1', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: base, apiKey: 'key' };
     const client = {
       chat: { completions: { create: vi.fn().mockRejectedValue({ status: 500, message: 'Internal error' }) } }
@@ -1047,10 +1047,10 @@ describe('runner failover behavior', () => {
     expect(result.errorEvent.message).toContain('eyni gateway');
   });
 
-  it('fails over from an OmniRoute 5xx to a configured OpenRouter candidate (cross-provider)', async () => {
+  it('fails over from a cloud 5xx to a configured OpenRouter candidate (cross-provider)', async () => {
     const runtime = createProviderRuntime();
-    const omniPrimary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omniroute.example/v1', apiKey: 'omni-key' };
-    const omniFallback = { id: 'web_general_fallback_1', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: 'https://omniroute.example/v1', apiKey: 'omni-key' };
+    const omniPrimary = { id: 'web_general_primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://cloud.example/v1', apiKey: 'cloud-key' };
+    const omniFallback = { id: 'web_general_fallback_1', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: 'https://cloud.example/v1', apiKey: 'cloud-key' };
     const openRouter = { id: 'web_auto_openrouter_fallback_1', wireApi: 'chat_completions', model: 'meta-llama/llama-3.3-70b-instruct:free', baseURL: 'https://openrouter.ai/api/v1', apiKey: 'sk-or-test' };
     const clients = {
       [omniPrimary.id]: createClientThatFails({ status: 503, message: 'Maximum combo retry limit reached' }),
@@ -1078,7 +1078,7 @@ describe('runner failover behavior', () => {
       shouldEmitDebugEvent: () => false,
       llmTimeoutMs: 1000,
       onProviderTelemetry: (event) => telemetry.push(event),
-      providerSessionKey: 'web:anon:omniroute->openrouter'
+      providerSessionKey: 'web:anon:cloud->openrouter'
     });
 
     expect(result.errorEvent).toBeFalsy();
@@ -1089,8 +1089,8 @@ describe('runner failover behavior', () => {
 
   it('withholds the single-gateway hint once a real second provider (OpenRouter) is in the pool', async () => {
     const runtime = createProviderRuntime();
-    const omniPrimary = { id: 'web_general_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://omniroute.example/v1', apiKey: 'omni-key' };
-    const omniFallback = { id: 'web_general_fallback_1', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: 'https://omniroute.example/v1', apiKey: 'omni-key' };
+    const omniPrimary = { id: 'web_general_primary', wireApi: 'chat_completions', model: 'auto', baseURL: 'https://cloud.example/v1', apiKey: 'cloud-key' };
+    const omniFallback = { id: 'web_general_fallback_1', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: 'https://cloud.example/v1', apiKey: 'cloud-key' };
     const openRouter = { id: 'web_auto_openrouter_fallback_1', wireApi: 'chat_completions', model: 'meta-llama/llama-3.3-70b-instruct:free', baseURL: 'https://openrouter.ai/api/v1', apiKey: 'sk-or-test' };
     const clients = {
       [omniPrimary.id]: createClientThatFails({ status: 503, message: 'Maximum combo retry limit reached' }),
@@ -1130,7 +1130,7 @@ describe('runner failover behavior', () => {
   it('shows the single-gateway hint on a 503 when no second provider is configured', async () => {
     const runtime = createProviderRuntime();
     const base = 'https://api.freemodel.dev/v1';
-    const primary = { id: 'web_text_primary_omniroute', wireApi: 'chat_completions', model: 'auto', baseURL: base, apiKey: 'key' };
+    const primary = { id: 'web_text_primary', wireApi: 'chat_completions', model: 'auto', baseURL: base, apiKey: 'key' };
     const fallback = { id: 'web_text_fallback_1', wireApi: 'chat_completions', model: 'gpt-5.5', baseURL: base, apiKey: 'key' };
     const client = {
       chat: { completions: { create: vi.fn().mockRejectedValue({ status: 503, message: 'Maximum combo retry limit reached' }) } }

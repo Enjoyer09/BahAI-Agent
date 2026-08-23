@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   NVIDIA_SPEC,
   WEB_SPEC,
-  OMNIROUTE_SPEC,
   PROVIDER_SPECS,
   getProviderSpec,
   resolveTaskModels,
@@ -20,9 +19,8 @@ describe('provider spec registry', () => {
   it('exposes all specs and lookups', () => {
     expect(getProviderSpec('nvidia')).toBe(NVIDIA_SPEC);
     expect(getProviderSpec('web')).toBe(WEB_SPEC);
-    expect(getProviderSpec('omniroute')).toBe(OMNIROUTE_SPEC);
     expect(getProviderSpec('nope')).toBeNull();
-    expect(Object.keys(PROVIDER_SPECS)).toEqual(['nvidia', 'omniroute', 'web']);
+    expect(Object.keys(PROVIDER_SPECS)).toEqual(['nvidia', 'web']);
   });
 
   it('NVIDIA general model falls back to fast alias (old: GENERAL || FAST)', () => {
@@ -164,10 +162,6 @@ describe('providers.js integration with specs', () => {
       productMode: 'web_chat',
       executionMode: 'cloud',
       env: {
-        OMNIROUTE_ENABLED: 'true',
-        OMNIROUTE_BASE_URL: 'https://omniroute.example/v1',
-        OMNIROUTE_API_KEY: 'omni-key',
-        OMNIROUTE_MODEL: 'auto',
         NVIDIA_API_KEY: 'nvapi-test',
         NVIDIA_CODE_MODEL: 'qwen/code-model',
         NVIDIA_SMART_MODEL: 'meta/smart-model',

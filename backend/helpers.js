@@ -73,12 +73,7 @@ function createProviderRuntime(opts) {
 
   return {
     markProviderFailure: function(providerId, error = null) {
-      var isOmniRoute = /omniroute/i.test(String(providerId || ''));
-      var status = String(error && (error.status || error.code) || '');
-      var failureCooldown = isOmniRoute && ['429', '500', '502', '503', '504'].includes(status)
-        ? Math.max(cooldownMs, 120000)
-        : cooldownMs;
-      cooldowns[providerId] = Date.now() + failureCooldown;
+      cooldowns[providerId] = Date.now() + cooldownMs;
       failureCounts[providerId] = (failureCounts[providerId] || 0) + 1;
     },
     markProviderSuccess: function(providerId) {

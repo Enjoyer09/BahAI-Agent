@@ -1,8 +1,8 @@
 # NVIDIA Build / NIM integration
 
 BahAI uses NVIDIA Build hosted models as server-side cloud fallback providers.
-Secrets must be configured only on the BahAI or OmniRoute deployment and must
-never be shipped in the frontend or Electron package.
+Secrets must be configured only on the BahAI deployment and must never be
+shipped in the frontend or Electron package.
 
 ## Configuration
 
@@ -23,10 +23,11 @@ vision or tool calling.
 
 ## Routing order
 
-For web cloud traffic, BahAI keeps OmniRoute as the primary control plane and
-adds task-matched NVIDIA models before the OpenRouter fallback. For desktop
-Cloud Smart mode, NVIDIA code and reasoning models participate in the cloud
-provider pool. Desktop Local mode remains Ollama-only.
+For web cloud traffic, BahAI routes to the env-driven primary OpenAI-compatible
+gateway (OPENAI_BASE_URL) first and adds task-matched NVIDIA models before the
+OpenRouter fallback. For desktop Cloud Smart mode, NVIDIA code and reasoning
+models participate in the cloud provider pool. Desktop Local mode remains
+Ollama-only.
 
 Provider errors with status `401`, `402`, `429`, quota/credit messages, network
 errors, and retryable `5xx` responses trigger the existing provider failover

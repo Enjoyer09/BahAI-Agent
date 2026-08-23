@@ -105,21 +105,6 @@ const NVIDIA_SPEC = {
 };
 
 /**
- * OmniRoute gateway spec (Railway web routing layer).
- */
-const OMNIROUTE_SPEC = {
-  id: 'omniroute',
-  name: 'OmniRoute Gateway',
-  enabledEnv: 'OMNIROUTE_ENABLED',
-  baseUrlEnv: 'OMNIROUTE_BASE_URL',
-  apiKeyEnv: 'OMNIROUTE_API_KEY',
-  modelEnv: 'OMNIROUTE_MODEL',
-  fallbackModelEnv: ['OMNIROUTE_FALLBACK_MODELS', 'OMNIROUTE_MODELS'],
-  wireApi: 'chat_completions',
-  primaryIdPrefix: 'omniroute',
-};
-
-/**
  * Web chat auto-routing spec (Web product only).
  */
 const WEB_SPEC = {
@@ -152,7 +137,6 @@ const WEB_SPEC = {
 
 const PROVIDER_SPECS = {
   nvidia: NVIDIA_SPEC,
-  omniroute: OMNIROUTE_SPEC,
   web: WEB_SPEC,
 };
 
@@ -232,7 +216,6 @@ function buildProviderFromSpec(spec, { model, apiKey, baseURL, wireApi, id }) {
 
 module.exports = {
   NVIDIA_SPEC,
-  OMNIROUTE_SPEC,
   WEB_SPEC,
   PROVIDER_SPECS,
   getProviderSpec,

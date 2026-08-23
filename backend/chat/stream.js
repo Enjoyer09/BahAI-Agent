@@ -210,15 +210,6 @@ async function collectStreamOutput({
   // desktop-only routing indicator. Track the resolved model internally for
   // token_usage/logs, but only emit the SSE event for non-web products.
   const canEmitAutoRoute = productMode !== 'web_chat';
-  if (stream && stream.response && typeof stream.response.headers?.get === 'function') {
-    const omniModel = stream.response.headers.get('x-omniroute-model');
-    if (omniModel) {
-      resolvedModel = omniModel;
-      if (canEmitAutoRoute) {
-        writeSse(res, { type: 'auto_route', chosenModel: resolvedModel, intent: 'smart' });
-      }
-    }
-  }
 
   try {
     for await (const chunk of stream) {

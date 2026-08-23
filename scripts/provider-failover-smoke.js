@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // ============================================================
-// Provider Failover Smoke Test — OmniRoute → NVIDIA
+// Provider Failover Smoke Test — Primary Cloud → NVIDIA
 // ============================================================
-// Verifies that when the OmniRoute gateway fails, the backend silently
-// fails over to NVIDIA and the user still receives a normal answer — and
-// that the whole trail is visible in the server's stdout, i.e. exactly the
-// markers that appear in Railway deploy logs:
+// Verifies that when the primary cloud provider (env-driven web chat gateway)
+// fails, the backend silently fails over to NVIDIA and the user still receives
+// a normal answer — and that the whole trail is visible in the server's
+// stdout, i.e. exactly the markers that appear in Railway deploy logs:
 //
-//   [PROVIDER] {"event":"provider_failure","providerId":"web_..._omniroute",...}
-//   [PROVIDER] {"event":"provider_failover","providerId":"nvidia_...","fromProviderId":"web_..._omniroute",...}
+//   [PROVIDER] {"event":"provider_failure","providerId":"web_..._primary",...}
+//   [PROVIDER] {"event":"provider_failover","providerId":"nvidia_...","fromProviderId":"web_..._primary",...}
 //   🔁 Provider failover: switched to nvidia_...
 //
 // Note: provider_stream_start is only logged when the FIRST candidate succeeds
@@ -22,9 +22,9 @@
 //   node scripts/provider-failover-smoke.js --remote --check-logs --log-cmd-extra "-n 2000"
 //
 // Local mode (default):
-//   - Spawns the real backend locally with OMNIROUTE_ENABLED=true and an
-//     OmniRoute base URL pointing at a throwaway HTTP server that always
-//     answers 401 -> OmniRoute attempt fails deterministically.
+//   - Spawns the real backend locally with OPENAI_BASE_URL pointing at a
+//     throwaway HTTP server that always answers 401 -> the primary cloud
+//     attempt fails deterministically.
 //   - If a real NVIDIA_API_KEY (+ a NVIDIA_GENERAL_MODEL / NVIDIA_FAST_MODEL)
 //     is present in the environment, the failover goes to REAL NVIDIA.
 //   - Otherwise a built-in fake OpenAI-compatible NVIDIA stub answers and the
@@ -92,7 +92,7 @@ function assert(condition, message) {
 }
 
 function printUsage() {
-  console.log(`Provider Failover Smoke Test — OmniRoute → NVIDIA
+  console.log(`Provider Failover Smoke Test — Primary Cloud → NVIDIA
 
 Usage:
   node scripts/provider-failover-smoke.js                Local deterministic run (default)
@@ -111,7 +111,7 @@ Env:
   BAHAI_SMOKE_BASE_URL      Remote base URL (default ${BASE_URL})
   BAHAI_SMOKE_EMAIL         Demo login email (default demo@bahai.az)
   BAHAI_SMOKE_PASSWORD      Demo login password (default demo123)
-  NVIDIA_API_KEY            Real NVIDIA key -> local mode validates real OmniRoute→NVIDIA failover
+  NVIDIA_API_KEY            Real NVIDIA key -> local mode validates real Primary-Cloud→NVIDIA failover
   NVIDIA_BASE_URL           NVIDIA endpoint (default https://integrate.api.nvidia.com/v1)
   NVIDIA_GENERAL_MODEL      NVIDIA model id (or NVIDIA_FAST_MODEL)
   FAILOVER_SMOKE_EXPECT_PROVIDER   Assert failover to this provider prefix (default nvidia)
@@ -125,7 +125,7 @@ Exit codes: 0 pass, 1 assertion failed, 2 config missing, 3 log check unavailabl
 // Small HTTP stubs used by the local deterministic mode
 // ------------------------------------------------------------
 
-function startOmniRouteFailureServer() {
+function startPrimaryFailureServer() {
   const server = http.createServer((req, res) => {
     res.writeHead(401, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
@@ -290,17 +290,17 @@ function analyzeLogs(stdout, expectProvider) {
   const failovers = providerLines.filter((line) => line.includes('"event":"provider_failover"'));
   const switched = lines.filter((line) => /🔁 Provider failover: switched to/i.test(line));
 
-  const omniFailure = failures.some((line) => /omniroute/i.test(line));
-  // The failover line must show the OmniRoute -> expected-provider direction
-  // (fromProviderId/previousProviderId = omniroute, providerId = nvidia).
+  const primaryFailure = failures.some((line) => /"providerId":"web_\w+_primary/i.test(line));
+  // The failover line must show the primary-cloud -> expected-provider direction
+  // (fromProviderId/previousProviderId = web_..._primary, providerId = nvidia).
   const nvidiaFailover = failovers.some((line) => (
-    /omniroute/i.test(line) &&
+    /"fromProviderId":"web_\w+_primary|web_\w+_local_primary/i.test(line) &&
     new RegExp(`"providerId":"${expectProvider}`, 'i').test(line)
   ));
   const nvidiaSwitched = switched.some((line) => new RegExp(`switched to ${expectProvider}`, 'i').test(line));
 
   return {
-    omniFailure,
+    primaryFailure,
     nvidiaFailover,
     nvidiaSwitched,
     trail: {
@@ -332,8 +332,8 @@ async function runLocalMode() {
     ? 'Using REAL NVIDIA (NVIDIA_API_KEY present).'
     : 'No NVIDIA_API_KEY — using built-in fake NVIDIA stub (same code path, same log markers).');
 
-  // 1) Deterministic OmniRoute failure: a server that always answers 401.
-  const omniFail = await startOmniRouteFailureServer();
+  // 1) Deterministic primary-cloud failure: a server that always answers 401.
+  const omniFail = await startPrimaryFailureServer();
   // 2) NVIDIA endpoint: real NVIDIA config or the built-in fake stub.
   let fakeNvidia = null;
   const nvidiaEnv = {};
@@ -361,10 +361,9 @@ async function runLocalMode() {
       NODE_ENV: 'test',
       WORKSPACE_ROOT: '/tmp/bahai_failover_smoke',
       ALLOWED_DIRECTORIES: '/tmp,/app',
-      OMNIROUTE_ENABLED: 'true',
-      OMNIROUTE_BASE_URL: `http://127.0.0.1:${omniFail.port}/v1`,
-      OMNIROUTE_API_KEY: 'failover-smoke-invalid-key',
-      OMNIROUTE_MODEL: 'gpt-5.5',
+      OPENAI_BASE_URL: `http://127.0.0.1:${omniFail.port}/v1`,
+      OPENAI_API_KEY: 'failover-smoke-invalid-key',
+      OPENAI_MODEL: 'gpt-5.5',
       PROVIDER_COOLDOWN_MS: '1000',
       ...nvidiaEnv
     }, ['AI_PROVIDER_POOL', 'OPENROUTER_API_KEY']);
@@ -394,13 +393,15 @@ async function runLocalMode() {
     }
     console.log('--------------------------------------------------------');
 
-    assert(analysis.omniFailure, 'No provider_failure for OmniRoute found in stdout');
-    assert(analysis.nvidiaFailover, `No provider_failover from omniroute to "${EXPECT_PROVIDER}" found in stdout`);
+    assert(analysis.primaryFailure, 'No provider_failure for the primary cloud provider found in stdout');
+    assert(analysis.nvidiaFailover, `No provider_failover from primary cloud to "${EXPECT_PROVIDER}" found in stdout`);
     assert(analysis.nvidiaSwitched, `No "🔁 Provider failover: switched to ${EXPECT_PROVIDER}" found in stdout`);
 
-    console.log(`\n✅ PASS: OmniRoute → ${EXPECT_PROVIDER} failover verified` +
+    console.log(`\n✅ PASS: Primary Cloud → ${EXPECT_PROVIDER} failover verified` +
       (useRealNvidia ? ' (REAL NVIDIA)' : ' (fake NVIDIA stub)') +
-      `.\nThe exact markers above are what Railway deploy logs will contain.\nRailway manual check: railway logs | grep -E '"event":"provider_failover"'`);
+      `
+The exact markers above are what Railway deploy logs will contain.`
+      + `\nRailway manual check: railway logs | grep -E '"event":"provider_failover"'`);
     return 0;
   } finally {
     if (child) await stopChild(child);
@@ -475,17 +476,17 @@ async function checkRailwayLogs(runId) {
         console.error(`Log command stderr:\n${errText}`);
       }
       const analysis = analyzeLogs(out, EXPECT_PROVIDER);
-      if (analysis.omniFailure) {
+      if (analysis.primaryFailure) {
         console.log('\n--- [PROVIDER] failover trail found in deploy logs ---');
         for (const line of [...analysis.trail.failure, ...analysis.trail.failover, ...analysis.trail.switched].slice(0, 9)) {
           console.log(line.trim());
         }
       }
       if (analysis.nvidiaFailover) {
-        console.log(`\n✅ PASS: deploy logs show OmniRoute → ${EXPECT_PROVIDER} failover.`);
+        console.log(`\n✅ PASS: deploy logs show Primary Cloud → ${EXPECT_PROVIDER} failover.`);
         resolve(0);
-      } else if (analysis.omniFailure) {
-        console.log(`\nℹ️  Deploy logs show provider failures/failovers but none to "${EXPECT_PROVIDER}". This is normal when the live OmniRoute gateway was healthy for this run.`);
+      } else if (analysis.primaryFailure) {
+        console.log(`\nℹ️  Deploy logs show provider failures/failovers but none to "${EXPECT_PROVIDER}". This is normal when the live primary gateway was healthy for this run.`);
         resolve(0);
       } else if (safeRunId) {
         console.log(`\nℹ️  No [PROVIDER] telemetry lines for runId "${safeRunId}" in the deploy-log window.`);
@@ -524,7 +525,7 @@ async function runRemoteMode() {
 
   console.log('\nThe server-side routing for this request is logged as [PROVIDER] lines in the Railway deploy log:');
   console.log('  railway logs | grep -E \'("[PROVIDER]|Provider failover)\'');
-  console.log('  Expected failover trail: "event":"provider_failure" (omniroute) -> "event":"provider_failover" (providerId=nvidia, fromProviderId=omniroute)');
+  console.log('  Expected failover trail: "event":"provider_failure" (web_..._primary) -> "event":"provider_failover" (providerId=nvidia, fromProviderId=web_..._primary)');
   console.log('  plus: 🔁 Provider failover: switched to nvidia_...');
 
   if (CHECK_LOGS) {

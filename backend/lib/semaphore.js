@@ -2,7 +2,7 @@
 // In-process concurrency semaphore
 // ==========================================
 // Bounds the number of concurrent model calls a single worker process will make
-// against OmniRoute. The durable worker already caps claims via `concurrency`,
+// against upstream gateways. The durable worker already caps claims via `concurrency`,
 // but a Semaphore gives an explicit, testable guard (and is reusable anywhere a
 // finite external-resource budget must be honored). Across multiple worker
 // processes a shared store (e.g. Redis) would be needed; for a single Railway

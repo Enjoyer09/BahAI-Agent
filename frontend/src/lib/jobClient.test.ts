@@ -70,14 +70,14 @@ describe('mapBackendJobEventToSSE', () => {
     const sse = mapBackendJobEventToSSE({
       type: 'provider_telemetry',
       event: 'provider_failover',
-      providerId: 'omniroute',
+      providerId: 'web_general_primary',
       status: 429,
       message: 'retry',
     } as JobEvent);
     expect(sse).toEqual({
       type: 'provider_telemetry',
       event: 'provider_failover',
-      providerId: 'omniroute',
+      providerId: 'web_general_primary',
       status: 429,
       message: 'retry',
     });

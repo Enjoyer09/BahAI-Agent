@@ -214,14 +214,6 @@ function buildProviderCandidates({
   const defaultLocalModel = configuredLocalModel || 'gemma4:12b';
   const cloudOnly = productMode === 'web_chat' || executionMode === 'cloud';
   const localOnly = productMode === 'desktop_code' && executionMode === 'local';
-  const omniRouteEnabled = String(env.OMNIROUTE_ENABLED || '').toLowerCase() === 'true';
-  const omniRouteApiKey = env.OMNIROUTE_API_KEY || '';
-  const omniRouteBase = normalizeProviderBaseUrl(env.OMNIROUTE_BASE_URL || '');
-  const omniRouteModel = env.OMNIROUTE_MODEL || '';
-  const omniRouteFallbackModels = uniqueModels([
-    omniRouteModel || 'auto',
-    ...parseModelList(env.OMNIROUTE_FALLBACK_MODELS || env.OMNIROUTE_MODELS || '')
-  ]);
   const nvidiaApiKey = String(env.NVIDIA_API_KEY || '').trim();
   const nvidiaBaseUrl = normalizeProviderBaseUrl(env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1');
   const openRouterKey = env.OPENROUTER_API_KEY || (String(env.OPENAI_API_KEY || '').startsWith('sk-or-') ? env.OPENAI_API_KEY : '');
@@ -273,23 +265,23 @@ function buildProviderCandidates({
 
   function resolveWebAutoPlan() {
     const normalizedEnvBase = normalizeProviderBaseUrl(env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1');
-    const useOmniRoute = omniRouteEnabled && Boolean(omniRouteBase);
-    const defaultBase = useOmniRoute ? omniRouteBase : normalizedEnvBase;
-    const defaultKey = useOmniRoute
-      ? (omniRouteApiKey || 'bahai-omniroute')
-      : (frontendApiKey || env.OPENAI_API_KEY || '');
-    const defaultModel = useOmniRoute
-      ? (omniRouteFallbackModels[0] || 'auto')
-      : (env.OPENAI_MODEL || env.AUTO_SMART_MODEL || env.AUTO_FAST_MODEL || 'gpt-5.5');
-    const frontLooksLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));
-    // In web mode Railway owns routing. Browser-local or stale provider
-    // settings must never bypass an explicitly enabled OmniRoute gateway.
-    const requestedBase = !useOmniRoute && normalizedFrontendBaseUrl && !frontLooksLocal
+    const defaultBase = normalizedEnvBase;
+    // In web mode the env-driven gateway is authoritative unless the browser
+    // supplied BOTH a base URL and a key (explicit BYOK override). A stale
+    // frontend key with no base URL must never shadow the env key.
+    const defaultKey = normalizedFrontendBaseUrl && frontendApiKey
+      ? frontendApiKey
+      : (env.OPENAI_API_KEY || frontendApiKey || '');
+    const defaultModel = env.OPENAI_MODEL || env.AUTO_SMART_MODEL || env.AUTO_FAST_MODEL || 'gpt-5.5';
+    const frontLooksLike = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));
+    // In web mode Railway/clients share the env-driven gateway. Browser-local
+    // or stale provider settings must never redirect cloud traffic.
+    const requestedBase = normalizedFrontendBaseUrl && !frontLooksLike
       ? normalizedFrontendBaseUrl
       : '';
     const effectiveBase = requestedBase || defaultBase;
     const effectiveKey = (requestedBase && frontendApiKey) ? frontendApiKey : defaultKey;
-    const isBaseLocal = !useOmniRoute && /localhost|127\.0\.0\.1|11434|1234|8080/i.test(effectiveBase);
+    const isBaseLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(effectiveBase);
 
     if (isBaseLocal) {
       const chosenLocalModel = looksLikeOllamaModel(frontendModel) ? frontendModel : (env.AUTO_FAST_MODEL || env.OPENAI_MODEL || defaultLocalModel);
@@ -303,40 +295,32 @@ function buildProviderCandidates({
     }
 
     const primaryTask = hasImageAttachment ? 'vision' : webTaskType;
-    // The web vision model must stay in the candidate list even when the
-    // OmniRoute gateway owns routing. A vision request sent as 'auto' can be
-    // resolved by the gateway to a text-only model, which then hallucinates a
-    // description from OCR hints and prompt fragments (observed: model echoing
-    // the injected image rules instead of describing pixels). Only prepend an
-    // explicit WEB_CHAT_VISION_MODEL though: the NVIDIA default id belongs to
-    // the NVIDIA endpoint, not the gateway, so it must not be forced onto the
-    // OmniRoute base URL (that would guarantee a failed first attempt).
+    // The web vision model must stay at the head of the cloud candidate list.
+    // A vision request resolved to a text-only model hallucinates a description
+    // from OCR hints and prompt fragments (observed: model echoing the injected
+    // image rules instead of describing pixels). Prepend an explicit
+    // WEB_CHAT_VISION_MODEL; the NVIDIA default id belongs to the NVIDIA
+    // endpoint, not the primary cloud gateway.
     const webVisionModel = env.WEB_CHAT_VISION_MODEL || '';
-    const orderedModels = useOmniRoute
-      ? (primaryTask === 'vision' && webVisionModel
-          ? uniqueModels([webVisionModel, ...omniRouteFallbackModels])
-          : omniRouteFallbackModels)
-      : resolveTaskModels(WEB_SPEC, {
-        taskType: primaryTask,
-        autoIntent,
-        env,
-        // Mirror the old chain smart = SMART || AUTO_SMART || fastModel, where
-        // fastModel = FAST || AUTO_FAST || defaultModel was computed first.
-        defaults: {
-          fast: env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel,
-          // Smart/conversational tier must prefer a GENERAL model, not the coder.
-          // Previously this fell back to AUTO_FAST_MODEL (qwen2.5-coder), which
-          // degraded open conversation. Prefer AUTO_SMART_MODEL explicitly.
-          smart: env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel,
-        },
-      });
+    const orderedModels = resolveTaskModels(WEB_SPEC, {
+      taskType: primaryTask,
+      autoIntent,
+      env,
+      // Mirror the old chain smart = SMART || AUTO_SMART || fastModel, where
+      // fastModel = FAST || AUTO_FAST || defaultModel was computed first.
+      defaults: {
+        fast: env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel,
+        // Smart/conversational tier must prefer a GENERAL model, not the coder.
+        // Previously this fell back to AUTO_FAST_MODEL (qwen2.5-coder), which
+        // degraded open conversation. Prefer AUTO_SMART_MODEL explicitly.
+        smart: env.WEB_CHAT_SMART_MODEL || env.AUTO_SMART_MODEL || env.WEB_CHAT_FAST_MODEL || env.AUTO_FAST_MODEL || defaultModel,
+      },
+    });
 
     const cloudCandidates = orderedModels
       .filter(Boolean)
       .map((model, index) => buildCloudProvider({
-        id: index === 0
-          ? (omniRouteEnabled && omniRouteBase ? `web_${primaryTask}_primary_omniroute` : `web_${primaryTask}_primary`)
-          : `web_${primaryTask}_fallback_${index}`,
+        id: index === 0 ? `web_${primaryTask}_primary` : `web_${primaryTask}_fallback_${index}`,
         apiKey: effectiveKey,
         baseURL: effectiveBase,
         model
@@ -397,21 +381,6 @@ function buildProviderCandidates({
   }
 
   if (localOnly) {
-    // Even in local mode, if OmniRoute is configured, prepend it as primary
-    // so the user gets cloud quality when online, with local as fallback
-    const useOmniRouteEvenInLocal = omniRouteEnabled && Boolean(omniRouteBase) && omniRouteApiKey;
-    if (useOmniRouteEvenInLocal) {
-      const omniModels = omniRouteFallbackModels.length > 0 ? omniRouteFallbackModels : ['auto'];
-      for (let i = 0; i < omniModels.length; i++) {
-        list.push({
-          id: i === 0 ? 'local_omniroute_primary' : `local_omniroute_fb_${i}`,
-          apiKey: omniRouteApiKey,
-          baseURL: omniRouteBase,
-          model: omniModels[i],
-          wireApi: detectWireApi(omniRouteBase),
-        });
-      }
-    }
     const chosenLocalModel = looksLikeOllamaModel(frontendModel) ? frontendModel : defaultLocalModel;
     list.push({
       id: 'desktop_local_primary',
@@ -426,23 +395,7 @@ function buildProviderCandidates({
     if (productMode === 'web_chat') {
       list.push(...resolveWebAutoPlan());
     } else {
-      // Desktop smart mode: use OmniRoute if enabled (same as web), then NVIDIA, then local
-      const useOmniRouteForDesktop = omniRouteEnabled && Boolean(omniRouteBase) && omniRouteApiKey;
-
-      if (useOmniRouteForDesktop) {
-        // OmniRoute primary (same cloud gateway as web)
-        const omniModels = omniRouteFallbackModels.length > 0 ? omniRouteFallbackModels : ['auto'];
-        for (let i = 0; i < omniModels.length; i++) {
-          list.push({
-            id: i === 0 ? 'desktop_smart_omniroute' : `desktop_smart_omniroute_fb_${i}`,
-            apiKey: omniRouteApiKey,
-            baseURL: omniRouteBase,
-            model: omniModels[i],
-            wireApi: detectWireApi(omniRouteBase),
-          });
-        }
-      }
-
+      // Desktop smart mode: env-driven cloud provider first, then NVIDIA, then local
       const cloudKey = frontendApiKey || env.OPENAI_API_KEY || '';
       const normalizedEnvBase = normalizeProviderBaseUrl(env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1');
       const frontendLooksLocal = /localhost|127\.0\.0\.1|11434|1234|8080/i.test(String(normalizedFrontendBaseUrl || ''));

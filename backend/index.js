@@ -22,11 +22,15 @@ for (const p of extraModulePaths) {
   }
 }
 
-// Safe dotenv loading with zero-dependency fallback
-try {
-  require('dotenv').config({ path: path.resolve(__dirname, '.env'), override: true });
-  require('dotenv').config({ path: path.resolve(__dirname, '..', '.env'), override: true });
-} catch {
+// Safe dotenv loading with zero-dependency fallback. Test-child processes
+// (tests/testServer.js) set BAHAI_DOTENV_SKIP=1 so their unique PORT/SSE env
+// passed via spawn is not overridden by a checked-in .env PORT entry.
+const dotenvSkipped = process.env.BAHAI_DOTENV_SKIP === '1';
+if (!dotenvSkipped) {
+  try {
+    require('dotenv').config({ path: path.resolve(__dirname, '.env'), override: true });
+    require('dotenv').config({ path: path.resolve(__dirname, '..', '.env'), override: true });
+  } catch {
   const envFiles = [
     path.resolve(__dirname, '.env'),
     path.resolve(__dirname, '..', '.env'),
@@ -48,6 +52,7 @@ try {
       } catch {}
     }
   }
+}
 }
 
 process.on('unhandledRejection', (reason, promise) => {

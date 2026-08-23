@@ -74,7 +74,6 @@ router.get('/api/admin/ops', async (req, res) => {
     queue,
     breaker,
     config: {
-      omniRouteEnabled: config.omniRoute.enabled,
       workerConcurrency: config.worker.concurrency,
       perUserActive: config.worker.perUserActive,
       maxActivePerUser: config.quota.maxActivePerUser,

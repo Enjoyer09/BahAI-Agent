@@ -1,7 +1,7 @@
 // ==========================================
 // Centralized runtime configuration
 // ==========================================
-// Single place that reads the OmniRoute / breaker / quota / worker settings from
+// Single place that reads the breaker / quota / worker settings from
 // the environment so the web process, worker process, executor, and ops endpoint
 // all agree. Railway exposes these as project environment variables; sensible
 // defaults keep local/dev runs working without them.
@@ -21,17 +21,7 @@ const env = process.env;
 const config = {
   version: require('./package.json').version,
 
-  // OmniRoute is the OpenAI-compatible /v1 gateway for cloud web chat.
-  omniRoute: {
-    enabled: bool(env.OMNIROUTE_ENABLED, false),
-    apiKey: env.OMNIROUTE_API_KEY || '',
-    baseUrl: env.OMNIROUTE_BASE_URL || '',
-    model: env.OMNIROUTE_MODEL || 'auto',
-    fallbackModels: (env.OMNIROUTE_FALLBACK_MODELS || env.OMNIROUTE_MODELS || '')
-      .split(/[,\n]/).map((m) => m.trim()).filter(Boolean)
-  },
-
-  // Circuit breaker protecting upstream providers (esp. OmniRoute).
+  // Circuit breaker protecting upstream providers.
   breaker: {
     failureThreshold: num(env.BREAKER_FAILURE_THRESHOLD, 5),
     cooldownMs: num(env.BREAKER_COOLDOWN_MS, 30000),

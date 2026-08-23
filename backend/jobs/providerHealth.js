@@ -1,7 +1,7 @@
 // ==========================================
 // Provider circuit breaker (per provider+model)
 // ==========================================
-// Protects OmniRoute (and any other upstream) from a retry storm when it is
+// Protects any upstream provider from a retry storm when it is
 // degraded. State lives in-memory and is authoritative for tripping; the
 // existing `provider_health` table is updated best-effort for cross-restart
 // continuity and ops visibility. A single worker process is sufficient because

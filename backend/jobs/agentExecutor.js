@@ -1,5 +1,5 @@
 // Real job executor for background jobs. It reuses the existing provider
-// candidate list (OmniRoute is primary for web_chat) and performs ONE bounded
+// candidate list (the env-driven cloud provider is primary for web_chat) and performs ONE bounded
 // chat completion per job. This is intentionally a single-shot completion: it
 // proves the durable pipeline against the real provider path without re-running
 // the full multi-step agent session for every background job. The multi-step
@@ -10,7 +10,7 @@ const { createProviderHealth } = require('./providerHealth');
 const { logger } = require('../lib/structuredLogger');
 
 async function createAgentExecutor({ env = process.env, db = null } = {}) {
-  // Circuit breaker protecting OmniRoute / upstream providers. State persists to
+  // Circuit breaker protecting upstream providers. State persists to
   // the provider_health table best-effort so ops can observe it across restarts.
   const health = createProviderHealth({ db, env });
 

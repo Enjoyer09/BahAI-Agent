@@ -105,7 +105,20 @@ async function spawnTestServer({ base, envOverrides = {}, bootTimeoutMs = 12000 
     throw new Error(`Test port ${port} is already in use before spawning; refusing to race a stale server.`);
   }
 
-  const env = { ...process.env, ...envOverrides, PORT: String(port) };
+  // index.js loads root/backend .env with override:true — a checked-in PORT
+  // entry would clobber the unique test port. Skip dotenv for test children so
+  // the spawn env (PORT, provider keys, etc.) is authoritative. The generic
+  // provider env keeps /api/chat from short-circuiting with "no providers" 503
+  // in tests that only exercise GUI/SSE paths.
+  const env = {
+    ...process.env,
+    OPENAI_BASE_URL: 'http://127.0.0.1:9/v1',
+    OPENAI_API_KEY: 'test-provider-key',
+    OPENAI_MODEL: 'test-model',
+    ...envOverrides,
+    PORT: String(port),
+    BAHAI_DOTENV_SKIP: '1'
+  };
   const child = spawn(process.execPath, ['index.js'], {
     cwd: backendRoot,
     env,

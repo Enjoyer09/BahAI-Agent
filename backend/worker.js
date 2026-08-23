@@ -25,8 +25,7 @@ async function main() {
   logger.info('Worker started', {
     workerId: WORKER_ID,
     concurrency: config.worker.concurrency,
-    perUserActive: config.worker.perUserActive,
-    omniRouteEnabled: config.omniRoute.enabled
+    perUserActive: config.worker.perUserActive
   });
 
   const execute = await createAgentExecutor({ env: process.env, db });

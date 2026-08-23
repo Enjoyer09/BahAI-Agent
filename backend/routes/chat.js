@@ -423,13 +423,12 @@ router.post('/', async (req, res) => {
     looksLikeOllamaModel
   }));
 
-  if (providerCandidates.length === 0) {
-    return res.status(503).json({ error: 'Heç bir AI provider konfiqurasiya edilməyib. Ayarlardan API açarı və model seçin.' });
-  }
-
-  let activeProvider = providerCandidates[0];
-  let client = buildOpenAIClient(activeProvider);
-  let effectiveModel = activeProvider.model;
+  // NOTE: the "no providers" 503 guard lives BELOW the GUI fast paths — a
+  // GUI checkpoint/self-test request needs no LLM provider and must not be
+  // rejected before it reaches its handler.
+  let activeProvider = providerCandidates[0] || null;
+  let client = activeProvider ? buildOpenAIClient(activeProvider) : null;
+  let effectiveModel = activeProvider?.model || '';
   const effectiveModelRef = { current: effectiveModel };
   const activeProviderRef = { current: activeProvider };
   const clientRef = { current: client };
@@ -527,6 +526,10 @@ router.post('/', async (req, res) => {
   }
 
   // --- Main Chat Processing ---
+  if (providerCandidates.length === 0) {
+    return res.status(503).json({ error: 'Heç bir AI provider konfiqurasiya edilməyib. Ayarlardan API açarı və model seçin.' });
+  }
+
   const TOOLS = productMode === 'web_chat'
     ? getToolsForProfile('web-chat')
     : getToolDefinitions();
@@ -749,9 +752,9 @@ ${generateToolsSystemPrompt(TOOLS)}`;
         crypto, hasAttachmentInRequest, safeMode, runId,
         entryPath, initialGateReceipt,
         providerSessionKey,
-        // A single text request should survive an OmniRoute attempt (15s) plus
-        // a healthy provider fallback without burning the whole budget; the old
-        // 30s/45s deadlines made late fallbacks fail with a bogus 1s "timeout".
+        // A single text request should survive one primary attempt (llmTimeout)
+        // plus a healthy provider fallback without burning the whole budget; the
+        // old 30s/45s deadlines made late fallbacks fail with a bogus 1s "timeout".
         requestTimeoutMs: productMode === 'web_chat'
           ? (hasImageAttachment ? 75000 : 60000)
           : Math.max(LLM_TIMEOUT_MS, 90000),

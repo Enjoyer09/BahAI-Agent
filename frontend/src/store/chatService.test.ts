@@ -262,7 +262,7 @@ describe('handleSSEEvent', () => {
 
   it('does not show provider/model routing pills in web chat', () => {
     const sink = createSink();
-    handleSSEEvent({ type: 'auto_route', chosenModel: 'auto-gpt-5.5', providerId: 'web_general_primary_omniroute' } as any, createCtx(sink, 'web_chat'));
+    handleSSEEvent({ type: 'auto_route', chosenModel: 'auto-gpt-5.5', providerId: 'web_general_primary' } as any, createCtx(sink, 'web_chat'));
     expect(sink.addSystemMessage).not.toHaveBeenCalled();
   });
 
@@ -294,7 +294,7 @@ describe('handleSSEEvent', () => {
   it('does not persist provider telemetry into project memory for web chat', () => {
     const sink = createSink();
     handleSSEEvent(
-      { type: 'provider_telemetry', event: 'provider_failover', providerId: 'omniroute', toProviderId: 'nvidia', model: 'gpt-5.5', toModel: 'meta/llama-4', status: 429 } as any,
+      { type: 'provider_telemetry', event: 'provider_failover', providerId: 'web_general_primary', toProviderId: 'nvidia', model: 'gpt-5.5', toModel: 'meta/llama-4', status: 429 } as any,
       { ...createCtx(sink, 'web_chat'), activeProject: { id: 'p1' } }
     );
     expect(sink.mergeProjectMemory).not.toHaveBeenCalled();
@@ -303,7 +303,7 @@ describe('handleSSEEvent', () => {
   it('persists provider telemetry into project memory for desktop', () => {
     const sink = createSink();
     handleSSEEvent(
-      { type: 'provider_telemetry', event: 'provider_failover', providerId: 'omniroute', toProviderId: 'nvidia', model: 'gpt-5.5', toModel: 'meta/llama-4', status: 429 } as any,
+      { type: 'provider_telemetry', event: 'provider_failover', providerId: 'web_general_primary', toProviderId: 'nvidia', model: 'gpt-5.5', toModel: 'meta/llama-4', status: 429 } as any,
       { ...createCtx(sink, 'desktop_code'), activeProject: { id: 'p1' } }
     );
     expect(sink.mergeProjectMemory).toHaveBeenCalledTimes(1);
