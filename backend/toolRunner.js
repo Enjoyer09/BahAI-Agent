@@ -11,6 +11,21 @@ const { glob } = require('glob');
 const execFileAsync = util.promisify(execFile);
 const pdfParse = require('pdf-parse');
 
+// Races multiple search backends; returns the first non-empty usable result.
+// Each fn resolves to string|null; empty/null/throw counts as a loss.
+async function raceFirstUsable(backendFns) {
+  if (!backendFns.length) return null;
+  const racers = backendFns.map((fn) => Promise.resolve().then(fn).then((res) => {
+    if (typeof res === 'string' && res.trim().length > 0) return res;
+    throw new Error('no usable result');
+  }));
+  try {
+    return await Promise.any(racers);
+  } catch {
+    return null;
+  }
+}
+
 const {
   normalizeToolName, isPathSafe, isBashCommandSafe, isCacheableTool,
   buildToolCallCacheKey, getUserGithubToken, injectGithubTokenIntoUrl,
@@ -293,8 +308,9 @@ async function handleToolCall(toolCall, workingDirectory, user) {
       }
 
       case "web_search": {
-        // Tries multiple search backends in order of quality. Google Custom Search
-        // (if configured via env) returns the best results. Falls back to DuckDuckGo.
+        // Queries multiple search backends in parallel and returns the first usable
+        // result (see raceFirstUsable). Tavily (if keyed) and Google CSE (if keyed)
+        // plus DuckDuckGo+Wikipedia run concurrently instead of strictly in sequence.
         const query = String(args.query || '').trim();
         if (!query) return 'Axtarış sorğusu daxil edin.';
         const lowerQuery = query.toLowerCase();
@@ -321,7 +337,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
         if (isWeatherQuery && normalizedCity) {
           try {
             const wttrUrl = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=%C|%t|%w|%h`;
-            const wttrRes = await fetch(wttrUrl, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
+            const wttrRes = await fetch(wttrUrl, { signal: AbortSignal.timeout(5000), headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
             if (wttrRes.ok) {
               const weatherLine = (await wttrRes.text()).trim();
               if (weatherLine) {
@@ -349,16 +365,22 @@ async function handleToolCall(toolCall, workingDirectory, user) {
         const googKey = process.env.GOOGLE_API_KEY || '';
         const googCx = process.env.GOOGLE_CSE_ID || '';
 
-        // 0) Tavily AI Search API (Top priority for LLM optimized facts)
+        // Parallel search: fire all available backends concurrently and return the
+        // first that yields a usable (non-empty) result. Cuts tail latency vs the
+        // old strictly-sequential Tavily -> Google -> DDG chain.
+        const backendFns = [];
+
+        // 0) Tavily AI Search API (top priority for LLM-optimized facts)
         if (tavilyKey) {
-          try {
-            const tRes = await fetch('https://api.tavily.com/search', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ api_key: tavilyKey, query, search_depth: 'basic', include_answer: true, max_results: 5 }),
-              signal: AbortSignal.timeout(10000)
-            });
-            if (tRes.ok) {
+          backendFns.push(async () => {
+            try {
+              const tRes = await fetch('https://api.tavily.com/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: tavilyKey, query, search_depth: 'basic', include_answer: true, max_results: 5 }),
+                signal: AbortSignal.timeout(10000)
+              });
+              if (!tRes.ok) return null;
               const tData = await tRes.json();
               if (tData.answer) {
                 return `🟢 [Tavily AI Direct Answer]: ${tData.answer}\n\nKey Sources:\n` +
@@ -367,18 +389,21 @@ async function handleToolCall(toolCall, workingDirectory, user) {
               if (tData.results && tData.results.length > 0) {
                 return tData.results.map(r => `• ${r.title} (${r.url}): ${r.content.slice(0, 220)}`).join('\n');
               }
+              return null;
+            } catch (tErr) {
+              console.error('⚠️ Tavily Search API error:', tErr);
+              return null;
             }
-          } catch (tErr) {
-            console.error('⚠️ Tavily Search API error:', tErr);
-          }
+          });
         }
 
         // 1) Google Custom Search (requires API key)
         if (googKey && googCx) {
-          try {
-            const gUrl = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(googKey)}&cx=${encodeURIComponent(googCx)}&q=${encodeURIComponent(query)}&hl=az`;
-            const gRes = await fetch(gUrl, { signal: AbortSignal.timeout(10000) });
-            if (gRes.ok) {
+          backendFns.push(async () => {
+            try {
+              const gUrl = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(googKey)}&cx=${encodeURIComponent(googCx)}&q=${encodeURIComponent(query)}&hl=az`;
+              const gRes = await fetch(gUrl, { signal: AbortSignal.timeout(10000) });
+              if (!gRes.ok) return null;
               const gData = await gRes.json();
               if (gData.items && gData.items.length > 0) {
                 const results = gData.items.slice(0, 6).map(item => {
@@ -387,15 +412,17 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                 });
                 return `🔍 Google "${query}" üçün nəticələr:\n\n${results.join('\n\n')}`;
               }
-            }
-          } catch { /* fall through to next backend */ }
+              return null;
+            } catch { return null; }
+          });
         }
 
-        // 2) DuckDuckGo Instant Answer API (free, no key needed, limited coverage)
-        try {
-          const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
-          const ddgRes = await fetch(ddgUrl, { signal: AbortSignal.timeout(10000) });
-          if (ddgRes.ok) {
+        // 2) DuckDuckGo Instant Answer API (free, no key) + Wikipedia fallback
+        backendFns.push(async () => {
+          try {
+            const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
+            const ddgRes = await fetch(ddgUrl, { signal: AbortSignal.timeout(10000) });
+            if (!ddgRes.ok) return null;
             const data = await ddgRes.json();
             const ddgResults = [];
             if (data.Abstract) ddgResults.push(`📋 ${data.Abstract.slice(0, 600)}`);
@@ -408,7 +435,6 @@ async function handleToolCall(toolCall, workingDirectory, user) {
             if (data.RelatedTopics) {
               data.RelatedTopics.slice(0, 5).forEach(topic => {
                 if (topic.Text) ddgResults.push(`• ${topic.Text.slice(0, 300)}`);
-                // Handle sub-topics
                 if (topic.Topics) topic.Topics.slice(0, 3).forEach(sub => {
                   if (sub.Text) ddgResults.push(`  • ${sub.Text.slice(0, 200)}`);
                 });
@@ -422,8 +448,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
             if (ddgResults.length > 0) {
               return `🔍 "${query}" üçün nəticələr:\n${ddgResults.join('\n')}`;
             }
-
-            // If DDG returned nothing useful, try a Wikipedia search as extra fallback
+            // Wikipedia fallback
             try {
               const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=3`;
               const wikiRes = await fetch(wikiUrl, { signal: AbortSignal.timeout(8000) });
@@ -431,15 +456,19 @@ async function handleToolCall(toolCall, workingDirectory, user) {
                 const wikiData = await wikiRes.json();
                 const wikiHits = wikiData?.query?.search || [];
                 if (wikiHits.length > 0) {
-                  const wikiResults = wikiHits.map(h => 
+                  const wikiResults = wikiHits.map(h =>
                     `• ${h.title}\n  https://en.wikipedia.org/wiki/${encodeURIComponent(h.title.replace(/ /g, '_'))}\n  ${(h.snippet || '').replace(/<[^>]+>/g, '').slice(0, 200)}`
                   );
                   return `🔍 "${query}" üçün nəticələr (Wikipedia):\n\n${wikiResults.join('\n\n')}`;
                 }
               }
             } catch { /* no wiki fallback */ }
-          }
-        } catch { /* ddg failed */ }
+            return null;
+          } catch { return null; }
+        });
+
+        const parallelResult = await raceFirstUsable(backendFns);
+        if (parallelResult) return parallelResult;
 
         const isSportsScheduleQuery = /\b(dünya çempionatı|world championship|oyunlar|games|fixture|schedule|match|matç)\b/i.test(lowerQuery);
         if (isSportsScheduleQuery) {

@@ -252,7 +252,50 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
   if (asksWhenWorldCupIs) {
     return 'FIFA Dünya Çempionatı 2026 rəsmi cədvələ görə 11 iyun 2026-da başlayır və 19 iyul 2026-da bitir.';
   }
+  // Weather fast-path: answer simple current-conditions questions directly from
+  // wttr.in, skipping the 3-step agent loop + web_search entirely. This is the
+  // single biggest latency win for the most common web question type.
+  const directWeather = await getDirectWeatherReply(text);
+  if (directWeather) return directWeather;
+
   return '';
+}
+
+// Answers a simple "Bakıda indi hava necədir?" style question directly from
+// wttr.in. Returns null when the query isn't a clear current-conditions question
+// (e.g. multi-day forecast, unknown city) so the agent loop can handle it.
+async function getDirectWeatherReply(userText) {
+  const lower = String(userText || '').toLowerCase();
+  const isWeatherQuery = /\b(hava|weather|temperature|temp|derece|dərəcə)\b/i.test(lower);
+  if (!isWeatherQuery) return null;
+  // Forecast / multi-day / tomorrow questions still need the agent + web_search for depth.
+  if (/(proqnoz|forecast|3\s*gün|3-gün|üç\s*gün|həftə|hafta|week|sabah|tomorrow|axşam|gecə)/i.test(lower)) return null;
+  const cityMatch = userText.match(/\b(baku|bakı|baki|sumqayit|sumqayıt|ganja|gence|gəncə)\b/i);
+  const normalizedCity = cityMatch
+    ? ({ baku: 'Baku', bakı: 'Baku', baki: 'Baku', sumqayit: 'Sumqayit', sumqayıt: 'Sumqayit', ganja: 'Ganja', gence: 'Ganja', gəncə: 'Ganja' }[cityMatch[1].toLowerCase()] || 'Baku')
+    : null;
+  if (!normalizedCity) return null;
+  const cityDisplayName = { Baku: 'Bakıda', Sumqayit: 'Sumqayıtda', Ganja: 'Gəncədə' };
+  try {
+    const wttrUrl = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=%C|%t|%w|%h`;
+    const wttrRes = await fetch(wttrUrl, { signal: AbortSignal.timeout(5000), headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
+    if (!wttrRes.ok) return null;
+    const weatherLine = (await wttrRes.text()).trim();
+    if (!weatherLine) return null;
+    const cleaned = weatherLine.replace(/\+([0-9])/g, '$1').trim();
+    const [conditionRaw = '', tempRaw = '', windRaw = '', humidityRaw = ''] = cleaned.split('|');
+    const tempMetric = String(tempRaw).replace(/°?[FC]/gi, '').trim();
+    const windMetric = String(windRaw).replace(/mph/gi, 'km/saat').replace(/km\/h/gi, 'km/saat').replace(/\s+/g, ' ').trim();
+    const humidity = String(humidityRaw).trim();
+    const pieces = [];
+    if (conditionRaw) pieces.push(`${cityDisplayName[normalizedCity] || normalizedCity} hazırda ${String(conditionRaw).toLowerCase()} müşahidə olunur.`);
+    if (tempMetric) pieces.push(`Temperatur təxminən ${tempMetric}°C-dir.`);
+    if (windMetric) pieces.push(`Külək ${windMetric} təşkil edir.`);
+    if (humidity) pieces.push(`Rütubət ${humidity.replace('%', '')}%-dir.`);
+    return pieces.length ? pieces.join(' ') : null;
+  } catch {
+    return null; // any failure falls through to the agent loop
+  }
 }
 
 async function readLocalDb() {
@@ -514,7 +557,7 @@ router.post('/', async (req, res) => {
     ? `Sən BahAI-sən — Azərbaycan dilində faydalı, təbii danışan canlı AI köməkçi.
 CRITICAL INSTRUCTIONS:
 - İstifadəçiyə HƏMİŞƏ DƏRHAL SON NƏTİCƏNİ və birbaşa cavabı ver.
-- Cari faktlar, idman qalibləri, çempionlar, canlı qiymətlər və ya xəbərlər soruşulduqda HƏMİŞƏ DƏRHAL \`web_search\` alətini işlədib ən son faktı öyrən, təxminlərlə və ya fərziyyələrlə cavab vermə!
+- Cari faktlar, idman qalibləri, çempionlar, canlı qiymətlər və ya xəbərlər soruşulduqda, əgər cavabı dəqiq bilmirsənsə və ya məlumat köhnələ bilərsə, dərhal \`web_search\` alətini işlət — təxmin və ya fərziyyə ilə cavab vermə. Əgər faktı artıq dəqiq bilirsənsə, birbaşa təbii cavab verə bilərsən.
 - Heç vaxt cavab yazarkən "Axtarış aparıram", "İndi səhifəni açıram" kimi öz daxili fikirlərini və alət addımlarını İSTİFADƏÇİYƏ YAZMA!
 - Alətlərdən (web_search, browser_open və s.) istifadə etdikdə, aləti sakitcə fon rejimində icra et, dəqiq nəticəni əldə et və istifadəçiyə YALNIZ NƏTİCƏNİ təbii dildə təqdim et.
 - İstifadəçinin sualında adı çəkilən kitab, məhsul, versiya, stansiya, şəxs, mükafat və ya tarixi hadisənin mövcudluğuna əmin deyilsənsə, onu real fakt kimi qəbul etmə. Əvvəl etibarlı mənbə ilə yoxla; təsdiq tapılmırsa bunu açıq de. Heç vaxt saxta qiymət, tarix, müəllif və ya citation uydurma.
@@ -691,9 +734,12 @@ ${generateToolsSystemPrompt(TOOLS)}`;
         // / 15s vision cap fits there; desktop system prompts are much larger and
         // healthy cloud models can legitimately exceed 8s TTFT, so desktop keeps
         // a conservative 25s default unless overridden via env.
+        // Upper cap guards against a stale/garbage Railway LLM_FIRST_TOKEN_MS
+        // (the exact bug class being fixed for LLM_TIMEOUT_CHAT): an absurd value
+        // would make a cold/queued provider stall that long before failing over.
         firstTokenTimeoutMs: hasImageAttachment
-          ? Math.max(1000, parseInt(process.env.VISION_LLM_FIRST_TOKEN_MS || (productMode === 'web_chat' ? '20000' : '25000'), 10))
-          : Math.max(1000, parseInt(process.env.LLM_FIRST_TOKEN_MS || (productMode === 'web_chat' ? '15000' : '25000'), 10)),
+          ? Math.min(productMode === 'web_chat' ? 25000 : 60000, Math.max(1000, parseInt(process.env.VISION_LLM_FIRST_TOKEN_MS || (productMode === 'web_chat' ? '20000' : '25000'), 10)))
+          : Math.min(productMode === 'web_chat' ? 25000 : 60000, Math.max(1000, parseInt(process.env.LLM_FIRST_TOKEN_MS || (productMode === 'web_chat' ? '15000' : '25000'), 10))),
         hasImageAttachment,
         handleToolCall, normalizeToolName, extractTextToolCalls,
         buildToolCallCacheKey, flattenResponseJsonText,
