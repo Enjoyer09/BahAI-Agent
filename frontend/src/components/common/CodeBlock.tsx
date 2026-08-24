@@ -123,7 +123,7 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all active:scale-95 cursor-pointer ${
               copied
                 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 shadow-sm'
-                : 'text-neutral-300 hover:text-white bg-neutral-800/60 hover:bg-neutral-700/80 border border-neutral-700/50'
+                : 'text-neutral-200 hover:text-white bg-neutral-700/70 hover:bg-neutral-600/80 border border-neutral-600/60 shadow-sm'
             }`}
             title={copied ? 'Kopyalandı' : 'Kodu buferə kopyala'}
           >
@@ -134,7 +134,7 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
               </>
             ) : (
               <>
-                <Copy size={13} className="text-neutral-400" />
+                <Copy size={13} className="text-neutral-300" />
                 <span>Kodu Kopyala</span>
               </>
             )}
@@ -143,10 +143,10 @@ export default function CodeBlock({ language, children, inline }: CodeBlockProps
           <button
             onClick={handleDownload}
             type="button"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-neutral-300 hover:text-white bg-neutral-800/60 hover:bg-neutral-700/80 border border-neutral-700/50 transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-neutral-200 hover:text-white bg-neutral-700/70 hover:bg-neutral-600/80 border border-neutral-600/60 shadow-sm transition-all active:scale-95 cursor-pointer"
             title="Kodu fayl kimi yüklə"
           >
-            <Download size={13} className="text-neutral-400" />
+            <Download size={13} className="text-neutral-300" />
             <span>Yüklə</span>
           </button>
 
