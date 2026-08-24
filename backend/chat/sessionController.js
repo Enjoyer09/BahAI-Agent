@@ -1,4 +1,5 @@
 const vm = require('node:vm');
+const { compactSystemPrompt } = require('../helpers');
 
 function findHtmlScriptSyntaxError(content = '') {
   const htmlBlocks = String(content).match(/```html(?:\s|\n|\r)*([\s\S]*?)```/gi) || [];
@@ -357,6 +358,18 @@ async function runChatSession({
       }
 
       writeSse(res, { type: 'assistant_message', message: msg });
+
+      // Token saving: after the first LLM round, strip the verbose tool
+      // definitions from the system message. The structured `tools` parameter
+      // already conveys tool info to the API; the text duplicate wastes ~2k-3k
+      // tokens on every subsequent round (TTFT + cost).
+      if (step === 1 && currentMessages.length > 0 && currentMessages[0]?.role === 'system') {
+        const original = currentMessages[0].content;
+        const compacted = compactSystemPrompt(original);
+        if (compacted.length < original.length) {
+          currentMessages[0] = { ...currentMessages[0], content: compacted };
+        }
+      }
 
       if (hasRecoverablePartialText && finishReason !== 'tool_calls') {
         currentMessages.push({

@@ -1230,6 +1230,24 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
   return normalized;
 }
 
+function compactSystemPrompt(fullPrompt = '') {
+  // Strip the verbose tool definitions section from the system prompt.
+  // After the first LLM round, the structured `tools` parameter already conveys
+  // tool info to the API. Keeping the text duplicate burns ~2k-3k tokens per round.
+  const marker = 'İSTİFADƏ EDƏ BİLƏCƏYİN ALƏTLƏR';
+  const idx = String(fullPrompt).indexOf(marker);
+  if (idx <= 0) return fullPrompt;
+  // Walk back to the separator line before the marker.
+  const before = fullPrompt.slice(0, idx);
+  const lastSep = before.lastIndexOf('═══════════════════════════════════════════');
+  if (lastSep > 0) {
+    // Keep content up to (and including) the separator, then stop.
+    return fullPrompt.slice(0, lastSep + 41).trimEnd();
+  }
+  // Fallback: strip from marker to end.
+  return before.trimEnd();
+}
+
 function generateToolsSystemPrompt(activeTools = []) {
   let prompt = `\n\nİSTİFADƏ EDƏ BİLƏCƏYİN ALƏTLƏR (TOOLS):\n`;
   prompt += `Tool çağırışı üçün cavabın YALNIZ aşağıdakı kimi JSON bloku olmalıdır:\n`;
@@ -1704,7 +1722,7 @@ module.exports = {
   loadMcpConfigForWorkingDirectory, resetMcpConfigCache,
 
   // Message normalization
-  normalizeMessagesForModel, generateToolsSystemPrompt,
+  normalizeMessagesForModel, generateToolsSystemPrompt, compactSystemPrompt,
   buildDeepSeekRecoveryMessages, extractTextToolCalls,
 
   // Serializers

@@ -308,11 +308,34 @@ async function handleToolCall(toolCall, workingDirectory, user) {
       }
 
       case "web_search": {
-        // Queries multiple search backends in parallel and returns the first usable
-        // result (see raceFirstUsable). Tavily (if keyed) and Google CSE (if keyed)
-        // plus DuckDuckGo+Wikipedia run concurrently instead of strictly in sequence.
-        const query = String(args.query || '').trim();
-        if (!query) return 'Axtarış sorğusu daxil edin.';
+        // Batch mode: queries array → run all in parallel, combine results.
+        // Single mode: query string → existing behavior.
+        const batchQueries = Array.isArray(args.queries) ? args.queries.map(q => String(q || '').trim()).filter(Boolean) : [];
+        const singleQuery = String(args.query || '').trim();
+        const queriesToRun = batchQueries.length > 0 ? batchQueries.slice(0, 5) : (singleQuery ? [singleQuery] : []);
+        if (queriesToRun.length === 0) return 'Axtarış sorğusu daxil edin.';
+
+        // Batch parallel: fire all queries concurrently, combine results
+        if (queriesToRun.length > 1) {
+          const batchResults = await Promise.all(
+            queriesToRun.map(async (q) => {
+              try {
+                const result = await executeWebSearchSingle(q);
+                return { query: q, result };
+              } catch { return { query: q, result: null }; }
+            })
+          );
+          const parts = batchResults
+            .filter(r => r.result)
+            .map(r => `--- "${r.query}" ---\n${r.result}`);
+          if (parts.length > 0) return parts.join('\n\n');
+          return `Bütün axtarış sorğuları (${queriesToRun.join(', ')}) üçün nəticə tapılmadı.`;
+        }
+
+        // Single query path — original behavior
+        const query = queriesToRun[0];
+        return executeWebSearchSingle(query);
+        async function executeWebSearchSingle(query) {
         const lowerQuery = query.toLowerCase();
         const isWeatherQuery = /\b(hava|weather|temperature|temp|derece|dərəcə)\b/i.test(lowerQuery);
         const cityDisplayName = {
@@ -480,6 +503,7 @@ async function handleToolCall(toolCall, workingDirectory, user) {
         }
 
         return `"${query}" üçün dəqiq nəticə çıxara bilmədim. Sorğunu bir az daha konkret yazın və ya mövzunu daraldın.`;
+        } // end executeWebSearchSingle
       }
 
       case "web_fetch": {

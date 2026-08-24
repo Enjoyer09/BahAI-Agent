@@ -258,6 +258,64 @@ async function getDirectWebChatReply(latestUserText = '', messages = [], referen
   const directWeather = await getDirectWeatherReply(text);
   if (directWeather) return directWeather;
 
+  // ── 1-step reply: simple questions that don't need web_search ──
+  // These patterns are common enough to justify a direct answer, saving
+  // an entire LLM round + tool execution (~5-15s latency per question).
+  const isShortQuery = text.length < 80;
+  if (isShortQuery) {
+    // Translation requests: "X necə yazılır" / "X in English" / "X translates to"
+    const translationMatch = text.match(/^(.+?)\s+(nec[əa] yazılır|necə deyilir|ingiliscə nədir|ingilis dilində nədir|english(?:\s+translation)?|how to say|what is .+ in english|translate(?:d?)? to)/i);
+    if (translationMatch) {
+      // Don't answer directly — let the LLM handle translations naturally
+      // as they benefit from conversational context.
+    }
+    // Simple math: "2+2", "15*3", "100/4"
+    const mathMatch = text.match(/^(\d+(?:[.,]\d+)?)\s*([+×\-*÷/])\s*(\d+(?:[.,]\d+)?)$/);
+    if (mathMatch) {
+      const a = Number(mathMatch[1].replace(',', '.'));
+      const op = mathMatch[2];
+      const b = Number(mathMatch[3].replace(',', '.'));
+      if (Number.isFinite(a) && Number.isFinite(b)) {
+        let result;
+        switch (op) {
+          case '+': result = a + b; break;
+          case '-': case '−': result = a - b; break;
+          case '*': case '×': result = a * b; break;
+          case '/': case '÷': result = b !== 0 ? a / b : NaN; break;
+        }
+        if (Number.isFinite(result)) {
+          const formatted = Number.isInteger(result) ? String(result) : String(Number(result.toFixed(8))).replace('.', ',');
+          return `**${a} ${op} ${b} = ${formatted}**`;
+        }
+      }
+    }
+    // Unit conversions: "5 km neçə metrdir" / "100 usd neçə azn"
+    const unitConvMatch = text.match(/^(\d+(?:[.,]\d+)?)\s*(km|m|kilometr|metr|kg|qram|litr|dərəcə|fahrenheit|celsius)\s+neç[əa]\s*(metr|km|kilometr|qram|kg|litr|fahrenheit|celsius|dərəcə)/i);
+    if (unitConvMatch) {
+      const val = Number(unitConvMatch[1].replace(',', '.'));
+      const from = unitConvMatch[2].toLowerCase();
+      const to = unitConvMatch[3].toLowerCase();
+      if (Number.isFinite(val)) {
+        const conversions = {
+          'km→metr': v => v * 1000, 'kilometr→metr': v => v * 1000,
+          'metr→km': v => v / 1000, 'metr→kilometr': v => v / 1000,
+          'kg→qram': v => v * 1000, 'qram→kg': v => v / 1000,
+          'celsius→fahrenheit': v => v * 9 / 5 + 32, 'dərəcə→fahrenheit': v => v * 9 / 5 + 32,
+          'fahrenheit→celsius': v => (v - 32) * 5 / 9, 'fahrenheit→dərəcə': v => (v - 32) * 5 / 9,
+        };
+        const key = `${from}→${to}`;
+        const fn = conversions[key];
+        if (fn) {
+          const result = fn(val);
+          const formatted = Number.isInteger(result) ? String(result) : String(Number(result.toFixed(2))).replace('.', ',');
+          return `**${val} ${from} = ${formatted} ${to}**`;
+        }
+      }
+    }
+    // Simple identity/existence: "Marsda hava var mı?" "Yer kürəsinin radiusu nədir?"
+    // These benefit from LLM knowledge + web_search combo, so skip.
+  }
+
   return '';
 }
 

@@ -313,13 +313,14 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'web_search',
-      description: 'Searches the web for information. Use for documentation, error solutions, latest API references.',
+      description: 'Searches the web for information. Use for documentation, error solutions, latest API references. Supports batch: pass `queries` array for parallel multi-query search (e.g. 2-3 related queries at once to speed up research).',
       parameters: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'Search query' }
+          query: { type: 'string', description: 'Single search query' },
+          queries: { type: 'array', items: { type: 'string' }, description: 'Multiple queries to search in parallel (saves time for research questions). Each item is a separate search.' }
         },
-        required: ['query']
+        required: []
       }
     }
   },

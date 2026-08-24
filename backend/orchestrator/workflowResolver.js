@@ -58,10 +58,10 @@ function resolveOrchestrationConfig(orchestrationMode, workflow, latestUserText 
         secondaryAgents: [],
         workflow: 'solo',
         useTools: true,
-        maxSteps: 3,
+        maxSteps: 2,
         reason: 'Web chat məhsulu üçün multi-agent orchestration söndürülüb',
       },
-      maxSteps: 3
+      maxSteps: 2
     };
   }
   const route = decideManagerRoute({ latestUserText, orchestrationMode, workflow });
