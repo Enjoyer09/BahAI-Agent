@@ -115,15 +115,16 @@ function decideManagerRoute({ latestUserText = '', orchestrationMode = false, wo
   }
 
   if (intent.wantsInfra) {
+    const isThorough = workflow === 'thorough';
     return {
       mode: 'delegated',
       primaryAgent: 'Planner',
       secondaryAgents: ['Builder', 'Reviewer'],
-      workflow: workflow === 'thorough' ? 'thorough' : 'default',
+      workflow: isThorough ? 'thorough' : 'default',
       useTools: true,
-      maxSteps: 5,
+      maxSteps: isThorough ? 7 : 5,
       reason: 'Infra/DevOps mövzusu plan + icra + risk yoxlaması tələb edir',
-      tokenDiscipline: buildBudget({ maxSteps: 5, agentCount: 3, allowTools: true, preferDirect: false })
+      tokenDiscipline: buildBudget({ maxSteps: isThorough ? 7 : 5, agentCount: isThorough ? 4 : 3, allowTools: true, preferDirect: false })
     };
   }
 
