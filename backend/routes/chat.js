@@ -50,6 +50,32 @@ const {
   deriveDialogueState, resolveFollowup, buildDialogueContinuityHint
 } = require('../helpers');
 
+// Fetches a URL and returns its readable text content (same sanitization as
+// the web_fetch tool: strips scripts/styles/tags, collapses whitespace).
+// Returns null when the fetch fails, the page is empty, or the target is a
+// private/internal host (SSRF guard — mirrors toolRunner's web_fetch).
+async function fetchUrlText(url) {
+  try {
+    let urlObj;
+    try { urlObj = new URL(url); } catch { return null; }
+    const host = urlObj.hostname.toLowerCase();
+    const isPrivate = (host === 'localhost' || host === '0.0.0.0' || host === '::1' || host.endsWith('.local') || host.endsWith('.internal') || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) || /^169\.254\./.test(host) || /^fc[0-9a-f]{2}:/.test(host) || /^fe80:/.test(host));
+    if (isPrivate) return null;
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
+    if (!response.ok) return null;
+    const text = await response.text();
+    const clean = text
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return clean || null;
+  } catch {
+    return null;
+  }
+}
+
 async function getDirectWebChatReply(latestUserText = '', messages = [], referentSummary = null) {
   const text = String(latestUserText || '').trim();
   const lower = text.toLowerCase();
@@ -594,7 +620,22 @@ router.post('/', async (req, res) => {
   const db = require('../db');
   const historyMessageCount = normalizedMessages.filter((item) => item && (item.role === 'user' || item.role === 'assistant') && String(item.content || '').trim()).length;
   const safeReferentSummary = productMode === 'web_chat' && historyMessageCount >= 2 ? (referentSummary || null) : null;
-  const directWebReply = productMode === 'web_chat' ? await getDirectWebChatReply(latestUserText, normalizedMessages, safeReferentSummary) : '';
+  // ── URL → direct fetch fast-path (web_chat) ──────────────────────
+  // When the user pastes a bare http(s) URL, skip the whole agent loop and
+  // answer directly from the fetched page content. Saves 1 LLM round + 1 tool
+  // execution (~10-20s latency) — one of the highest-ROI web_chat wins.
+  const pastedUrlMatch = productMode === 'web_chat'
+    ? String(latestUserText || '').trim().match(/^(https?:\/\/[^\s]+)$/i)
+    : null;
+  const directWebReply = pastedUrlMatch
+    ? await (async () => {
+        try {
+          const pageText = await fetchUrlText(pastedUrlMatch[1]);
+          if (!pageText) return null;
+          return `Bu link-dəki məzmun:\n\n${pageText.slice(0, 6000)}`;
+        } catch { return null; }
+      })()
+    : '';
 
   if (directWebReply) {
     initSse(res);
@@ -872,3 +913,4 @@ ${generateToolsSystemPrompt(TOOLS)}`;
 
 module.exports = router;
 module.exports.getDirectWebChatReply = getDirectWebChatReply;
+module.exports.fetchUrlText = fetchUrlText;

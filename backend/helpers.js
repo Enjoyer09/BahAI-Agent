@@ -17,6 +17,7 @@ const fs_raw = require('fs');
 
 const execFileAsync = util.promisify(execFile);
 const pdfParse = require('pdf-parse');
+const JSZip = require('jszip');
 const { appendGuiRepairGuidance } = require('./gui/repairGuidance');
 
 // Module-level state for WORKSPACE_ROOT, ALLOWED_DIRS — set once at startup
@@ -963,6 +964,42 @@ async function extractSpreadsheetText(buffer) {
     .join('\n');
 }
 
+async function extractPptxText(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const slides = [];
+  // PPTX stores slides as ppt/slides/slide1.xml, slide2.xml, etc.
+  const slideFiles = Object.keys(zip.files)
+    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/slide(\d+)\.xml$/i)?.[1] || '0', 10);
+      const numB = parseInt(b.match(/slide(\d+)\.xml$/i)?.[1] || '0', 10);
+      return numA - numB;
+    });
+
+  for (const slideFile of slideFiles) {
+    const xml = await zip.file(slideFile).async('string');
+    // Extract text from <a:t> tags (PowerPoint text runs)
+    const textParts = [];
+    const tagRegex = /<a:t>([^<]*)<\/a:t>/gi;
+    let match;
+    while ((match = tagRegex.exec(xml)) !== null) {
+      const text = match[1]
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .trim();
+      if (text) textParts.push(text);
+    }
+    if (textParts.length > 0) {
+      const slideNum = slideFile.match(/slide(\d+)\.xml$/i)?.[1] || '?';
+      slides.push(`[Slayd ${slideNum}]\n${textParts.join(' ')}`);
+    }
+  }
+  return slides.join('\n\n');
+}
+
 let ocrWorkerPromise = null;
 async function getOcrWorker() {
   if (!ocrWorkerPromise) {
@@ -1053,6 +1090,11 @@ async function extractAttachment(attachment) {
       catch (e) { return { name, mimeType, extractedText: '', extractionError: `Cədvəl parse xətası: ${e.message}` }; }
     }
 
+    if (mimeType.includes('presentationml') || lowerName.endsWith('.pptx')) {
+      try { const text = await extractPptxText(buf); return { name, mimeType, extractedText: (text || '').slice(0, 50000) }; }
+      catch (e) { return { name, mimeType, extractedText: '', extractionError: `PPTX parse xətası: ${e.message}` }; }
+    }
+
     if (mimeType.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|tiff)$/i.test(name)) {
       try { const text = await extractImageText(buf); return { name, mimeType, extractedText: (text || '').slice(0, 50000) }; }
       catch (e) { return { name, mimeType, extractedText: '', extractionError: `Image OCR xətası: ${e.message}` }; }
@@ -1063,7 +1105,7 @@ async function extractAttachment(attachment) {
       return { name, mimeType, extractedText: text.slice(0, 50000) };
     }
 
-    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}. Dəstəklənənlər: PDF, DOCX, XLSX, CSV, şəkillər (OCR), və mətn faylları.]` };
+    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}. Dəstəklənənlər: PDF, DOCX, XLSX, PPTX, CSV, şəkillər (OCR), və mətn faylları.]` };
   } catch (error) {
     console.error('Attachment parse xətası:', name, error?.message || error);
     return { name, mimeType, extractedText: `[Attachment oxunarkən xəta: ${name}]` };
@@ -1121,6 +1163,7 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
       : [];
 
     if (message.attachments?.length) {
+      const attachments = Array.isArray(message.attachments) ? message.attachments : [];
       const textParts = [content, '[Sistem qeydi: İstifadəçi artıq attachment göndərib. Yenidən upload/drag-drop/link istəmədən mövcud attachment məzmununu analiz et.]'];
       if (!isLocalOrFlakyModel && imageAttachments.length > 0) {
         // Keep this instruction compact and unquoted: earlier verbose variants
@@ -1131,7 +1174,15 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
           textParts.push('[Sistem formatı - image reply: Təbii dildə birbaşa cavab ver. Siyahı, başlıq və ya təlimat mətnini cavaba köçürmə.]');
         }
       }
-      const results = await Promise.all(message.attachments.map(async (attachment) => {
+      // Multi-file RAG: when several documents are uploaded together, give the
+      // model stable per-file indices so it can cite "Fayl 2" / "3-cü faylda...",
+      // and distribute a shared context budget instead of a fixed per-file cap.
+      // This prevents 5×6000 = 30K chars from blowing the model context.
+      const textFileCount = attachments.filter((a) => a?.type !== 'image').length;
+      const perFileBudget = Math.max(2000, Math.floor(24000 / Math.max(1, textFileCount)));
+      const results = await Promise.all(attachments.map(async (attachment, index) => {
+        const fileLabel = textFileCount > 1 ? `Fayl ${index + 1}` : 'Attachment';
+        const header = `[${fileLabel}: ${attachment.name || 'attachment'} | ${attachment.mimeType || attachment.type || 'unknown'}]`;
         if (attachment?.extractedText && typeof attachment.extractedText === 'string' && attachment.extractedText.trim()) {
           const extractedText = String(attachment.extractedText || '').trim();
           if (attachment?.type === 'image' && !isLocalOrFlakyModel) {
@@ -1140,10 +1191,10 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
             }
             return '\n\n[Şəkil əlavə olunub]\nVizual analizə üstünlük ver.';
           }
-          return `\n\n[Attachment: ${attachment.name || 'attachment'} | ${attachment.mimeType || attachment.type || 'unknown'}]\n${extractedText.slice(0, 6000)}`;
+          return `\n\n${header}\n${extractedText.slice(0, perFileBudget)}`;
         }
-        if (attachment?.extractionError) return `\n\n[Attachment: ${attachment?.name || 'attachment'}]\nOxuma xətası: ${attachment.extractionError}`;
-        if (!attachment?.url || attachment.url === '') return `\n\n[Attachment: ${attachment?.name || 'attachment'} | ${attachment?.mimeType || 'unknown'}]\nFayl əlavə olunub, amma məzmunu çıxarıla bilmədi.`;
+        if (attachment?.extractionError) return `\n\n${header}\nOxuma xətası: ${attachment.extractionError}`;
+        if (!attachment?.url || attachment.url === '') return `\n\n${header}\nFayl əlavə olunub, amma məzmunu çıxarıla bilmədi.`;
         let extracted;
         try { extracted = await extractAttachment(attachment); }
         catch (error) { extracted = { name: attachment?.name || 'attachment', mimeType: attachment?.mimeType || attachment?.type || 'application/octet-stream', extractedText: `[Attachment emalında xəta: ${attachment?.name || 'attachment'}]` }; }
@@ -1154,9 +1205,9 @@ async function normalizeMessagesForModel(messages = [], modelName = '', TOOLS = 
             }
             return '\n\n[Şəkil əlavə olunub]\nVizual analizə üstünlük ver.';
           }
-          return `\n\n[Attachment: ${extracted.name} | ${extracted.mimeType}]\n${String(extracted.extractedText).slice(0, 6000)}`;
+          return `\n\n${header}\n${String(extracted.extractedText).slice(0, perFileBudget)}`;
         }
-        return `\n\n[Attachment: ${attachment?.name || extracted.name || 'attachment'} | ${attachment?.mimeType || extracted.mimeType || 'unknown'}]\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`;
+        return `\n\n${header}\nMətn çıxarıla bilmədi, amma fayl əlavə olunub.`;
       }));
       textParts.push(...results);
       content = textParts.join('\n').trim();

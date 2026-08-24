@@ -16,12 +16,14 @@ import {
   Moon,
   User,
   Cable,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
 import type { Project, Conversation } from '../../lib/types';
 import { API_BASE_URL } from '../../lib/constants';
-import { connectGithub, disconnectGithub, getGithubStatus, listGithubRepos } from '../../lib/api';
+import { connectGithub, disconnectGithub, getGithubStatus, listGithubRepos, getConversationMessages } from '../../lib/api';
+import { exportConversation } from '../../lib/exportConversation';
 import SettingsModal from './SettingsModal';
 import AdminPanel from './AdminPanel';
 import McpPanel from '../chat/McpPanel';
@@ -312,6 +314,25 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
     if (ok) chat.deleteConversation(id);
   };
 
+  const handleExportConversation = async (conv: Conversation, format: 'markdown' | 'json') => {
+    try {
+      // Fetch the full message list (the sidebar list may be paginated and
+      // only hold the most recent page).
+      let messages = conv.messages || [];
+      if (conv.messagesHasMore || messages.length === 0) {
+        const page = await getConversationMessages(conv.id, { limit: 200 });
+        if (page.messages.length > messages.length) messages = page.messages;
+      }
+      if (messages.length === 0) {
+        toast.warning('Bu söhbətdə export üçün mesaj yoxdur.');
+        return;
+      }
+      exportConversation(conv, messages, format);
+    } catch (e: any) {
+      toast.error(e?.message || 'Söhbət export edilə bilmədi.');
+    }
+  };
+
   const handleNewChat = () => {
     if (chat.activeProject) {
       chat.createConversation(chat.activeProject.id);
@@ -581,7 +602,22 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                         )}
                       </div>
                     </button>
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 mobile-visible" style={{ opacity: isMobile ? 1 : undefined }}>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 mobile-visible" style={{ opacity: isMobile ? 1 : undefined }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); void handleExportConversation(conv, 'markdown'); }}
+                        className="p-2 rounded-full transition-colors tahoe-button"
+                        style={{
+                          color: 'var(--fg-muted)',
+                          minHeight: '36px',
+                          minWidth: '36px',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)'
+                        }}
+                        title="Markdown olaraq export et"
+                        aria-label="Export conversation as Markdown"
+                      >
+                        <Download size={14} />
+                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conv.id); }}
                         className="p-2 rounded-full transition-colors tahoe-button"

@@ -171,3 +171,23 @@ describe('dialogue continuity hint', () => {
     expect(result.continuityHint).toBeNull();
   });
 });
+
+describe('URL fast-path (fetchUrlText)', () => {
+  it('fetches readable text from a public URL', async () => {
+    const { fetchUrlText } = await import('../routes/chat.js');
+    const text = await fetchUrlText('https://example.com');
+    expect(text).toBeTruthy();
+    expect(text).toMatch(/example/i);
+  });
+
+  it('blocks private/internal hosts (SSRF guard)', async () => {
+    const { fetchUrlText } = await import('../routes/chat.js');
+    expect(await fetchUrlText('http://127.0.0.1:3001/')).toBeNull();
+    expect(await fetchUrlText('http://localhost:8080/')).toBeNull();
+  });
+
+  it('returns null for invalid URLs', async () => {
+    const { fetchUrlText } = await import('../routes/chat.js');
+    expect(await fetchUrlText('not-a-url')).toBeNull();
+  });
+});

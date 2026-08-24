@@ -158,4 +158,21 @@ describe('web vision prompt (helpers.js normalizeMessagesForModel)', () => {
     expect(normalized.content).toContain('[Sistem qeydi: İstifadəçi artıq attachment göndərib');
     expect(normalized.content).not.toContain('[Sistem formatı - image reply');
   });
+
+  it('labels multiple text documents with stable file indices (multi-file RAG)', async () => {
+    const multiDocMessage = {
+      role: 'user',
+      content: 'Bu iki sənədi müqayisə et',
+      attachments: [
+        { type: 'file', mimeType: 'text/plain', name: 'a.txt', url: '', extractedText: 'Sənəd A məzmunu.' },
+        { type: 'file', mimeType: 'text/plain', name: 'b.txt', url: '', extractedText: 'Sənəd B məzmunu.' },
+      ]
+    };
+    const [normalized] = await normalizeMessagesForModel([multiDocMessage], 'gpt-5.5', []);
+    const text = typeof normalized.content === 'string' ? normalized.content : JSON.stringify(normalized.content);
+    expect(text).toContain('Fayl 1: a.txt');
+    expect(text).toContain('Fayl 2: b.txt');
+    expect(text).toContain('Sənəd A məzmunu.');
+    expect(text).toContain('Sənəd B məzmunu.');
+  });
 });

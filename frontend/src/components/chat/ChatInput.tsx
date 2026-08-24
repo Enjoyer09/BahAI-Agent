@@ -240,7 +240,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             type="file"
             className="hidden"
             multiple
-            accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json,.yaml,.yml,.xml,.log"
+            accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.csv,.txt,.md,.json,.yaml,.yml,.xml,.log"
             onChange={(event) => {
               pushFiles(event.target.files);
               event.target.value = '';
@@ -354,6 +354,9 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
         {/* Attachments preview */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-2 px-1">
+            <div className="text-[10px] px-2 py-1 rounded-md" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-muted)' }}>
+              {attachments.length} fayl — bütünlənlərindən cavab veriləcək
+            </div>
             {attachments.map((at, i) => (
               <div
                 key={at.id || i}
