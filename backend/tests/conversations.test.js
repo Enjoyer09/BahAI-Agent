@@ -56,6 +56,7 @@ const fake = vi.hoisted(() => {
         messages: params[4],
         summary_text: params[5] || '',
         archived: false,
+        pinned: false,
         last_message_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -116,13 +117,14 @@ const fake = vi.hoisted(() => {
     }
 
     if (t.startsWith('UPDATE conversations') && t.includes('RETURNING')) {
-      // PATCH final UPDATE: $1 title, $2 archived, $3 messages, $4 summary_text, $5 id, $6 user_id
-      const row = state.conversations.get(params[4]);
+      // PATCH final UPDATE: $1 title, $2 archived, $3 messages, $4 summary_text, $5 pinned, $6 id, $7 user_id
+      const row = state.conversations.get(params[5]);
       if (row) {
         if (params[0] != null) row.title = params[0];
         if (params[1] != null) row.archived = params[1];
         if (params[2] != null) row.messages = params[2];
         if (params[3] != null) row.summary_text = params[3];
+        if (params[4] != null) row.pinned = params[4];
         row.updated_at = new Date().toISOString();
         return { rows: [{ ...row }] };
       }

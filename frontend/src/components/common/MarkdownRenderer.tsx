@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CodeBlock from './CodeBlock';
 import ArtifactBlock from '../chat/ArtifactBlock';
+import { linkifyUrls } from '../../lib/linkifyUrls';
 import type { Components } from 'react-markdown';
 
 interface MarkdownRendererProps {
@@ -9,7 +10,7 @@ interface MarkdownRendererProps {
 }
 
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
-  const safeContent = typeof content === 'string' ? content : '';
+  const safeContent = linkifyUrls(typeof content === 'string' ? content : '');
   const components: Partial<Components> = {
     code({ className, children }) {
       const match = /language-(\w+)/.exec(className || '');

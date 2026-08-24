@@ -17,6 +17,8 @@ import {
   User,
   Cable,
   Download,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
@@ -24,6 +26,7 @@ import type { Project, Conversation } from '../../lib/types';
 import { API_BASE_URL } from '../../lib/constants';
 import { connectGithub, disconnectGithub, getGithubStatus, listGithubRepos, getConversationMessages } from '../../lib/api';
 import { exportConversation } from '../../lib/exportConversation';
+import { updateConversationOnServer } from '../../lib/api';
 import SettingsModal from './SettingsModal';
 import AdminPanel from './AdminPanel';
 import McpPanel from '../chat/McpPanel';
@@ -37,6 +40,7 @@ interface ChatState {
   activeConvId: string | null;
   activeProject: Project | null;
   setActiveConvId: (id: string) => void;
+  setConversations: (conversations: Conversation[]) => void;
   createProject: (name: string, path: string, repoUrl?: string) => any;
   createConversation: (projectId: string) => void;
   loadMoreConversations?: () => Promise<void> | void;
@@ -333,6 +337,27 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
     }
   };
 
+  const handlePinConversation = async (conv: Conversation) => {
+    try {
+      const newPinned = !conv.pinned;
+      await updateConversationOnServer(conv.id, { pinned: newPinned } as any);
+      // Optimistic local update: flip pinned + re-sort conversations
+      const updated = chat.conversations.map((c) =>
+        c.id === conv.id ? { ...c, pinned: newPinned, pinnedAt: newPinned ? Date.now() : undefined } : c
+      );
+      // Sort: pinned first (by pinnedAt desc), then by lastMessageAt desc
+      updated.sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        if (a.pinned && b.pinned) return (b.pinnedAt || 0) - (a.pinnedAt || 0);
+        return (b.lastMessageAt || b.updatedAt) - (a.lastMessageAt || a.updatedAt);
+      });
+      chat.setConversations(updated);
+    } catch (e: any) {
+      toast.error(e?.message || 'Söhbət bərkidilmədi.');
+    }
+  };
+
   const handleNewChat = () => {
     if (chat.activeProject) {
       chat.createConversation(chat.activeProject.id);
@@ -559,7 +584,10 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="text-sm truncate flex-1 font-medium">{conv.title || (isWebProduct ? 'Adsız chat' : 'Adsız söhbət')}</div>
+                          <div className="text-sm truncate flex-1 font-medium">
+                            {conv.pinned && <Pin size={12} className="inline-block mr-1 -mt-0.5" style={{ color: 'var(--color-accent)' }} />}
+                            {conv.title || (isWebProduct ? 'Adsız chat' : 'Adsız söhbət')}
+                          </div>
                           {metaTime && (
                             <span className="text-[10px] shrink-0" style={{ color: 'var(--fg-muted)' }}>
                               {metaTime}
@@ -603,6 +631,21 @@ export default function Sidebar({ onToggle, chat, themeCtx, settingsCtx, isMobil
                       </div>
                     </button>
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 mobile-visible" style={{ opacity: isMobile ? 1 : undefined }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); void handlePinConversation(conv); }}
+                        className="p-2 rounded-full transition-colors tahoe-button"
+                        style={{
+                          color: conv.pinned ? 'var(--color-accent)' : 'var(--fg-muted)',
+                          minHeight: '36px',
+                          minWidth: '36px',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)'
+                        }}
+                        title={conv.pinned ? 'Bərkitməni qaldır' : 'Söhbəti bərkit'}
+                        aria-label={conv.pinned ? 'Unpin conversation' : 'Pin conversation'}
+                      >
+                        {conv.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); void handleExportConversation(conv, 'markdown'); }}
                         className="p-2 rounded-full transition-colors tahoe-button"

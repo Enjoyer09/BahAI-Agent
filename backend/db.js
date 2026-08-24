@@ -107,6 +107,16 @@ async function initDb() {
     `);
 
     await client.query(`
+      ALTER TABLE conversations
+      ADD COLUMN IF NOT EXISTS pinned BOOLEAN DEFAULT false
+    `);
+
+    await client.query(`
+      ALTER TABLE conversations
+      ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY,
         conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
@@ -134,6 +144,28 @@ async function initDb() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
       ON messages(conversation_id, created_at ASC)
+    `);
+
+    // Covering index for conversation list queries:WHERE user_id = ? AND archived = false
+    // ORDER BY pinned DESC, pinned_at DESC NULLS LAST, last_message_at DESC
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_conversations_list
+      ON conversations(user_id, pinned DESC, pinned_at DESC NULLS LAST, last_message_at DESC)
+      WHERE archived = false
+    `);
+
+    // Partial index for archived conversations (used by soft-delete queries)
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_conversations_archived
+      ON conversations(user_id, updated_at DESC)
+      WHERE archived = true
+    `);
+
+    // Covering index for project-scoped conversation list
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_conversations_project_list
+      ON conversations(user_id, project_id, pinned DESC, pinned_at DESC NULLS LAST, last_message_at DESC)
+      WHERE archived = false
     `);
 
     await client.query(`

@@ -1210,6 +1210,7 @@ export function useChat(settings: Settings, userKey?: string | number | null) {
   return {
     projects: state.projects,
     conversations: state.conversations,
+    setConversations: (conversations: Conversation[]) => dispatch({ type: 'SET_CONVERSATIONS', conversations }),
     conversationsHasMore: state.conversationsHasMore,
     messages,
     activeConvId: state.activeConvId,

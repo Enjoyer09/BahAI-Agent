@@ -273,7 +273,7 @@ export function Composer({ onSendMessage, disabled, isGenerating, onStop, settin
           type="file"
           multiple
           className="hidden"
-          accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.csv,.txt,.md,.json,.yaml,.yml,.xml,.log"
+          accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.csv,.txt,.md,.json,.yaml,.yml,.xml,.log,.mp3,.wav,.m4a,.ogg,.webm,.flac,.aac"
           onChange={(event) => {
             void addFiles(event.target.files);
             event.target.value = '';

@@ -240,7 +240,7 @@ export default function ChatInput({ onSend, onStop, loading, blockedByActionCent
             type="file"
             className="hidden"
             multiple
-            accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.csv,.txt,.md,.json,.yaml,.yml,.xml,.log"
+            accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.pptx,.csv,.txt,.md,.json,.yaml,.yml,.xml,.log,.mp3,.wav,.m4a,.ogg,.webm,.flac,.aac"
             onChange={(event) => {
               pushFiles(event.target.files);
               event.target.value = '';

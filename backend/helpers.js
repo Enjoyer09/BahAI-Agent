@@ -1000,6 +1000,55 @@ async function extractPptxText(buffer) {
   return slides.join('\n\n');
 }
 
+// ==========================================
+// Audio transcription (Whisper)
+// ==========================================
+// Reuses the same STT_BASE_URL / STT_API_KEY env vars as routes/speech.js.
+// Audio attachments are transcribed server-side so the model receives text.
+const STT_BASE_URL = (process.env.STT_BASE_URL || '').trim().replace(/\/+$/, '');
+const STT_API_KEY = (process.env.STT_API_KEY || '').trim();
+const STT_MODEL = process.env.STT_MODEL || 'whisper-1';
+const MAX_AUDIO_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB Whisper limit
+
+async function extractAudioText(buffer, mimeType = 'audio/webm') {
+  if (!STT_BASE_URL || !STT_API_KEY) {
+    return '[Səs transkriptiyası konfiqurasiya olunmayıb — STT_BASE_URL və STT_API_KEY tələb olunur]';
+  }
+  if (buffer.length > MAX_AUDIO_ATTACHMENT_BYTES) {
+    return `[Audio faylı 25MB limitini keçir (${Math.round(buffer.length / 1024 / 1024)}MB)]`;
+  }
+  const form = new FormData();
+  form.append('file', new Blob([buffer], { type: mimeType }), 'audio.webm');
+  form.append('model', STT_MODEL);
+  form.append('language', 'auto');
+  form.append('response_format', 'json');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000); // 60s for larger files
+  try {
+    const resp = await fetch(`${STT_BASE_URL}/audio/transcriptions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${STT_API_KEY}` },
+      body: form,
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      console.error(`[AUDIO_EXTRACT] Whisper error ${resp.status}: ${errText.slice(0, 200)}`);
+      return `[Səs transkriptiyası xətası: ${resp.status}]`;
+    }
+    const data = await resp.json().catch(() => null);
+    const text = (data && data.text) || '';
+    if (!text.trim()) return '[Səs tanınmadı — audio faylda danışiq tapılmadı]';
+    return text.trim();
+  } catch (err) {
+    if (err?.name === 'AbortError') return '[Səs transkriptiyası vaxt aşımına uğradı]';
+    console.error('[AUDIO_EXTRACT] Whisper fetch error:', err?.message || err);
+    return `[Səs transkriptiyası xətası: ${err?.message || 'naməlum'}]`;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 let ocrWorkerPromise = null;
 async function getOcrWorker() {
   if (!ocrWorkerPromise) {
@@ -1100,12 +1149,17 @@ async function extractAttachment(attachment) {
       catch (e) { return { name, mimeType, extractedText: '', extractionError: `Image OCR xətası: ${e.message}` }; }
     }
 
+    if (mimeType.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|webm|flac|aac|wma)$/i.test(name)) {
+      try { const text = await extractAudioText(buf, mimeType); return { name, mimeType, extractedText: (text || '').slice(0, 50000) }; }
+      catch (e) { return { name, mimeType, extractedText: '', extractionError: `Audio transkriptiya xətası: ${e.message}` }; }
+    }
+
     if (mimeType.startsWith('text/') || mimeType.includes('json') || mimeType.includes('xml') || mimeType.includes('javascript') || mimeType.includes('typescript') || /\.(txt|json|csv|md|yaml|yml|xml|log|env|js|ts|jsx|tsx|py|html|css|sh|toml|ini|cfg|conf)$/i.test(name)) {
       const text = buf.toString('utf8');
       return { name, mimeType, extractedText: text.slice(0, 50000) };
     }
 
-    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}. Dəstəklənənlər: PDF, DOCX, XLSX, PPTX, CSV, şəkillər (OCR), və mətn faylları.]` };
+    return { name, mimeType, extractedText: `[Dəstəklənməyən fayl növü: ${name}. Dəstəklənənlər: PDF, DOCX, XLSX, PPTX, CSV, şəkillər (OCR), səs (Whisper), və mətn faylları.]` };
   } catch (error) {
     console.error('Attachment parse xətası:', name, error?.message || error);
     return { name, mimeType, extractedText: `[Attachment oxunarkən xəta: ${name}]` };
@@ -1443,6 +1497,8 @@ function serializeConversation(row) {
     title: row.title,
     messages: Array.isArray(row.messages) ? row.messages : [],
     archived: Boolean(row.archived),
+    pinned: Boolean(row.pinned),
+    pinnedAt: row.pinned_at ? new Date(row.pinned_at).getTime() : undefined,
     lastMessageAt: row.last_message_at ? new Date(row.last_message_at).getTime() : undefined,
     preview: row.preview || undefined,
     summaryText: row.summary_text || undefined,

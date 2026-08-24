@@ -104,6 +104,8 @@ export interface Conversation {
   title: string;
   messages: Message[];
   archived?: boolean;
+  pinned?: boolean;
+  pinnedAt?: number;
   lastMessageAt?: number;
   preview?: string;
   summaryText?: string;

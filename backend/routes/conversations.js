@@ -274,7 +274,7 @@ router.get('/', async (req, res) => {
            GROUP BY conversation_id
          ) m ON m.conversation_id = c.id
          WHERE c.user_id = $1 AND c.project_id = $2 AND c.archived = false${searchClause}
-         ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC
+         ORDER BY c.pinned DESC, c.pinned_at DESC NULLS LAST, COALESCE(c.last_message_at, c.updated_at) DESC
          LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params
       );
@@ -305,7 +305,7 @@ router.get('/', async (req, res) => {
          GROUP BY conversation_id
        ) m ON m.conversation_id = c.id
        WHERE c.user_id = $1 AND c.archived = false${searchClause}
-       ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC
+       ORDER BY c.pinned DESC, c.pinned_at DESC NULLS LAST, COALESCE(c.last_message_at, c.updated_at) DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
@@ -397,7 +397,7 @@ router.get('/:id/messages', async (req, res) => {
 
 async function patchConversation(req, res) {
   try {
-    const { title, messages, archived } = req.body;
+    const { title, messages, archived, pinned } = req.body;
     if (!db.hasDatabase()) return res.json({ success: true });
     const client = await db.pool.connect();
     try {
@@ -417,16 +417,23 @@ async function patchConversation(req, res) {
         normalized = await upsertConversationMessages(client, req.params.id, req.user.id, messages);
         summaryText = buildConversationSummary(normalized);
       }
+      const pinValue = typeof pinned === 'boolean' ? pinned : null;
       const updateResult = await client.query(
         `UPDATE conversations
          SET title = COALESCE($1, title),
              archived = COALESCE($2, archived),
              messages = COALESCE($3, messages),
              summary_text = COALESCE($4, summary_text),
+             pinned = COALESCE($5, pinned),
+             pinned_at = CASE
+               WHEN $5::boolean IS TRUE THEN CURRENT_TIMESTAMP
+               WHEN $5::boolean IS FALSE THEN NULL
+               ELSE pinned_at
+             END,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $5 AND user_id = $6
+         WHERE id = $6 AND user_id = $7
          RETURNING *`,
-        [title || null, typeof archived === 'boolean' ? archived : null, messages ? JSON.stringify(buildConversationSnapshot(normalized)) : null, messages ? summaryText : null, req.params.id, req.user.id]
+        [title || null, typeof archived === 'boolean' ? archived : null, messages ? JSON.stringify(buildConversationSnapshot(normalized)) : null, messages ? summaryText : null, pinValue, req.params.id, req.user.id]
       );
       await client.query('COMMIT');
       updateResult.rows[0].messages = normalized;
