@@ -9,6 +9,11 @@ const fs = require('fs/promises');
 const fsSync = require('fs');
 const ptyManager = require('./ptyManager');
 const fsWatcher = require('./fsWatcher');
+const screenCapture = require('./screenCapture');
+
+// In-memory cache for the user's JWT, populated when the renderer calls
+// setAuthToken() (typically after login). Screen share uploads reuse it.
+let cachedAuthToken = null;
 
 let mainWindowRef = null;
 let allowedDirectories = [];
@@ -47,6 +52,11 @@ function register(mainWindow, allowedDirs = []) {
   // ─── Shell ─────────────────────────────────────
   ipcMain.handle('shell:openExternal', handleOpenExternal);
   ipcMain.handle('shell:showItemInFolder', handleShowInFolder);
+
+  // ─── Screen Capture (Buddy Ekran Kompanyonu) ─────
+  ipcMain.handle('screen:authToken:set', handleSetAuthToken);
+  ipcMain.handle('screen:captureAndShare', handleScreenCaptureAndShare);
+  ipcMain.handle('screen:status', handleScreenStatus);
 }
 
 // ─── Path Safety ─────────────────────────────────
@@ -244,6 +254,72 @@ async function handleOpenExternal(_event, url) {
 async function handleShowInFolder(_event, filePath) {
   const { shell } = require('electron');
   shell.showItemInFolder(filePath);
+}
+
+// ─── Screen Capture (Buddy Ekran Kompanyonu) ─────
+// The renderer caches the user's JWT here after login. We reuse it on
+// every screen share so the upload can authenticate as the user.
+function handleSetAuthToken(_event, token) {
+  if (typeof token === 'string' && token.length > 0 && token.length < 4096) {
+    cachedAuthToken = token;
+    return { ok: true };
+  }
+  cachedAuthToken = null;
+  return { ok: false, error: 'token must be a non-empty string under 4KB' };
+}
+
+function handleScreenStatus() {
+  return {
+    hasToken: !!cachedAuthToken,
+    backendPort: process.env.BACKEND_PORT || 3001
+  };
+}
+
+/**
+ * Capture a screenshot of the primary display and upload it to the
+ * backend's /api/screen-capture/upload endpoint.
+ *
+ * Renderer-supplied payload:
+ *   { baseUrl, conversationId?, appendToConversation?, deviceLabel? }
+ *
+ * Returns { ok, timestamp, expiresAt, ttlMs, mimeType, bytes, capture?: {...} }
+ * or  { ok:false, error } for the renderer to surface as a toast.
+ */
+async function handleScreenCaptureAndShare(_event, payload) {
+  if (!cachedAuthToken) {
+    return { ok: false, error: 'auth token not cached — call setAuthToken first' };
+  }
+  const opts = payload || {};
+  const baseUrl = opts.baseUrl || `http://127.0.0.1:${process.env.BACKEND_PORT || 3001}`;
+  const conversationId = typeof opts.conversationId === 'string' ? opts.conversationId : null;
+  const appendToConversation = !!opts.appendToConversation;
+  const deviceLabel = typeof opts.deviceLabel === 'string' ? opts.deviceLabel : null;
+
+  const cap = await screenCapture.captureScreenThumbnail();
+  if (!cap.ok) return { ok: false, error: cap.error, stage: 'capture' };
+
+  const upload = await screenCapture.uploadToBackend({
+    baseUrl,
+    token: cachedAuthToken,
+    base64: cap.base64,
+    mimeType: cap.mimeType,
+    conversationId,
+    appendToConversation,
+    deviceLabel: deviceLabel || cap.deviceLabel
+  });
+  if (!upload.ok) return { ok: false, error: upload.error, status: upload.status, stage: 'upload' };
+
+  return {
+    ok: true,
+    timestamp: upload.timestamp,
+    expiresAt: upload.expiresAt,
+    ttlMs: upload.ttlMs,
+    mimeType: upload.mimeType,
+    bytes: upload.bytes,
+    displayLabel: cap.displayLabel,
+    deviceLabel: deviceLabel || cap.deviceLabel,
+    truncated: cap.bytes > 5 * 1024 * 1024
+  };
 }
 
 // ─── Cleanup ─────────────────────────────────────

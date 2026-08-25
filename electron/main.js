@@ -306,6 +306,89 @@ function createWindow() {
   });
 }
 
+// ─── Screen Share trigger (main process) ──────────
+// Fired from the "Buddy → Ekranı Buddy ilə paylaş" menu item. Captures the
+// primary display, uploads it via the cached JWT, then notifies the
+// renderer so the chat UI can show a toast ("Buddy sənin ekranını gördü")
+// and the user can send a follow-up message.
+async function triggerScreenShare() {
+  if (!mainWindow) return;
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(
+      `(async () => {
+        const token = (window.localStorage.getItem('auth_token')
+                    || window.localStorage.getItem('jwt')
+                    || window.localStorage.getItem('token')
+                    || '').trim();
+        await window.electron?.screenCapture?.setAuthToken?.(token);
+        const conv = window.localStorage.getItem('currentConversationId') || null;
+        return { hasToken: !!token, conversationId: conv };
+      })()`,
+      true
+    );
+    if (!result || !result.hasToken) {
+      notifyRenderer('screen:share:error', {
+        error: 'auth token tapılmadı. Əvvəlcə giriş et, sonra ekranı paylaş.'
+      });
+      return;
+    }
+    // Use the renderer-known baseUrl (frontend origin) for the upload so
+    // the same-origin cookie/JWT path applies. Fall back to localhost in
+    // dev mode when cookies haven't been seeded.
+    const baseUrl = mainWindow.webContents.getURL().replace(/\/+$/, '').replace(/\/chat.*$/, '');
+    const uploadResult = await new Promise((resolve) => {
+      mainWindow.webContents.executeJavaScript(
+        `window.electron.screenCapture.captureAndShare(${JSON.stringify({
+          baseUrl,
+          conversationId: result.conversationId || undefined,
+          appendToConversation: false,
+          deviceLabel: 'electron-desktop'
+        })})`,
+        true,
+        (res) => resolve(res)
+      );
+    });
+    if (!uploadResult || !uploadResult.ok) {
+      notifyRenderer('screen:share:error', { error: uploadResult?.error || 'unknown error' });
+      return;
+    }
+    notifyRenderer('screen:share:complete', {
+      timestamp: uploadResult.timestamp,
+      expiresAt: uploadResult.expiresAt,
+      ttlMs: uploadResult.ttlMs,
+      bytes: uploadResult.bytes,
+      displayLabel: uploadResult.displayLabel
+    });
+    const kb = Math.round(uploadResult.bytes / 1024);
+    const mins = Math.max(1, Math.round(uploadResult.ttlMs / 60000));
+    notifyOS(
+      'Buddy — ekran paylaşıldı',
+      `${kb} KB görüntü yükləndi. ${mins} dəqiqə ərzində "ekrana bax" yazsan, Buddy baxacaq.`,
+      false
+    );
+  } catch (err) {
+    notifyRenderer('screen:share:error', { error: err.message });
+    notifyOS('Buddy — xəta', `Ekran paylaşımı uğursuz: ${err.message}`, true);
+  }
+}
+
+function notifyRenderer(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
+  }
+}
+
+function notifyOS(title, body, urgent = false) {
+  try {
+    const { Notification } = require('electron');
+    if (!Notification || !Notification.isSupported || !Notification.isSupported()) return;
+    const n = new Notification({ title, body, silent: false, urgency: urgent ? 'critical' : 'normal' });
+    n.show();
+    // Auto-dismiss after 5s
+    setTimeout(() => { try { n.close(); } catch {} }, 5000);
+  } catch { /* notifications not available — silently skip */ }
+}
+
 function createMenu() {
   const template = [
     {
@@ -343,6 +426,22 @@ function createMenu() {
         { label: 'Kopyala', role: 'copy' },
         { label: 'Yapışdır', role: 'paste' },
         { label: 'Hamısını seç', role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'Buddy',
+      submenu: [
+        {
+          label: 'Ekranı Buddy ilə paylaş',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => triggerScreenShare()
+        },
+        { type: 'separator' },
+        {
+          label: 'Yeni söhbət',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => mainWindow?.webContents.send('new-chat')
+        }
       ]
     },
     {

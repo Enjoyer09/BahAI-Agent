@@ -72,4 +72,23 @@ contextBridge.exposeInMainWorld('electron', {
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
     showItemInFolder: (filePath) => ipcRenderer.invoke('shell:showItemInFolder', filePath),
   },
+
+  // ─── Screen Capture (Buddy Ekran Kompanyonu) ─────
+  // The renderer caches its JWT via setAuthToken() after login so the main
+  // process can reuse it on screen share without re-prompting.
+  screenCapture: {
+    setAuthToken: (token) => ipcRenderer.invoke('screen:authToken:set', token),
+    captureAndShare: (opts) => ipcRenderer.invoke('screen:captureAndShare', opts),
+    status: () => ipcRenderer.invoke('screen:status'),
+    onShareComplete: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on('screen:share:complete', listener);
+      return () => ipcRenderer.removeListener('screen:share:complete', listener);
+    },
+    onShareError: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on('screen:share:error', listener);
+      return () => ipcRenderer.removeListener('screen:share:error', listener);
+    }
+  },
 });

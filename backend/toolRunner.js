@@ -49,6 +49,7 @@ const {
 } = require('./helpers');
 const { publishApp } = require('./tools/appBuilder');
 const { getSession } = require('./browserSession');
+const screenCaptureTools = require('./tools/screenCapture');
 
 async function handleToolCall(toolCall, workingDirectory, user) {
   try {
@@ -637,6 +638,17 @@ async function handleToolCall(toolCall, workingDirectory, user) {
             ? `App published. Live URL: ${result.publicUrl}`
             : `App published at ${result.path} (site origin not configured — prepend the public base URL).`
         });
+      }
+
+      case "capture_my_screen": {
+        // Reads the latest screenshot the user shared from their desktop app.
+        // Returns a small JSON status — the LLM decides what to do based on
+        // hasScreen + ageMs. We don't auto-append to the conversation here:
+        // the upload endpoint already supports that, and on the web_chat path
+        // we don't want the agent to silently mutate the user's conversation
+        // without an explicit user turn.
+        const userId = user?.id || user?.userId || user?.email || 'anon';
+        return JSON.stringify(screenCaptureTools.getStatus(userId));
       }
 
       default:

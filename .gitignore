@@ -38,6 +38,7 @@ sandbox/local_db.json
 backend/debug_messages.json
 backend/debug_*.json
 backend/apps/
+backend/screen-captures/
 *.db-journal
 *.db-shm
 *.db-wal

@@ -56,15 +56,25 @@ const REVIEWER_TOOLS = Array.from(new Set([
 
 const WEB_CHAT_PUBLISH_TOOLS = [
   // Tools that mutate nothing in the user's project but perform a safe external
-  // action (publishing a page). Allowed in web_chat so end users can ask the
-  // agent to create live web pages, but NOT in READ_ONLY_TOOLS so role-restricted
+  // action (publishing a page, reading the user's freshly-shared screen).
+  // Allowed in web_chat so end users can ask the agent to create live web pages
+  // or reference what they see, but NOT in READ_ONLY_TOOLS so role-restricted
   // profiles (Planner/Architect) keep their read-only guarantee.
-  'build_and_publish_app'
+  'build_and_publish_app',
+  'capture_my_screen'
+];
+
+const WEB_CHAT_AWARENESS_TOOLS = [
+  // Read-only access to ephemeral user state (latest screenshot). Does not
+  // mutate anything in the user's project.
+  // NOTE: capture_my_screen is also in WEB_CHAT_PUBLISH_TOOLS so it lives in
+  // both groups — the union below picks it up exactly once.
 ];
 
 const WEB_CHAT_TOOLS = Array.from(new Set([
   ...READ_ONLY_TOOLS,
-  ...WEB_CHAT_PUBLISH_TOOLS
+  ...WEB_CHAT_PUBLISH_TOOLS,
+  ...WEB_CHAT_AWARENESS_TOOLS
 ]));
 
 const TOOL_PROFILES = {

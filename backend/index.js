@@ -111,6 +111,7 @@ const approvalsRouter = require('./routes/approvals');
 const ttsRouter = require('./routes/tts');
 const speechRouter = require('./routes/speech');
 const opsRouter = require('./routes/ops');
+const screenCaptureRouter = require('./routes/screenCapture');
 
 // ==========================================
 // Configuration
@@ -335,7 +336,8 @@ const protectedPaths = [
   '/api/browsers', '/api/gui-capabilities', '/api/computer-use-status',
   '/api/runtime-status', '/api/interactions', '/api/tts',
   '/api/conversation-token', '/api/signed-url', '/api/admin/stats',
-  '/api/admin/users', '/api/mcp', '/api/jobs', '/api/dsh'
+  '/api/admin/users', '/api/mcp', '/api/jobs', '/api/dsh',
+  '/api/screen-capture'
 ];
 protectedPaths.forEach(function(p) { app.use(p, verifyToken); });
 
@@ -405,6 +407,9 @@ app.use('/api', miscRouter);
 // DSH Features (Plugins, Sub-Agent Profiles, Stress Test)
 const dshRouter = require('./routes/dsh');
 app.use('/api/dsh', dshRouter);
+
+// Screen capture — desktop app uploads user screenshots, web_chat reads them
+app.use('/api/screen-capture', screenCaptureRouter);
 
 // Approvals — POST /api/approvals/:id, POST /api/checkpoints/:id, GET /api/interactions
 app.use('/api', injectChatRuntime, approvalsRouter);

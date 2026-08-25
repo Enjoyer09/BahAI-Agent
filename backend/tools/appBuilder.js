@@ -10,7 +10,8 @@
 // which on Railway is ephemeral. Mount a Railway Volume at that path (or set
 // APPS_DIR to the mount) so published apps survive redeploys.
 
-const fs = require('fs/promises');
+const fs = require('fs');
+const fsp = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -34,9 +35,13 @@ function getPublicBaseUrl() {
   return base.replace(/\/+$/, '');
 }
 
-async function ensureAppsDir() {
+// SYNC mkdir so index.js can call it once at boot without async ceremony.
+// A single mkdir recursive with recursive:true is cheap and only runs once
+// per process — we don't want to wait for it before serving the first
+// request.
+function ensureAppsDir() {
   const dir = getAppsDir();
-  await fs.mkdir(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
@@ -90,8 +95,8 @@ async function publishApp({ html, title, slug } = {}) {
     return { ok: false, error: 'Invalid path.' };
   }
 
-  await fs.mkdir(path.dirname(resolved), { recursive: true });
-  await fs.writeFile(resolved, html, 'utf8');
+  await fsp.mkdir(path.dirname(resolved), { recursive: true });
+  await fsp.writeFile(resolved, html, 'utf8');
 
   const urlPath = `/apps/${id}/`;
   const publicBase = getPublicBaseUrl();

@@ -831,6 +831,21 @@ const TOOL_DEFINITIONS = [
         required: ['html']
       }
     }
+  },
+  // ─── Screen Co-Pilot (read latest user-shared screenshot from the desktop app) ───
+  {
+    type: 'function',
+    function: {
+      name: 'capture_my_screen',
+      description: 'Reads the latest screenshot the user just shared from their desktop app. Returns a short JSON status: whether a fresh screen is available (hasScreen), its age in milliseconds (ageMs), and how long until it expires (expiresInMs). Screenshots expire after a few minutes — call this tool PROACTIVELY whenever the user says things like "bax ekrana", "bu səhvə bax", "bunu düzəlt", "ekranıma bax", or references what they are seeing. If hasScreen is false, ask the user to share their screen again or describe what they see in text. Do NOT use this tool for general questions or to investigate server-side state — only for ground-truth on what is currently visible on the user\'s screen.',
+      parameters: {
+        type: 'object',
+        properties: {
+          conversationId: { type: 'string', description: 'Optional conversation id. When provided and the user just shared a screen that was not yet attached to the conversation, the agent should call appendToConversation=true via the upload endpoint OR continue without it — this tool itself does not mutate state.' }
+        },
+        required: []
+      }
+    }
   }
 ];
 
