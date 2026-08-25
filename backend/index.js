@@ -209,6 +209,27 @@ app.use(express.static(FRONTEND_DIST, {
 }));
 
 // ==========================================
+// Published Mini-Apps (/apps/<id>/index.html)
+// ==========================================
+// Self-contained HTML pages the agent publishes via the build_and_publish_app
+// tool. On Railway the APPS_DIR defaults to <repo>/backend/apps which is
+// ephemeral — mount a Railway Volume there for persistence across deploys.
+const { ensureAppsDir } = require('./tools/appBuilder');
+const APPS_DIR = ensureAppsDir();
+app.use('/apps', express.static(APPS_DIR, {
+  index: 'index.html',
+  fallthrough: true,
+  setHeaders(res, filePath) {
+    // Published pages are versioned by their id (random hex or user slug), so
+    // they're already immutable per page — but allow short revalidation in case
+    // the agent ever updates the same id.
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    }
+  }
+}));
+
+// ==========================================
 // Helmet / CSP
 // ==========================================
 const disableCsp = process.env.DISABLE_CSP === 'true';

@@ -814,6 +814,23 @@ const TOOL_DEFINITIONS = [
         required: []
       }
     }
+  },
+  // ─── App Builder (publish self-contained HTML pages from chat) ───
+  {
+    type: 'function',
+    function: {
+      name: 'build_and_publish_app',
+      description: 'Publishes a self-contained HTML page (landing page, form, calculator, quiz, portfolio, mini-app, etc.) and returns a live hosted URL the user can open immediately. Use whenever the user asks to BUILD, CREATE, or GENERATE a web page, site, form, landing, portfolio, or visual HTML output that should be live and shareable. Pass the full HTML as the `html` parameter (a complete <!DOCTYPE html> document is recommended, with inline <style> and <script>). The page will be hosted at a unique URL on this service and returned to the user as a clickable link. Do NOT use this tool for code snippets, explanations, or non-HTML content — use a code block instead.',
+      parameters: {
+        type: 'object',
+        properties: {
+          html: { type: 'string', description: 'Complete HTML content for the page. A full HTML5 document (<!DOCTYPE html>...) with inline CSS (<style>) and JS (<script>) is recommended. Keep it self-contained — no external build step required. Max 2MB.' },
+          title: { type: 'string', description: 'Optional human-readable page title (also used to generate a friendly URL slug if `slug` is omitted). Max 100 chars.' },
+          slug: { type: 'string', description: 'Optional short URL slug, lowercase letters/digits/hyphens, max 40 chars (e.g. "cay-evi"). If omitted, a random id is generated.' }
+        },
+        required: ['html']
+      }
+    }
   }
 ];
 

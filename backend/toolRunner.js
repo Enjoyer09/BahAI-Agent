@@ -47,6 +47,7 @@ const {
   ensureDir, resolveWorkingDirectory, isWorkingDirectoryAllowed,
   safeSegment, encryptSecret, decryptSecret
 } = require('./helpers');
+const { publishApp } = require('./tools/appBuilder');
 const { getSession } = require('./browserSession');
 
 async function handleToolCall(toolCall, workingDirectory, user) {
@@ -614,6 +615,28 @@ async function handleToolCall(toolCall, workingDirectory, user) {
           if (args.name) { await execFileAsync('git', ['checkout', '-b', args.name], { cwd: workingDirectory, timeout: 5000 }); return `Created and switched to branch: ${args.name}`; }
           else { const { stdout } = await execFileAsync('git', ['branch'], { cwd: workingDirectory, timeout: 5000 }); return stdout || "No branches"; }
         } catch (e) { return `Git branch error: ${e.message}`; }
+      }
+
+      case "build_and_publish_app": {
+        const result = await publishApp({
+          html: args.html,
+          title: typeof args.title === 'string' ? args.title : undefined,
+          slug: typeof args.slug === 'string' ? args.slug : undefined
+        });
+        if (!result.ok) return `Error: ${result.error}`;
+        // The LLM is told the public URL (when configured) so it can hand the user
+        // a clickable link. If PUBLIC_BASE_URL is unset, the agent should prepend
+        // the site's origin from context.
+        return JSON.stringify({
+          ok: true,
+          id: result.id,
+          title: result.title,
+          path: result.path,
+          publicUrl: result.publicUrl,
+          message: result.publicUrl
+            ? `App published. Live URL: ${result.publicUrl}`
+            : `App published at ${result.path} (site origin not configured — prepend the public base URL).`
+        });
       }
 
       default:

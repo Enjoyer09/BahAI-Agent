@@ -54,8 +54,17 @@ const REVIEWER_TOOLS = Array.from(new Set([
   'run_tests'
 ]));
 
+const WEB_CHAT_PUBLISH_TOOLS = [
+  // Tools that mutate nothing in the user's project but perform a safe external
+  // action (publishing a page). Allowed in web_chat so end users can ask the
+  // agent to create live web pages, but NOT in READ_ONLY_TOOLS so role-restricted
+  // profiles (Planner/Architect) keep their read-only guarantee.
+  'build_and_publish_app'
+];
+
 const WEB_CHAT_TOOLS = Array.from(new Set([
-  ...READ_ONLY_TOOLS
+  ...READ_ONLY_TOOLS,
+  ...WEB_CHAT_PUBLISH_TOOLS
 ]));
 
 const TOOL_PROFILES = {
