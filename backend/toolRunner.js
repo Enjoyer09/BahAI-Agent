@@ -50,6 +50,7 @@ const {
 const { publishApp } = require('./tools/appBuilder');
 const { getSession } = require('./browserSession');
 const screenCaptureTools = require('./tools/screenCapture');
+const { quantumSearchCodebase } = require('./chat/quantumSearch');
 
 async function handleToolCall(toolCall, workingDirectory, user) {
   try {
@@ -295,6 +296,20 @@ async function handleToolCall(toolCall, workingDirectory, user) {
         const searchCwd = path.resolve(workingDirectory, args.cwd || '.');
         if (!isPathSafe(searchCwd, workingDirectory, user)) return "Error: Path outside workspace";
         try {
+          // Quantum search: O(√N) amplitude-amplified search when enabled
+          if (process.env.QUANTUM_SEARCH_ENABLED === 'true') {
+            const quantumResult = await quantumSearchCodebase(searchCwd, args.symbol, {
+              searchContent: true,
+              searchFilenames: false,
+              maxResults: 20,
+              caseSensitive: false
+            });
+            if (quantumResult && quantumResult.results.length > 0) {
+              const lines = quantumResult.results.map(r => `${r.path}: ${r.name} (score: ${r.score.toFixed(2)})`);
+              return `Quantum search found ${quantumResult.results.length} definitions (${quantumResult.complexity.speedup}x faster):\n${lines.join('\n')}`;
+            }
+          }
+          // Fallback: classical grep
           const patterns = [`function ${args.symbol}`, `const ${args.symbol}`, `let ${args.symbol}`, `class ${args.symbol}`, `export.*${args.symbol}`, `def ${args.symbol}`];
           const results = [];
           for (const pattern of patterns) { try { const { stdout } = await execFileAsync('grep', ['-rn', pattern, searchCwd], { cwd: workingDirectory, timeout: 5000 }); if (stdout) results.push(stdout); } catch { /* ignore */ } }
@@ -305,8 +320,25 @@ async function handleToolCall(toolCall, workingDirectory, user) {
       case "find_references": {
         const searchCwd = path.resolve(workingDirectory, args.cwd || '.');
         if (!isPathSafe(searchCwd, workingDirectory, user)) return "Error: Path outside workspace";
-        try { const { stdout } = await execFileAsync('grep', ['-rn', args.symbol, searchCwd], { cwd: workingDirectory, timeout: 10000 }); const lines = stdout.split('\n').slice(0, 50); return lines.length > 0 ? `Found ${lines.length} references:\n${lines.join('\n')}` : `No references found for '${args.symbol}'`; }
-        catch (e) { return `No references found for '${args.symbol}'`; }
+        try {
+          // Quantum search: O(√N) amplitude-amplified search when enabled
+          if (process.env.QUANTUM_SEARCH_ENABLED === 'true') {
+            const quantumResult = await quantumSearchCodebase(searchCwd, args.symbol, {
+              searchContent: true,
+              searchFilenames: true,
+              maxResults: 50,
+              caseSensitive: false
+            });
+            if (quantumResult && quantumResult.results.length > 0) {
+              const lines = quantumResult.results.map(r => `${r.path}: ${r.name} (score: ${r.score.toFixed(2)})`);
+              return `Quantum search found ${quantumResult.results.length} references (${quantumResult.complexity.speedup}x faster):\n${lines.join('\n')}`;
+            }
+          }
+          // Fallback: classical grep
+          const { stdout } = await execFileAsync('grep', ['-rn', args.symbol, searchCwd], { cwd: workingDirectory, timeout: 10000 });
+          const lines = stdout.split('\n').slice(0, 50);
+          return lines.length > 0 ? `Found ${lines.length} references:\n${lines.join('\n')}` : `No references found for '${args.symbol}'`;
+        } catch (e) { return `No references found for '${args.symbol}'`; }
       }
 
       case "web_search": {

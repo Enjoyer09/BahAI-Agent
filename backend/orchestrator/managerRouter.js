@@ -166,7 +166,32 @@ function decideManagerRoute({ latestUserText = '', orchestrationMode = false, wo
   };
 }
 
+const { quantumOptimizeRouting } = require('./quantumAnnealing');
+
+/**
+ * Quantum-annealing-enhanced routing (opt-in via QUANTUM_ANNEALING_ENABLED)
+ * Falls back to greedy routing when disabled or on error.
+ */
+function quantumEnhancedRoute(latestUserText, orchestrationMode, workflow) {
+  if (process.env.QUANTUM_ANNEALING_ENABLED !== 'true') return null;
+  
+  try {
+    const result = quantumOptimizeRouting(
+      { text: latestUserText, taskType: 'general' },
+      { enabled: true, maxIterations: 30 }
+    );
+    if (result?.routing) {
+      console.log(`🔮 Quantum annealing: workflow=${result.routing.workflow}, improvement=${result.improvement}%`);
+      return result.routing;
+    }
+  } catch (err) {
+    console.warn(`[QuantumAnnealing] Routing failed: ${err.message}`);
+  }
+  return null;
+}
+
 module.exports = {
   classifyUserIntent,
-  decideManagerRoute
+  decideManagerRoute,
+  quantumEnhancedRoute
 };

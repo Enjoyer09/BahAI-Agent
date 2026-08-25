@@ -42,6 +42,7 @@ function sleep(ms) {
 // next candidate). Covers transient upstream blips only: 408/429/5xx and network
 // errors. Deliberately EXCLUDES AbortError (request/attempt deadline) and
 // deterministic 4xx — those are not fixed by retrying the same call.
+const { quantumSelectProvider } = require('./quantumRouter');
 const TRANSIENT_RETRY_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 function isTransientForRetry(err) {
   if (!err) return false;
@@ -155,13 +156,65 @@ async function openAiStreamWithFallback({
   onProviderTelemetry,
   providerSessionKey,
   forceDisableTools = false,
-  requestDeadlineAt = Number.POSITIVE_INFINITY
+  requestDeadlineAt = Number.POSITIVE_INFINITY,
+  quantumRoutingEnabled = (process.env.QUANTUM_ROUTING_ENABLED === 'true'),
+  quantumProbeCount = 3
 }) {
   let stream;
   let nextProvider = activeProvider;
   let nextClient = client;
   let nextModel = effectiveModel;
   let nextMessages = currentMessages;
+  
+  // ── Quantum Superposition Routing ──
+  // Probe top N providers in parallel and select the optimal one probabilistically.
+  // Falls back to serial failover if quantum routing fails or is disabled.
+  if (quantumRoutingEnabled && providerCandidates && providerCandidates.length > 1) {
+    try {
+      const quantumResult = await quantumSelectProvider(providerCandidates, {
+        enabled: quantumRoutingEnabled,
+        probeCount: quantumProbeCount,
+        taskType: isVisionRequest ? 'vision' : 'general',
+        queryContext: {
+          hasImageAttachment: isVisionRequest,
+          step: 'initial'
+        }
+      });
+      
+      if (quantumResult && quantumResult.selected) {
+        // Use quantum-selected provider as starting point
+        nextProvider = quantumResult.selected;
+        nextClient = buildOpenAIClient(quantumResult.selected);
+        nextModel = quantumResult.selected.model;
+        
+        // Emit quantum routing telemetry
+        onProviderTelemetry?.({
+          event: 'quantum_routing_selected',
+          providerId: quantumResult.selected.id,
+          model: quantumResult.selected.model,
+          baseURL: quantumResult.selected.baseURL,
+          selectionMethod: quantumResult.selectionMethod,
+          amplitudes: quantumResult.amplitudes
+        });
+        
+        if (shouldEmitDebugEvent()) {
+          writeSse({
+            type: 'debug',
+            info: {
+              quantumRouting: {
+                selected: quantumResult.selected.id,
+                selectionMethod: quantumResult.selectionMethod,
+                amplitudes: quantumResult.amplitudes,
+                probeResults: quantumResult.probeResults?.length || 0
+              }
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(`[QuantumRouter] Initial selection failed, using default: ${err.message}`);
+    }
+  }
   let deepSeekRecoveryUsed = false;
   let providerNoToolsFallbackUsed = false;
   let lastAttemptTimeoutMs = llmTimeoutMs;

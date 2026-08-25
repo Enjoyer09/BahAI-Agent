@@ -5,6 +5,7 @@
  */
 
 const { buildRoleInstruction } = require('./rolePrompts');
+const { QuantumEntangledAgents, createEntangledAgentsFromWorkflow } = require('./quantumEntanglement');
 // Assumes a generic callModel function exists in the system
 // const { callModel } = require('../chat/providers'); 
 
@@ -13,6 +14,8 @@ class MultiAgentManager {
     this.sessionContext = options.sessionContext || {};
     this.history = [];
     this.activeAgents = new Map();
+    this.quantumEnabled = process.env.QUANTUM_ENTANGLEMENT_ENABLED === 'true';
+    this.entangledAgents = null;
   }
 
   /**
@@ -70,6 +73,45 @@ class MultiAgentManager {
       role: 'system',
       content: `Context received from ${fromRole}:\n${summary}`
     });
+  }
+
+  /**
+   * Initialize quantum entanglement for a workflow (opt-in via QUANTUM_ENTANGLEMENT_ENABLED)
+   */
+  initQuantumEntanglement(workflow) {
+    if (!this.quantumEnabled) return null;
+    try {
+      this.entangledAgents = createEntangledAgentsFromWorkflow(workflow);
+      return this.entangledAgents;
+    } catch (err) {
+      console.warn(`[QuantumEntanglement] Init failed: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Execute task with quantum entanglement (parallel agents) if enabled,
+   * otherwise fall back to serial execution.
+   */
+  async executeEntangledOrSerial(task, taskPrompt, options = {}) {
+    if (this.quantumEnabled && this.entangledAgents) {
+      try {
+        const result = await this.entangledAgents.executeEntangled(task, taskPrompt, options);
+        // Convert quantum result to serial-compatible format
+        return {
+          content: result.result?.content || '',
+          decision: result.result?.decision || 'neutral',
+          consensus: result.result?.consensus || 'weak',
+          quantum: true,
+          correlations: result.correlations,
+          speedup: result.parallelSpeedup
+        };
+      } catch (err) {
+        console.warn(`[QuantumEntanglement] Execution failed, falling back to serial: ${err.message}`);
+      }
+    }
+    // Fallback: serial execution (existing behavior)
+    return null;
   }
 }
 
