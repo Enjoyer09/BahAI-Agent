@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="az" data-page-node-id="IcgMA8HFaP2mWMcuCi5FGK">
+<head data-page-node-id="E7YGu1wt9EGVUOdPtY4r1T">
+<meta charset="UTF-8" data-page-node-id="pkA6wTVOyHZ6J3QqhI61x4">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="nltDux65vDpYtYKwm41COs">
+<title>Kvant Kompüter — Süni Dolaşıqlıqdan Süni İntellektə</title>
+<style>
+  :root{
+    --bg:#0a0e27; --bg2:#141937; --surface:#1a1f3a;
+    --accent:#7c5cff; --accent2:#00d4ff; --accent3:#ff6b9d;
+    --text:#e8ebf7; --text-dim:#9aa3c7; --muted:#6b7392;
+    --border:rgba(124,92,255,0.15);
+    --glow:0 0 40px rgba(124,92,255,0.4);
+    --font:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    --mono:'JetBrains Mono','SF Mono',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:var(--font); background:var(--bg); color:var(--text);
+    line-height:1.65; overflow-x:hidden; font-weight:400;
+  }
+  body::before{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:-1;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(124,92,255,0.15), transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(0,212,255,0.10), transparent 50%),
+      radial-gradient(circle at 50% 100%, rgba(255,107,157,0.08), transparent 60%);
+  }
+  nav{
+    position:sticky; top:0; z-index:50;
+    backdrop-filter:blur(20px) saturate(180%);
+    -webkit-backdrop-filter:blur(20px) saturate(180%);
+    background:rgba(10,14,39,0.7); border-bottom:1px solid var(--border);
+    padding:18px 0;
+  }
+  .nav-inner{max-width:1180px;margin:0 auto;padding:0 24px;display:flex;justify-content:space-between;align-items:center}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:17px;letter-spacing:-0.01em}
+  .logo-mark{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;display:grid;place-items:center;color:#fff;font-weight:700;box-shadow:var(--glow)}
+  .nav-links{display:flex;gap:28px;list-style:none}
+  .nav-links a{color:var(--text-dim);text-decoration:none;font-size:14px;font-weight:500;transition:color .2s}
+  .nav-links a:hover{color:var(--text)}
+  @media(max-width:680px){.nav-links{display:none}}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+
+  /* ── Hero ─────────────────────────────────── */
+  .hero{
+    padding:96px 0 64px; position:relative;
+  }
+  .hero-tag{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:6px 14px; border:1px solid var(--border); border-radius:100px;
+    background:rgba(124,92,255,0.08); font-size:13px; color:var(--accent2);
+    margin-bottom:24px; font-family:var(--mono);
+  }
+  .hero-tag::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent2);box-shadow:0 0 8px var(--accent2);animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  h1{
+    font-size:clamp(2.4rem,5vw,4.2rem); font-weight:700; line-height:1.05;
+    letter-spacing:-0.035em; margin-bottom:24px; max-width:14ch;
+  }
+  h1 .grad{
+    background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 60%,var(--accent3) 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .hero p.lede{
+    font-size:1.15rem; color:var(--text-dim); max-width:60ch; margin-bottom:36px;
+  }
+  .cta-row{display:flex;flex-wrap:wrap;gap:14px}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;padding:13px 22px;
+    border-radius:10px;font-weight:600;font-size:14px;text-decoration:none;
+    transition:transform .15s, box-shadow .2s; cursor:pointer; border:none; font-family:inherit;
+  }
+  .btn-primary{
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff;
+    box-shadow:0 8px 24px -8px rgba(124,92,255,0.5);
+  }
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 32px -8px rgba(124,92,255,0.7)}
+  .btn-ghost{
+    background:rgba(255,255,255,0.04); color:var(--text);
+    border:1px solid var(--border);
+  }
+  .btn-ghost:hover{background:rgba(255,255,255,0.08)}
+
+  /* ── Qubit visualization ──────────────────── */
+  .bloch-hero{
+    margin-top:60px; position:relative;
+    display:grid; place-items:center; padding:40px 0;
+  }
+  .bloch-hero::before{
+    content:'';position:absolute;inset:0;
+    background:radial-gradient(circle,rgba(124,92,255,0.1),transparent 70%);
+  }
+  .bloch-svg{filter:drop-shadow(0 20px 40px rgba(0,0,0,0.3))}
+
+  /* ── Section structure ───────────────────── */
+  section{padding:80px 0; border-top:1px solid var(--border)}
+  .section-head{margin-bottom:56px; max-width:60ch}
+  .section-head .num{
+    font-family:var(--mono); font-size:13px; color:var(--accent);
+    letter-spacing:0.05em; margin-bottom:12px; text-transform:uppercase;
+  }
+  .section-head h2{
+    font-size:clamp(1.8rem,3.5vw,2.6rem); font-weight:700;
+    letter-spacing:-0.025em; line-height:1.15; margin-bottom:16px;
+  }
+  .section-head p{color:var(--text-dim);font-size:1.05rem}
+
+  /* ── Concept grid ────────────────────────── */
+  .concepts{
+    display:grid; gap:20px;
+    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  }
+  .card{
+    background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    border:1px solid var(--border); border-radius:16px; padding:28px;
+    transition:border-color .25s, transform .25s; position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--accent),transparent);
+    opacity:0;transition:opacity .25s;
+  }
+  .card:hover{border-color:rgba(124,92,255,0.4);transform:translateY(-2px)}
+  .card:hover::before{opacity:1}
+  .card-icon{
+    width:44px;height:44px;border-radius:10px;
+    background:linear-gradient(135deg,rgba(124,92,255,0.2),rgba(0,212,255,0.2));
+    display:grid;place-items:center;margin-bottom:18px;color:var(--accent2);
+  }
+  .card h3{font-size:1.25rem;font-weight:600;margin-bottom:10px;letter-spacing:-0.015em}
+  .card p{color:var(--text-dim);font-size:0.95rem}
+  .card .formula{
+    display:block;margin-top:14px;padding:10px 14px;border-radius:8px;
+    background:rgba(0,0,0,0.3);font-family:var(--mono);font-size:0.85rem;
+    color:var(--accent2);overflow-x:auto;
+  }
+
+  /* ── Gates table ─────────────────────────── */
+  .gates{display:grid;gap:12px;margin-top:20px}
+  .gate{
+    display:grid; grid-template-columns:80px 1fr 1fr 140px; gap:18px;
+    align-items:center; padding:18px 22px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px; transition:background .2s;
+  }
+  .gate:hover{background:rgba(124,92,255,0.05)}
+  .gate-name{
+    font-family:var(--mono);font-weight:600;color:var(--accent);
+    font-size:0.95rem;
+  }
+  .gate-desc{color:var(--text);font-size:0.95rem}
+  .gate-effect{color:var(--text-dim);font-size:0.85rem;font-family:var(--mono)}
+  .gate-matrix{
+    background:#0a0e27;padding:10px;border-radius:6px;
+    font-family:var(--mono);font-size:0.8rem;color:var(--accent2);
+    text-align:center;border:1px solid var(--border);
+  }
+  @media(max-width:780px){
+    .gate{grid-template-columns:1fr;gap:8px}
+  }
+
+  /* ── Algorithms timeline ─────────────────── */
+  .timeline{position:relative;padding:20px 0;margin-top:20px}
+  .timeline::before{
+    content:'';position:absolute;left:60px;top:0;bottom:0;
+    width:2px;background:linear-gradient(180deg,var(--accent),var(--accent2));
+    opacity:0.5;
+  }
+  .tl-item{
+    position:relative;padding:24px 24px 24px 100px;
+  }
+  .tl-item::before{
+    content:'';position:absolute;left:51px;top:32px;width:20px;height:20px;
+    border-radius:50%;background:var(--bg);border:3px solid var(--accent);
+    box-shadow:0 0 0 4px rgba(124,92,255,0.2);
+  }
+  .tl-year{
+    position:absolute;left:0;top:28px;width:40px;
+    font-family:var(--mono);font-weight:600;color:var(--accent2);
+    font-size:0.85rem;text-align:right;
+  }
+  .tl-item h4{font-size:1.1rem;font-weight:600;margin-bottom:6px}
+  .tl-item p{color:var(--text-dim);font-size:0.95rem}
+
+  /* ── Stats banner ────────────────────────── */
+  .stats{
+    display:grid;gap:24px;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    padding:40px;background:linear-gradient(135deg,rgba(124,92,255,0.08),rgba(0,212,255,0.04));
+    border:1px solid var(--border);border-radius:20px;margin:40px 0;
+  }
+  .stat{text-align:center}
+  .stat-num{
+    font-size:2.4rem;font-weight:700;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    letter-spacing:-0.02em;line-height:1;
+  }
+  .stat-label{font-size:0.85rem;color:var(--text-dim);margin-top:6px;letter-spacing:0.02em}
+
+  /* ── Tabs (interactive) ──────────────────── */
+  .tabs{margin-top:30px}
+  .tab-buttons{
+    display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;
+    border-bottom:1px solid var(--border);
+  }
+  .tab-btn{
+    padding:12px 20px;background:transparent;border:none;
+    color:var(--text-dim);font-weight:500;font-size:0.95rem;
+    cursor:pointer;border-bottom:2px solid transparent;
+    transition:color .2s, border-color .2s;font-family:inherit;
+  }
+  .tab-btn.active{color:var(--text);border-bottom-color:var(--accent)}
+  .tab-panel{display:none;animation:fadeIn .3s ease}
+  .tab-panel.active{display:block}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .tab-content{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:28px;
+  }
+  .tab-content h4{margin-bottom:12px;color:var(--accent2);font-weight:600}
+  .tab-content p{color:var(--text-dim);margin-bottom:14px}
+  .tab-content ul{list-style:none;padding:0}
+  .tab-content li{padding:8px 0 8px 24px;position:relative;color:var(--text)}
+  .tab-content li::before{content:'→';position:absolute;left:0;color:var(--accent);font-weight:600}
+
+  /* ── Footer ──────────────────────────────── */
+  footer{
+    text-align:center;padding:48px 24px;border-top:1px solid var(--border);
+    color:var(--muted);font-size:0.9rem;
+  }
+  footer a{color:var(--accent2);text-decoration:none}
+
+  /* ── Accessibility ───────────────────────── */
+  @media(prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  }
+</style>
+</head>
+<body data-page-node-id="2mZBrM5iMy5ZMvsImFqt6l">
+
+<nav data-page-node-id="pv8rCZiw0PNAz0Toiyv273">
+  <div class="nav-inner" data-page-node-id="fRkAoQkBtuTWRBCfwotI3o">
+    <div class="logo" data-page-node-id="ZNtEQMvCJrKXCrd8RxphYq">
+      <div class="logo-mark" data-page-node-id="coJwKbWVD4vXARCAZG7Btk">|ψ⟩</div>
+      <span data-page-node-id="mDPAEMdtKekroIxy54i1Ew">Kvant Kompüter</span>
+    </div>
+    <ul class="nav-links" data-page-node-id="6ZtPXqWwblMvK6jwg98OUl">
+      <li data-page-node-id="HJi3BROm4zGaJOrRgzvZVS"><a href="#prinsip" data-page-node-id="qwkl436vI1aTd7LJighdC2">Prinsip</a></li>
+      <li data-page-node-id="gW656QC3l40tM7eev4PnAj"><a href="#qubit" data-page-node-id="Cc354MlNV5ZFGtyMqQDKVR">Qubit</a></li>
+      <li data-page-node-id="bE8wJdluf9C3aMw6HBlG6K"><a href="#qapilar" data-page-node-id="HkmED0oYPLD9uV50nJbmMc">Qapılar</a></li>
+      <li data-page-node-id="vyQJMOVunZ2wfDiy3VHFj0"><a href="#alqoritmlar" data-page-node-id="Yga2fEnvtbtqPz2ZiNFiwt">Alqoritmlər</a></li>
+      <li data-page-node-id="TFA3rtPN0RLq1SVxmZCDpj"><a href="#tetbiq" data-page-node-id="fUof6nfzLd5AM9uQG9Irgd">Tətbiq</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="hero" data-page-node-id="LiTE6X9DMt8WolefN8OiTa">
+  <div class="wrap" data-page-node-id="urja8p4BdGUiWfLgNCGhtc">
+    <span class="hero-tag" data-page-node-id="oqqq5TOVYv4YR57ATR0d4B">Kvant Hesablama · 2026</span>
+    <h1 data-page-node-id="FyqDW2SDdisXb0uxwBePWc">Kvant kompüter <span class="grad" data-page-node-id="Zp0FZcFwso1jYcFqAzSdI3">süni dolaşıqlıqdan</span> süni intellektə</h1>
+    <p class="lede" data-page-node-id="TAC8EwTDAGBGGKEOLdWfQl">
+      Kvant mexanikasının əsas prinsipləri — <strong data-page-node-id="9jrhzR3IBoQUCH1mD1OMAo">süperpozisiya</strong>, <strong data-page-node-id="jacLBEdYv9YE1Nev9U65pF">dolaşıqlıq</strong> və <strong data-page-node-id="LW1DdGJBAyvfZz3ASauMyC">interferans</strong> — klassik kompüterlərin min illərlə hesablaya bilmədiyi problemləri saatlarla həll edir. Bu səhifə kvant hesablama dünyasına girişdir.
+    </p>
+    <div class="cta-row" data-page-node-id="3MT2jXDeWFRv9FOaCFxeFE">
+      <a href="#prinsip" class="btn btn-primary" data-page-node-id="7aBcM1ZnGud4EfZzRliiRY">Əsasları öyrən →</a>
+      <a href="#alqoritmlar" class="btn btn-ghost" data-page-node-id="YY1ew6dWIJGeWfXGJsD7MH">Alqoritmlər</a>
+    </div>
+
+    <div class="bloch-hero" data-page-node-id="yNY6vAJp9mn6Q8qdH9HQ8i">
+      <svg class="bloch-svg" width="320" height="320" viewBox="-160 -160 320 320" xmlns="http://www.w3.org/2000/svg" data-page-node-id="85BFg1XXrmE0QraiAzXyoa">
+        <defs data-page-node-id="3xgqpJpZ6I9oAYkhMYWSTG">
+          <radialGradient id="sphereGrad" cx="40%" cy="40%" data-page-node-id="zEI7oY1qYBPKX9TlxcF8WK">
+            <stop offset="0%" stop-color="rgba(124,92,255,0.4)" data-page-node-id="NvbQlHdZHyzqRG6thd1laN"/>
+            <stop offset="60%" stop-color="rgba(10,14,39,0.95)" data-page-node-id="S4AxYORqcM4XL3Efl46Wsq"/>
+            <stop offset="100%" stop-color="rgba(10,14,39,0.1)" data-page-node-id="5omOFhJJk9nknLL5GSiKHt"/>
+          </radialGradient>
+          <linearGradient id="stateGrad" x1="0%" y1="0%" x2="100%" y2="100%" data-page-node-id="NiU7OWt5HBjA9SoErvGONv">
+            <stop offset="0%" stop-color="#7c5cff" data-page-node-id="XFNj1c7aKobB9fCoYzICsK"/>
+            <stop offset="100%" stop-color="#00d4ff" data-page-node-id="kubIQ45f4F2SrAeIgrLjcp"/>
+          </linearGradient>
+        </defs>
+        <!-- Sphere wireframe -->
+        <circle cx="0" cy="0" r="130" fill="url(#sphereGrad)" stroke="rgba(124,92,255,0.6)" stroke-width="1.5" data-page-node-id="wEILAvKe8MaZqPBWTMN60f"/>
+        <ellipse cx="0" cy="0" rx="130" ry="35" fill="none" stroke="rgba(124,92,255,0.3)" stroke-width="1" data-page-node-id="6OoFQTVKb0ooUHkfNHAffZ"/>
+        <ellipse cx="0" cy="0" rx="35" ry="130" fill="none" stroke="rgba(124,92,255,0.3)" stroke-width="1" data-page-node-id="vfXaDm23TmWvXo83lT25Se"/>
+        <!-- Axes -->
+        <line x1="-145" y1="0" x2="145" y2="0" stroke="rgba(232,235,247,0.4)" stroke-width="1" marker-end="url(#arrX)" marker-start="url(#arrXN)" data-page-node-id="yIIzyr3OTlR94MVRC1mX2z"/>
+        <line x1="0" y1="-145" x2="0" y2="145" stroke="rgba(232,235,247,0.4)" stroke-width="1" data-page-node-id="NArOOxhgxcWde9v1pfAmiO"/>
+        <line x1="-100" y1="100" x2="100" y2="-100" stroke="rgba(232,235,247,0.4)" stroke-width="1" data-page-node-id="9apEmSJVWGJTVxTqv5G8gS"/>
+        <!-- Labels -->
+        <text x="155" y="5" fill="#9aa3c7" font-family="JetBrains Mono" font-size="14" data-page-node-id="TjxddJSrFUTEJFLz7bddcT">x</text>
+        <text x="-5" y="-150" fill="#9aa3c7" font-family="JetBrains Mono" font-size="14" data-page-node-id="Bxg2uFujAuGPa4OXCNMvxj">z</text>
+        <text x="-110" y="105" fill="#9aa3c7" font-family="JetBrains Mono" font-size="13" data-page-node-id="iJ4ESgZdOuod0PwpRZMw1e">|0⟩</text>
+        <text x="105" y="-95" fill="#9aa3c7" font-family="JetBrains Mono" font-size="13" data-page-node-id="E2ubS30ZAtQQIRHNQ2qvz6">|1⟩</text>
+        <text x="-25" y="50" fill="#9aa3c7" font-family="JetBrains Mono" font-size="12" data-page-node-id="PYFyQeQCGs5OFoi3dHkrvy">y</text>
+        <!-- State vector |ψ⟩ -->
+        <defs data-page-node-id="b4F1EaLvSKFpT8AzPyb3bN">
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto" data-page-node-id="lmnkIuK5Dgb54E1IeSIclC">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="url(#stateGrad)" data-page-node-id="usCNPHT9lhUmFvv2yrD7E6"/>
+          </marker>
+        </defs>
+        <line x1="0" y1="0" x2="92" y2="-78" stroke="url(#stateGrad)" stroke-width="3" marker-end="url(#arrow)" filter="drop-shadow(0 0 6px rgba(124,92,255,0.8))" data-page-node-id="kU1p2iZyNkAekhyDsxCRfS"/>
+        <circle cx="92" cy="-78" r="6" fill="#7c5cff" data-page-node-id="hv7xFSWSluITctW5mmPi9K"/>
+        <!-- Label -->
+        <text x="100" y="-90" fill="#e8ebf7" font-family="Inter" font-size="16" font-weight="600" data-page-node-id="V0Ovva7ElYZSu6FKND9cGH">|ψ⟩</text>
+        <text x="100" y="-72" fill="#9aa3c7" font-family="JetBrains Mono" font-size="11" data-page-node-id="BJLx0HilB3EEqqjPmIjvBX">θ=60°, φ=45°</text>
+      </svg>
+    </div>
+  </div>
+</header>
+
+<section id="prinsip" data-page-node-id="d7kKArnUanyFJcp5Ry5NaR">
+  <div class="wrap" data-page-node-id="tDlBhzk8CoxQS3lOkwEILJ">
+    <div class="section-head" data-page-node-id="T05i0m2fi9U1lCfvmyypzI">
+      <div class="num" data-page-node-id="l65Zz8hen1lW7oVGZc04YH">01 — Prinsip</div>
+      <h2 data-page-node-id="QsL846xWsjTsakRH6P1iNZ">Klassik bitdən kvant qubit-ə</h2>
+      <p data-page-node-id="WxyUB2fOirQS6qcY2z9odQ">Klassik kompüter məlumatı <strong data-page-node-id="54a4UDPvh40tOwWn1GMsbI">0</strong> və ya <strong data-page-node-id="VVX2OvhQaOjGlmVjcNZiz5">1</strong> kimi saxlayır. Kvant kompüter isə <strong data-page-node-id="aCQj617xKtdaYX7RAWKBkS">qubit</strong> istifadə edir — və qubit eyni anda hər ikisinin superpozisiyasında ola bilər. Bu fərq bəzi problemlər üçün eksponensial sürət artımı yaradır.</p>
+    </div>
+
+    <div class="stats" data-page-node-id="o6kMc9u2It1Ttx1OhRCxNJ">
+      <div class="stat" data-page-node-id="HfH9rdytGPXrZSoXic9w5A"><div class="stat-num" data-page-node-id="6w8oDHf4ZBqvowy4YwNFwz">2ⁿ</div><div class="stat-label" data-page-node-id="R62RyXgY7AhCpFjmqB4Ahr">Vəziyyət (n qubit)</div></div>
+      <div class="stat" data-page-node-id="9HUJY2FfVKeuXktA0PO0jO"><div class="stat-num" data-page-node-id="RNFOAJOa5dB9ZFeAlHWETl">≈ 10⁹</div><div class="stat-label" data-page-node-id="WxzuOd1IoWIrsPbtV99BHi">IBM Condor qubit (2023)</div></div>
+      <div class="stat" data-page-node-id="YLI9oz26va64k9lC8vE5i5"><div class="stat-num" data-page-node-id="0s24iDIMRPd6Aldb2MfWIz">15 mK</div><div class="stat-label" data-page-node-id="I4DDQfs3HG0OPYI6iEaKt0">İş temperaturu</div></div>
+      <div class="stat" data-page-node-id="JauDUNNZA3zZeIUcqOY0Yo"><div class="stat-num" data-page-node-id="9qj6CI7iGrAG7WOjgwHoMY">~ 100 µs</div><div class="stat-label" data-page-node-id="7OBjKoCj6dIMEV9TUeDVpf">Koherens vaxtı</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="qubit" data-page-node-id="6CrYbRgJk6YyGisUEGeluE">
+  <div class="wrap" data-page-node-id="WXymBdZPTQN3PdDTatMs99">
+    <div class="section-head" data-page-node-id="nmQnH09L6brGRD2e4IG6pR">
+      <div class="num" data-page-node-id="dtxvFoVRYqRkP5EATktLU4">02 — Qubit</div>
+      <h2 data-page-node-id="WqXb79YfD2A7tG6nTHGKha">Əsas anlayışlar</h2>
+      <p data-page-node-id="00hpHZ7BXVEIFonf7ftzTZ">Qubit sadəcə "kvant biti" deyil — kvant mexanikasının üç qeyri-adi xüsusiyyətindən istifadə edir.</p>
+    </div>
+
+    <div class="concepts" data-page-node-id="5DwCV1qcijz99UF9PPVyYS">
+      <div class="card" data-page-node-id="qrXwVBZBdVj4domOYnlpuX">
+        <div class="card-icon" data-page-node-id="nItGAFkAZVEfKIGG0wmVU1">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="QZocWEoX1D15eCX21BdEbZ"><circle cx="12" cy="12" r="9" data-page-node-id="5V4BjMhXQ4cAdW4boK4wPC"/><path d="M12 3 v18 M3 12 h18" data-page-node-id="RFuqgsE0XFsW6EdPbqsRBU"/></svg>
+        </div>
+        <h3 data-page-node-id="zotr8VGx5a5Hchx8pHgJ4i">Süperpozisiya</h3>
+        <p data-page-node-id="MresRQUEC7GSpLOMe0ceHn">Bir qubit eyni anda həm <code data-page-node-id="4YTF3oqX7LheAgKz4iOaaZ">|0⟩</code>, həm də <code data-page-node-id="HnnMDUbhsG1oyqBUWJQa8c">|1⟩</code> vəziyyətində ola bilər. Ölçüldükdə isə yalnız birini qaytarır — ehtimalla.</p>
+        <code class="formula" data-page-node-id="QEwhjykx4DwD08VnYTjUe1">|ψ⟩ = α|0⟩ + β|1⟩     |α|² + |β|² = 1</code>
+      </div>
+
+      <div class="card" data-page-node-id="kJjVkv3VNvIL3dLOAOOzoU">
+        <div class="card-icon" data-page-node-id="CXHr4hMsJ5HHGEPTSN225N">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="kQxMqQa4PyPftFPCXzbPcT"><circle cx="6" cy="12" r="3" data-page-node-id="eX9AEDuKekBBqPw7zjTROz"/><circle cx="18" cy="12" r="3" data-page-node-id="amHcKC0WjxeOgBu8oMrmZI"/><path d="M9 12 h6" data-page-node-id="VYS0XH2Tk1tXOAEhbpCnyH"/></svg>
+        </div>
+        <h3 data-page-node-id="FBpOFUfMCZHfH55Kp12tvu">Dolaşıqlıq (Entanglement)</h3>
+        <p data-page-node-id="xeWMC0nssTPwnbFV7N1nQx">İki qubit bir-biri ilə dolaşıq olduqda, birini ölçmək digərinin vəziyyətini ani olaraq müəyyən edir — məsafədən asılı olmayaraq. Bu kvant üstünlüyün əsasıdır.</p>
+        <code class="formula" data-page-node-id="jRdG8YSZcPbWacq15ARkk2">|Φ+⟩ = (|00⟩ + |11⟩) / √2</code>
+      </div>
+
+      <div class="card" data-page-node-id="2PiGxF5HG4tSgg5jdGIgRr">
+        <div class="card-icon" data-page-node-id="aliTvdSm8vAzQgQOoiCJF0">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="YVb1Hs7Byg8wFPlTeVYUX3"><path d="M3 12 q4 -8 9 0 t9 0" data-page-node-id="H42rMzdO9FC6kTGjDuiQc8"/><path d="M3 12 q4 8 9 0 t9 0" opacity="0.5" data-page-node-id="Mxc9Pr3C9d0FczpHfi4cMI"/></svg>
+        </div>
+        <h3 data-page-node-id="ZxNN4KxSvqXj2wmZBkGGtM">İnterferans</h3>
+        <p data-page-node-id="kJESoXzv9eSBLT2QFLK6vs">Düzgün cavablara uyğun dalğalar güclənir, səhv cavablara uyğun dalğalar bir-birini söndürür. Kvant alqoritmləri bunu hesablama sürətinə çevirir.</p>
+        <code class="formula" data-page-node-id="rWASAxQOA94O943dIrSG0A">P(x) ∝ |⟨x|ψ⟩|²</code>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="qapilar" data-page-node-id="kmjlHHP1QlVdgm3EhAS1CU">
+  <div class="wrap" data-page-node-id="ACBywqB46lnNvwL3mr6a22">
+    <div class="section-head" data-page-node-id="AiIhmvOArk6JiMBUoc5EH0">
+      <div class="num" data-page-node-id="rsnKFQsjTEEoBa2xmCHD8Y">03 — Qapılar</div>
+      <h2 data-page-node-id="MjHRbM7IXIFMdBFFIMWdGe">Kvant qapıları — qubit-ləri çevirən operatorlar</h2>
+      <p data-page-node-id="jGaW2wsurVbYFpkmmW4Icd">Klassik məntiq qapıları kimi (AND, OR, NOT), kvant qapıları da vəziyyətləri dəyişir. Lakin onlar geri qaytarıla bilən (<em data-page-node-id="e6DBvL0nDvwPLTFgCHhdIv">unitary</em>) və şəbəkə kompozisiyasına yararlı olmalıdır.</p>
+    </div>
+
+    <div class="gates" data-page-node-id="ywZumjIsj59lAj5BXCP8u3">
+      <div class="gate" data-page-node-id="dwYHIdS9H0gyPydtz5nvU4">
+        <div class="gate-name" data-page-node-id="JAALCcCzOJ7h8OYEATulHY">H</div>
+        <div class="gate-desc" data-page-node-id="4FUdc9lsXBmN55sCFsHUfe"><strong data-page-node-id="2XZmqQSSFFCgDB2952vHGO">Hadamard</strong> — <code data-page-node-id="ZDBS4om8SZLHPkhKDnB4nR">|0⟩</code>-ı bərabər superpozisiyaya çevirir. Kvant paralelliyin başlanğıc nöqtəsi.</div>
+        <div class="gate-effect" data-page-node-id="4zmWDoDWsPgAty4Kbvipk7">|0⟩ → (|0⟩+|1⟩)/√2</div>
+        <div class="gate-matrix" data-page-node-id="YXnAwylgR3aqxS6322aIiB">H = 1/√2 · [[1,1],[1,-1]]</div>
+      </div>
+      <div class="gate" data-page-node-id="fDfSn6Wjaket6d8qf7XLiW">
+        <div class="gate-name" data-page-node-id="9lJUPSVvRFCRmfvTRfvTpk">X</div>
+        <div class="gate-desc" data-page-node-id="QE4C63gAQF8GonKOBEzIOv"><strong data-page-node-id="Nz81ZBrbegepVso5J7yHt4">Pauli-X</strong> — kvant NOT. Klassik bit flip-in kvant ekvivalenti.</div>
+        <div class="gate-effect" data-page-node-id="xMMxSoIdZP9lqKqMtpxQGq">|0⟩↔|1⟩</div>
+        <div class="gate-matrix" data-page-node-id="8fSroGTz4frNuV0Up7OItY">X = [[0,1],[1,0]]</div>
+      </div>
+      <div class="gate" data-page-node-id="vRsWMnmRGJxbyXeLjboxAu">
+        <div class="gate-name" data-page-node-id="FbYPedfHOY2gUjzbb7gkHN">Z</div>
+        <div class="gate-desc" data-page-node-id="QabUGfFGyATbDcd8C4jGOh"><strong data-page-node-id="6Wq5Jg6qig5YTGJFRoCX3z">Pauli-Z</strong> — faz çevirməsi. <code data-page-node-id="isPFquTCdorZUBkgPEZJOG">|1⟩</code>-ə -1 vurur, <code data-page-node-id="C5QQJdvGgWm1OXHwg4pzLh">|0⟩</code>-ı olduğu kimi saxlayır.</div>
+        <div class="gate-effect" data-page-node-id="z53FqN0jFT4vrdmBTVNUSu">|0⟩→|0⟩, |1⟩→-|1⟩</div>
+        <div class="gate-matrix" data-page-node-id="KevRGuZHpcCz8YQDaTTUC8">Z = [[1,0],[0,-1]]</div>
+      </div>
+      <div class="gate" data-page-node-id="nsE5ONu3teIYsVWu1UFb0k">
+        <div class="gate-name" data-page-node-id="JYeUuxPLe9zfcwIWVC8PK0">CNOT</div>
+        <div class="gate-desc" data-page-node-id="0NleuvyT1IX0BMM70kNOYW"><strong data-page-node-id="W9CJAS69aLIBVu3pFc173v">Kontrollu-NOT</strong> — iki qubitli qapı. İkinci qubit (target) birincinin (control) dəyərindən asılı olaraq çevrilir. Dolaşıqlıq yaratmağın ən sadə yolu.</div>
+        <div class="gate-effect" data-page-node-id="DfQqPvdngmuEA1lpj4ImKo">|00⟩→|00⟩, |01⟩→|01⟩, |10⟩→|11⟩, |11⟩→|10⟩</div>
+        <div class="gate-matrix" data-page-node-id="A9Sv0gOFvSA1IH7kSkvA5v">4×4 matris<br data-page-node-id="Eqlq5b2VN43IWuw2Yis2db"/>[[1,0,0,0],[0,1,0,0],[0,0,0,1],[0,0,1,0]]</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="alqoritmlar" data-page-node-id="njcO3PrppDAc1YZaj33fE7">
+  <div class="wrap" data-page-node-id="wdCWHrfRWQ3LwAWXgSQOTC">
+    <div class="section-head" data-page-node-id="zhcLuv754YCMNRrWtkb1zi">
+      <div class="num" data-page-node-id="ENVzQvz3LJFOlQ2wnBOZW6">04 — Alqoritmlər</div>
+      <h2 data-page-node-id="cwuHAYmH57k553UTpwDgkP">Kvant hesablamanın sübut olunmuş üstünlükləri</h2>
+      <p data-page-node-id="w83Gz9w5bfaVQvjMF3lnio">Hələ ki bəzi problemlər kvant üçün eksponensial asanlaşır. Aşağıdakılar sahənin əsasını qoymuş dörd klassik alqoritmdir.</p>
+    </div>
+
+    <div class="timeline" data-page-node-id="dElkgUSxvFHybT2gQWuyRh">
+      <div class="tl-item" data-page-node-id="Muyut4YlcKGV5EB37elyaW">
+        <div class="tl-year" data-page-node-id="GeIRkb44KD1li7GIHhA72M">1985</div>
+        <h4 data-page-node-id="uYYAEejSHhknjSmEqHPRH7">Deutsch–Jozsa</h4>
+        <p data-page-node-id="0qwePCAKycMd5wkm2mqUbL">Sabit və ya balanslı funksiyanı <strong data-page-node-id="V4pICwEkJzRHHHGu3reY7s">1 sorğuda</strong> ayırd edir — klassik kompüter 2ⁿ⁻¹+1 sorğu tələb edir. Kvant paralelliyin ilk riyazi sübutu.</p>
+      </div>
+      <div class="tl-item" data-page-node-id="Z4bxsu5NZTgjgxLbYg8RCG">
+        <div class="tl-year" data-page-node-id="GTCNxKsGoIrKa4SRazWNTv">1994</div>
+        <h4 data-page-node-id="plt8CYqRVBhQxAO0seO8tl">Shor</h4>
+        <p data-page-node-id="CJxUZxOC6DA3bytR8BmkAW">Böyük ədədlərin vuruqlarını <strong data-page-node-id="PjskgA7NRme3SSay4s7AbF">polinom vaxtda</strong> tapır. Müasir RSA şifrələməsinin təhlükəsizlik təməlini sarsıdır — kvant-davamlı kriptoqrafiyanın yaranma səbəbi.</p>
+      </div>
+      <div class="tl-item" data-page-node-id="Jlx25EVFc5M4KiTFbUCnid">
+        <div class="tl-year" data-page-node-id="ayohDSbFCe8tR6fJB5q3Ab">1996</div>
+        <h4 data-page-node-id="UHBJD3hoSWZwG6vrwxn0v9">Grover</h4>
+        <p data-page-node-id="ZCZBRycDXqstz1kVJB3vvr">Sıralanmamış verilənlər bazasında axtarışı <strong data-page-node-id="ZQ8SDBD6abwdrg3VShAs7M">O(√N)</strong> vaxta endirir. Kvadratik, amma geniş tətbiq olunan sürət artımı.</p>
+      </div>
+      <div class="tl-item" data-page-node-id="0RqTryPUmzH9UDCI2VV2g3">
+        <div class="tl-year" data-page-node-id="it2XWj3pIs9XGTgryhluH5">2009–</div>
+        <h4 data-page-node-id="AWVSiyO5gdvoy0nRV6QXzB">HHL və VQE</h4>
+        <p data-page-node-id="HhsFLlxzpRf8TgIQ2SxZsR">Xətti cəbr həlli və variasiya kvant eşelonu (VQE) kimi hibrid alqoritmlər kvant-klassik əməkdaşlığı ilə real kimya/mühəndislik problemlərini hədəfləyir.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tetbiq" data-page-node-id="is4CrzTV5rHidnc0EDTg8c">
+  <div class="wrap" data-page-node-id="je0vxQ6n8AdNr5h7RZmtYA">
+    <div class="section-head" data-page-node-id="evtgyywb7m73o7vnsDoFqU">
+      <div class="num" data-page-node-id="t5aUhjMVYaK6DaCYtT7Dxp">05 — Tətbiq</div>
+      <h2 data-page-node-id="dPf4jCiX9VbI4mW2vWvmm8">Harada kvant fərq yaradır?</h2>
+      <p data-page-node-id="L91oUtbXvrz2ltMEgiiD61">Bugünkü kvant kompüterlər hələ "universal əvəzedici" deyil — amma bir neçə sahədə artıq praktik üstünlük göstərirlər.</p>
+    </div>
+
+    <div class="tabs" data-page-node-id="Vo95yC9cnRQGLc8S0wp7mM">
+      <div class="tab-buttons" role="tablist" data-page-node-id="3NVrPoVB44uajY4NpLJwUv">
+        <button class="tab-btn active" data-tab="kripto" data-page-node-id="mtFjEAwPUypSia8mrK7I3e">🔐 Kriptoqrafiya</button>
+        <button class="tab-btn" data-tab="kimya" data-page-node-id="D5S2w3jQe6TPCh4itwNZF5">⚛️ Kimya / material</button>
+        <button class="tab-btn" data-tab="optim" data-page-node-id="mCvpovf5CPuGALJJNkkblB">📦 Optimallaşdırma</button>
+        <button class="tab-btn" data-tab="ai" data-page-node-id="DKWWyLC9AOkj4k2HsO00ua">🧠 Süni intellekt</button>
+      </div>
+
+      <div class="tab-panels" data-page-node-id="6Bn5M0eUWQ4DEqXpFMGDIv">
+        <div class="tab-panel active" data-panel="kripto" data-page-node-id="aEtR1RpG61vq7vMhbE2AcC">
+          <div class="tab-content" data-page-node-id="eUdPN5dlcmNpud12dydFcc">
+            <h4 data-page-node-id="RfnesNqeEdiJQI4wFMoCQN">Shor alqoritmi və kvant-davamlı kriptoqrafiya</h4>
+            <p data-page-node-id="5oyOGv4skwxJglCCW0oOZR">RSA-2048 və ECC kimi klassik açıq-açar sxemlər kifayət qədər böyük kvant kompüterlə sındırıla bilər. NIST artıq <strong data-page-node-id="LnFjCAR1BQt8dxxTa8G4nu">CRYSTALS-Kyber</strong> və <strong data-page-node-id="mCh8YVe4KQxPIOSWqQOcWP">CRYSTALS-Dilithium</strong> kimi post-kvant standartları təsdiqləyib.</p>
+            <ul data-page-node-id="eW0PIlVMRv3HETwKU38spM">
+              <li data-page-node-id="PGH4UXHrHW92ehmrHq8OTp">Klassik RSA: 2048-bit ≈ 10²⁴ əməliyyat</li>
+              <li data-page-node-id="foZ9uVA7PsfphNfchCYHRl">Shor ilə kvant: ~ 4096 kubit + saatlar</li>
+              <li data-page-node-id="SEGWRHHMgCpO9o3zaYkIzb">Müdafiə: kvant-davamlı sxemlərə köçür</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="kimya" data-page-node-id="hoWVzonxGvTrM9fqzNLDUx">
+          <div class="tab-content" data-page-node-id="bftnUJh3dYEKfNxHCRZXUh">
+            <h4 data-page-node-id="cqZ16AXMIm84nCK2OW2bMC">Molekulyar simulyasiya</h4>
+            <p data-page-node-id="SzPX56AR5vuoIj8sy4llyS">Feykmanın məşhur sitatı: "Təbiət kvant deyil — təbiətin kvant olduğu yeganə yer kvant kompüterdir." Kvant kompüterlər dərman, katalizator və batareya materiallarının elektron quruluşunu klassik üsullardan dəqiq simulyasiya edə bilir.</p>
+            <ul data-page-node-id="1zG5R6aXjZzXeHI8o3Y1Qv">
+              <li data-page-node-id="sJxajZZNaB7sSqmeKAYvTV">Dərman kəşfi — molekulyar qarşılıqlı təsir</li>
+              <li data-page-node-id="0flYRr96281ypJ9bRoEWpu">Yeni batareya materiallarının dizaynı</li>
+              <li data-page-node-id="mZ8ktoBMJjWIQf2enV5tt0">Yüksək keçiricilik temperaturunun proqnozlaşdırılması</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="optim" data-page-node-id="lLsA39JGu0nkXiBbBpYLGl">
+          <div class="tab-content" data-page-node-id="6u6tygFqiBF8F6AbluVLMF">
+            <h4 data-page-node-id="gFRVsFzXwk4oUvdVmYIOf3">Kombinatorial optimallaşdırma</h4>
+            <p data-page-node-id="fiIVFzRel2qtRGwCXBV53y">QAOA və Quantum Annealing kimi üsullar lojistika, maliyyə portföyləri və marşrut planlamasında yaxın-eksponensial axtarışı sürətləndirir. Tam kvant üstünlüyü hələ ki mövcud deyil, amma <em data-page-node-id="ZWH4iFgWDhvNJXtGHWZ7Gf">kvant-klassik hibrid</em> yaxınlaşma mövcuddur.</p>
+            <ul data-page-node-id="PE7G6VlsCUBWB3cdlQHA8A">
+              <li data-page-node-id="bWNlSvQvKkNfYLX3BxBs5W">QAOA — kvant-klassik hibrid optimallaşdırma</li>
+              <li data-page-node-id="jDYQYpR0LkhQtoUbJyeRLf">D-Wave — 5000+ qubit annealing prosessorları</li>
+              <li data-page-node-id="RTctRx35WJ0QJE019Y76oW">Tətbiq: portfel, çatdırılma marşrutu</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="ai" data-page-node-id="ulBqXGP5kQZQyK3d6r4O6D">
+          <div class="tab-content" data-page-node-id="NME4VfEuI2gRE5VZATnP2H">
+            <h4 data-page-node-id="D30CMNZPitUB3nkrJ99viL">Süni intellekt</h4>
+            <p data-page-node-id="Ah3tcHGagO6pN3zsLp01i3">Kvant maşın öyrənməsi (QML) kvant xüsusiyyətlərindən istifadə edərək klassik ML-dən fərqli nümunə tanıma imkanları təklif edir. Praktik üstünlük hələ ki erkan mərhələdədir, amma nəzəri potensial böyükdür.</p>
+            <ul data-page-node-id="PfAtQNbHCxGeEDGLtHSqUf">
+              <li data-page-node-id="QJZOAl1US1bLdGpeiMpPc1">Kvant neyron şəbəkələri</li>
+              <li data-page-node-id="AuaQw5qQWbjKVOOwcvonFz">Variasiya kvant sinifləndiriciləri</li>
+              <li data-page-node-id="Hacdda8aEhjnH1OHpouIN7">Nümunə tanımanın kvant sürətləndirilməsi</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer data-page-node-id="DI3TlalrIOPZ4Z1iEBHqac">
+  <div class="wrap" data-page-node-id="w5Ek0MAzbk722WXshtyBvu">
+    <p data-page-node-id="OOpQkDmNfG6jCKKSkjOj6H">Bu səhifə <strong data-page-node-id="9EyQvaPOCBWmE5ejh3yE4L">Buddy</strong> tərəfindən nümunə olaraq hazırlanıb — kvant hesablamanın əsaslarını vizual olaraq izah etmək üçün. Tam məlumat üçün IBM Quantum, Google Quantum AI və NIST post-quantum sənədlərinə baxın.</p>
+    <p style="margin-top:12px" data-page-node-id="ehRzsLSBhHjJOEzHhgv3XU">© 2026 · Süni Dolaşıqlıq · Pure Azərbaycan dili</p>
+  </div>
+</footer>
+
+<script>
+  // Tab switcher (vanilla JS, no deps)
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === target));
+    });
+  });
+
+  // Smooth scroll for nav anchors
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const id = a.getAttribute('href').slice(1);
+      const el = document.getElementById(id);
+      if (el) { e.preventDefault(); el.scrollIntoView({behavior:'smooth', block:'start'}); }
+    });
+  });
+</script>
+</body>
+</html>
