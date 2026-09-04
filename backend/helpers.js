@@ -1642,7 +1642,10 @@ async function buildApprovalMetadata(toolName, rawArgs, workingDirectory, user) 
 // intentionally excluded. For file deletion the agent should use the file
 // tool; for Git operations it should use the dedicated git_* tools so the
 // approval gate applies.
-const ALLOWED_COMMANDS = ['npm', 'npx', 'yarn', 'git', 'node', 'python', 'python3', 'pip', 'ls', 'pwd', 'mkdir', 'touch', 'grep', 'find', 'cat', 'echo', 'cp', 'curl', 'which'];
+// NOTE: 'npx' intentionally excluded — `npx <pkg>` fetches and executes
+// arbitrary code from the registry, bypassing the denylist. Use `npm run`
+// (project-scoped scripts) instead.
+const ALLOWED_COMMANDS = ['npm', 'yarn', 'git', 'node', 'python', 'python3', 'pip', 'ls', 'pwd', 'mkdir', 'touch', 'grep', 'find', 'cat', 'echo', 'cp', 'curl', 'which'];
 
 // SEC-FIX: Dangerous patterns that are blocked regardless of base command.
 // Covers file destruction, privilege escalation, network pivots and fork bombs.
@@ -1681,7 +1684,7 @@ function isBashCommandSafe(command) {
   }
 
   const baseCmd = trimmed.split(/\s+/)[0];
-  return ALLOWED_COMMANDS.includes(baseCmd) || trimmed.startsWith('npm run') || trimmed.startsWith('npx ');
+  return ALLOWED_COMMANDS.includes(baseCmd);
 }
 
 // ==========================================

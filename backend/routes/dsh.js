@@ -4,9 +4,10 @@ const pluginRegistry = require('../plugins/registry');
 const { listProfileBundles } = require('../chat/profiles');
 const path = require('path');
 const { spawn } = require('child_process');
+const { requireAdmin } = require('../auth');
 
 // GET /api/dsh/plugins - List installed plugins
-router.get('/plugins', (req, res) => {
+router.get('/plugins', requireAdmin, (req, res) => {
   res.json({
     ok: true,
     plugins: pluginRegistry.listPlugins()
@@ -14,7 +15,7 @@ router.get('/plugins', (req, res) => {
 });
 
 // POST /api/dsh/plugins/execute - Execute a plugin dynamically
-router.post('/plugins/execute', async (req, res) => {
+router.post('/plugins/execute', requireAdmin, async (req, res) => {
   const { name, context } = req.body || {};
   if (!name) return res.status(400).json({ error: 'Plugin name required' });
   try {
@@ -26,7 +27,7 @@ router.post('/plugins/execute', async (req, res) => {
 });
 
 // GET /api/dsh/profiles - List sub-agent profile bundles
-router.get('/profiles', (req, res) => {
+router.get('/profiles', requireAdmin, (req, res) => {
   res.json({
     ok: true,
     profiles: listProfileBundles()
@@ -34,7 +35,7 @@ router.get('/profiles', (req, res) => {
 });
 
 // POST /api/dsh/stress-test - Trigger 100-prompt heavy stress test from GUI
-router.post('/stress-test', (req, res) => {
+router.post('/stress-test', requireAdmin, (req, res) => {
   const testScript = path.resolve(__dirname, '../../sandbox/quick_stress_audit.js');
   const child = spawn('node', [testScript], {
     cwd: path.resolve(__dirname, '../..'),

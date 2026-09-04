@@ -209,10 +209,12 @@ class QuantumSuperpositionRouter {
           };
         }
         
-        // Check if it's a rate limit (provider is alive but busy)
+        // Check if it's a rate limit — provider is alive but cannot serve requests.
+        // Mark as NOT reachable so the router skips it: a 429 on the probe means
+        // the real request will also 429, making this provider useless right now.
         if (err.status === 429) {
           return {
-            reachable: true,
+            reachable: false,
             latencyMs: Date.now() - startTime,
             error: 'rate_limited'
           };
