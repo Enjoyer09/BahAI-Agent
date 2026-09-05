@@ -361,7 +361,9 @@ async function getDirectWeatherReply(userText) {
   if (!normalizedCity) return null;
   const cityDisplayName = { Baku: 'Bakıda', Sumqayit: 'Sumqayıtda', Ganja: 'Gəncədə' };
   try {
-    const wttrUrl = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=%C|%t|%w|%h`;
+    // &m = metric units (Celsius) — without it wttr.in defaults to the
+    // server IP's locale which on Railway EU West returns Fahrenheit.
+    const wttrUrl = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=%C|%t|%w|%h&m`;
     const wttrRes = await fetch(wttrUrl, { signal: AbortSignal.timeout(5000), headers: { 'User-Agent': 'bahAI-Agent/1.0' } });
     if (!wttrRes.ok) return null;
     const weatherLine = (await wttrRes.text()).trim();
@@ -645,6 +647,25 @@ router.post('/', async (req, res) => {
     });
     finishSse(res);
     return res.end();
+  }
+
+  // web_chat direct-reply fast-path: greetings, date, simple math, hava,
+  // guardrails — answered locally without touching the LLM or chat queue.
+  if (productMode === 'web_chat' && !hasAttachment) {
+    const directChatReply = await getDirectWebChatReply(
+      latestUserText,
+      normalizedMessages,
+      referentSummary || null
+    );
+    if (directChatReply) {
+      initSse(res);
+      writeSse(res, {
+        type: 'assistant_message',
+        message: { role: 'assistant', content: directChatReply }
+      });
+      finishSse(res);
+      return res.end();
+    }
   }
 
   const continuity = productMode === 'web_chat'
