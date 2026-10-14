@@ -530,6 +530,7 @@ export async function handleSendMessage(
         productMode: settings.productMode,
         executionMode: settings.executionMode,
         referentSummary: prepared.referentSummary,
+        preset: settings.preset ?? null,
       },
       (event: any) => handleSSEEvent(event, {
         convId,

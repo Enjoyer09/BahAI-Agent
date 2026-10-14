@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { AlertCircle, CheckCircle2, FileText, Loader2, Mic, Paperclip, Send, Square, X } from 'lucide-react';
-import type { Attachment } from '../../lib/types';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { AlertCircle, CheckCircle2, FileText, Loader2, Mic, Paperclip, Send, Square, Terminal, X } from 'lucide-react';
+import type { Attachment, PresetSelection } from '../../lib/types';
 import type { JobStatusState } from '../../store/chatService';
 import type { JobStatus } from '../../lib/jobTypes';
+import { fetchPresetCommands } from '../../lib/api';
 import { useToast } from '../common/Toast';
 
 interface ComposerProps {
@@ -18,6 +19,9 @@ interface ComposerProps {
   // Optional Voice Mode entry point (web_chat, when Speech API is available).
   // Rendered inline (left of the send button) so it never overlaps on mobile.
   onVoiceMode?: () => void;
+  // Active ECC preset selection (null = none) + setter for slash-command picks.
+  activePreset?: PresetSelection | null;
+  onSelectPreset?: (selection: PresetSelection | null) => void;
 }
 
 // Localized labels + tone per durable job status.
@@ -87,6 +91,30 @@ function JobStatusPill({
 const MAX_ATTACHMENTS = 5;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_FILE = /\.(png|jpe?g|gif|webp|pdf|docx?|xlsx?|csv|txt|md|json|ya?ml|xml|log)$/i;
+
+// Slash-command menu limits.
+const SLASH_TRIGGER = '/';
+const SLASH_MAX_RESULTS = 8;
+const SLASH_COMMANDS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface SlashCommand {
+  id: string;
+  name: string;
+  description: string;
+  argumentHint: string | null;
+}
+
+// Module-level cache so re-opening the menu within 5 minutes doesn't refetch.
+let slashCommandsCache: { commands: SlashCommand[]; fetchedAt: number } | null = null;
+
+async function loadSlashCommands(): Promise<SlashCommand[]> {
+  if (slashCommandsCache && Date.now() - slashCommandsCache.fetchedAt < SLASH_COMMANDS_CACHE_TTL_MS) {
+    return slashCommandsCache.commands;
+  }
+  const commands = await fetchPresetCommands();
+  slashCommandsCache = { commands, fetchedAt: Date.now() };
+  return commands;
+}
 
 function fileToAttachment(file: File): Promise<Attachment> {
   return new Promise((resolve, reject) => {
@@ -175,13 +203,95 @@ function AttachmentChip({
   );
 }
 
-export function Composer({ onSendMessage, disabled, isGenerating, onStop, settings, jobStatus, onCancelJob, onVoiceMode }: ComposerProps) {
+export function Composer({ onSendMessage, disabled, isGenerating, onStop, settings, jobStatus, onCancelJob, onVoiceMode, activePreset, onSelectPreset }: ComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const toastCtx = useToast();
   const toast = toastCtx?.toast;
+
+  // --- Slash-command menu state ---
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[] | null>(null);
+  const [slashHighlight, setSlashHighlight] = useState(0);
+  const slashFetchStartedRef = useRef(false);
+  const slashQuery = text.startsWith(SLASH_TRIGGER) && !text.slice(1).includes(' ')
+    ? text.slice(1).toLowerCase()
+    : null;
+  const isSlashMenuOpen = slashQuery !== null && slashCommands !== null && slashCommands.length > 0;
+
+  const slashMatches = useMemo(() => {
+    if (slashQuery === null || !slashCommands) return [];
+    if (!slashQuery) return slashCommands.slice(0, SLASH_MAX_RESULTS);
+    return slashCommands
+      .filter(cmd =>
+        cmd.id.toLowerCase().includes(slashQuery) ||
+        cmd.name.toLowerCase().includes(slashQuery) ||
+        cmd.description.toLowerCase().includes(slashQuery))
+      .slice(0, SLASH_MAX_RESULTS);
+  }, [slashQuery, slashCommands]);
+
+  // Lazy-fetch commands once the user types the first slash.
+  useEffect(() => {
+    if (slashQuery === null || slashCommands !== null || slashFetchStartedRef.current) return;
+    slashFetchStartedRef.current = true;
+    loadSlashCommands()
+      .then(cmds => {
+        setSlashCommands(cmds);
+        setSlashHighlight(0);
+      })
+      .catch(() => {
+        // Leave cache null so a later keystroke retries the fetch.
+        slashFetchStartedRef.current = false;
+      });
+  }, [slashQuery, slashCommands]);
+
+  // Close the menu once a preset becomes active (selection made elsewhere).
+  useEffect(() => {
+    if (activePreset) setText('');
+  }, [activePreset]);
+
+  const closeSlashMenu = useCallback(() => {
+    setText('');
+    setSlashHighlight(0);
+  }, []);
+
+  const applySlashCommand = useCallback((cmd: SlashCommand) => {
+    if (!onSelectPreset) return;
+    onSelectPreset({
+      presetId: 'ecc',
+      kind: 'commands',
+      entryId: cmd.id,
+      name: cmd.name || `/${cmd.id}`,
+    });
+    closeSlashMenu();
+  }, [onSelectPreset, closeSlashMenu]);
+
+  const handleSlashKeyNav = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!isSlashMenuOpen || slashMatches.length === 0) return false;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSlashHighlight(h => (h + 1) % slashMatches.length);
+      return true;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSlashHighlight(h => (h - 1 + slashMatches.length) % slashMatches.length);
+      return true;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      applySlashCommand(slashMatches[slashHighlight]);
+      return true;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeSlashMenu();
+      return true;
+    }
+    return false;
+  }, [isSlashMenuOpen, slashMatches, slashHighlight, applySlashCommand, closeSlashMenu]);
+  // --- End slash-command state ---
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -257,6 +367,53 @@ export function Composer({ onSendMessage, disabled, isGenerating, onStop, settin
         />
       )}
 
+      {isSlashMenuOpen && slashMatches.length > 0 && (
+        <div className="composer-slash-menu" role="listbox" aria-label="ECC komandaları">
+          <div className="composer-slash-menu-header">
+            <Terminal size={12} />
+            <span>ECC komandaları</span>
+          </div>
+          {slashMatches.map((cmd, index) => (
+            <button
+              key={cmd.id}
+              type="button"
+              role="option"
+              aria-selected={index === slashHighlight}
+              className={`composer-slash-item ${index === slashHighlight ? 'is-highlighted' : ''}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => applySlashCommand(cmd)}
+              onMouseEnter={() => setSlashHighlight(index)}
+            >
+              <span className="composer-slash-item-id">/{cmd.id}</span>
+              <span className="composer-slash-item-desc">{cmd.description}</span>
+            </button>
+          ))}
+          <div className="composer-slash-menu-footer">
+            ↑↓ naviqasiya · Enter seç · Esc bağla
+          </div>
+        </div>
+      )}
+
+      {activePreset && (
+        <div className="composer-active-preset">
+          <Terminal size={12} />
+          <span className="composer-active-preset-name">
+            {activePreset.name || `/${activePreset.entryId}`}
+          </span>
+          <span className="composer-active-preset-kind">{activePreset.kind}</span>
+          {onSelectPreset && (
+            <button
+              type="button"
+              onClick={() => onSelectPreset(null)}
+              aria-label="Preset-i deaktiv et"
+              title="Deaktiv et"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="composer-input-row">
         <button
           type="button"
@@ -293,6 +450,7 @@ export function Composer({ onSendMessage, disabled, isGenerating, onStop, settin
             }
           }}
           onKeyDown={(event) => {
+            if (handleSlashKeyNav(event)) return;
             const enterToSend = settings?.enterToSend !== false;
             if (event.key !== 'Enter') return;
             if ((enterToSend && !event.shiftKey) || (!enterToSend && (event.ctrlKey || event.metaKey))) {

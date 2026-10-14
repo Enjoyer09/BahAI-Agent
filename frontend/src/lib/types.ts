@@ -153,6 +153,37 @@ export interface Settings {
   enableMarkdown: boolean;
   showThinking: boolean;
   autoScroll: boolean;
+
+  // ECC preset — a single active entry, null means none
+  preset: PresetSelection | null;
+}
+
+export type PresetKind = 'agents' | 'skills' | 'commands' | 'rules';
+
+export interface PresetSelection {
+  presetId: 'ecc';
+  kind: PresetKind;
+  entryId: string;
+  name: string;
+}
+
+export interface PresetProfile {
+  preset: 'ecc' | null;
+  id: string;
+  kind: PresetKind | 'builtin';
+  name: string;
+  description: string;
+  model: string | null;
+  tools: string[];
+  unsupportedTools: string[];
+}
+
+export interface PresetCounts {
+  agents: number;
+  skills: number;
+  commands: number;
+  rules: number;
+  hooks: number;
 }
 
 export interface ModelOption {

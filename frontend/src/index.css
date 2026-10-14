@@ -994,6 +994,125 @@ button, a, [role="button"] {
   }
 }
 
+/* ==========================================
+   Composer slash-command menu (ECC presets)
+   Rendered in-flow above the input row — .composer-frame has
+   overflow:hidden, so an absolutely-positioned popup would be clipped.
+   ========================================== */
+.composer-slash-menu {
+  margin: 2px 2px 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  background: var(--bg-surface-elevated, #fff);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+  padding: 4px;
+}
+
+.composer-slash-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-muted, #6b7280);
+}
+
+.composer-slash-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-slash-item.is-highlighted {
+  background: color-mix(in srgb, var(--color-accent, #7f77dd) 14%, transparent);
+}
+
+.composer-slash-item-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent, #7f77dd);
+  white-space: nowrap;
+}
+
+.composer-slash-item-desc {
+  font-size: 11px;
+  color: var(--fg-muted, #6b7280);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.composer-slash-menu-footer {
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  color: var(--fg-muted, #6b7280);
+  border-top: 1px solid var(--border-subtle, #e3e6ea);
+  margin-top: 2px;
+}
+
+/* Active preset chip shown above the input row when an ECC entry is active */
+.composer-active-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 4px 4px;
+  padding: 4px 8px;
+  width: fit-content;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 999px;
+  color: var(--color-accent, #7f77dd);
+  background: color-mix(in srgb, var(--color-accent, #7f77dd) 10%, var(--bg-main));
+  border: 1px solid color-mix(in srgb, var(--color-accent, #7f77dd) 30%, transparent);
+}
+
+.composer-active-preset-name {
+  font-weight: 600;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-active-preset-kind {
+  font-size: 10px;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.composer-active-preset button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.composer-active-preset button:hover {
+  background: color-mix(in srgb, var(--color-accent, #7f77dd) 18%, transparent);
+}
+
 .composer-textarea {
   min-width: 0;
   min-height: 44px;

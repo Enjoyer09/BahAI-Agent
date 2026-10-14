@@ -366,6 +366,8 @@ function AppContent() {
                             jobStatus={chat.jobStatus}
                             onCancelJob={chat.stop}
                             onVoiceMode={undefined}
+                            activePreset={settings.preset}
+                            onSelectPreset={settings.setPreset}
                           />
                         </div>
                       </div>
@@ -395,6 +397,8 @@ function AppContent() {
                         jobStatus={chat.jobStatus}
                         onCancelJob={chat.stop}
                         onVoiceMode={undefined}
+                        activePreset={settings.preset}
+                        onSelectPreset={settings.setPreset}
                       />
                     </div>
                   </div>
@@ -658,7 +662,7 @@ function AppContent() {
         }>
           <Composer
             onSendMessage={(text, attachments) => {
-              chat.sendMessage(text, attachments); 
+              chat.sendMessage(text, attachments);
             }}
             disabled={chat.loading || chat.actionCenterInteractions.length > 0}
             isGenerating={chat.loading}
@@ -667,6 +671,8 @@ function AppContent() {
             jobStatus={chat.jobStatus}
             onCancelJob={chat.stop}
             onVoiceMode={undefined}
+            activePreset={settings.preset}
+            onSelectPreset={settings.setPreset}
           />
         </div>
 

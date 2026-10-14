@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { X, Code2, Type, AlignLeft, Maximize, PanelRightClose, PanelBottom, Sun, Eye, Send, FileText, Brain, ArrowDownToLine, Zap, Key, Globe, LayoutTemplate, ShieldAlert, Workflow } from 'lucide-react';
+import { X, Code2, Type, AlignLeft, Maximize, PanelRightClose, PanelBottom, Sun, Eye, Send, FileText, Brain, ArrowDownToLine, Zap, Key, Globe, LayoutTemplate, ShieldAlert, Workflow, Blocks } from 'lucide-react';
 import type { ReturnTypeUseSettings } from '../../hooks/useSettings';
 import { MODELS, WORKFLOW_OPTIONS } from '../../lib/constants';
+import PresetPicker from './PresetPicker';
 
 interface Props {
   isOpen: boolean;
@@ -345,12 +346,22 @@ export default function SettingsModal({
       <div>
         <label style={labelStyle}><FileText size={14} /> Sistem Təlimatları (Custom Instructions)</label>
         <p style={descStyle} className="mb-2">Agentin necə cavab verməsini (qısa cavablar, konkret rol, vb.) tənzimləmək üçün təlimatlar yazın.</p>
-        <textarea 
-          style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} 
-          value={customInstructions} 
+        <textarea
+          style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }}
+          value={customInstructions}
           onChange={(e) => setCustomInstructions(e.target.value)}
           placeholder="Məsələn: Sən köməkçi bir proqramçısan. Həmişə azərbaycan dilində, qısa və anlaşıqlı kod parçaları ilə cavab ver."
         />
+      </div>
+
+      <hr className="border-[var(--border)]" />
+
+      <div>
+        <div className="mb-3">
+          <div style={labelStyle} className="mb-0"><Blocks size={14} /> ECC Preset</div>
+          <p style={descStyle}>Hər chat sorğusuna bir ECC komandası, agent, skill və ya qaydası əlavə edin (chat inputda da / komandaları var).</p>
+        </div>
+        <PresetPicker active={settingsCtx.preset} onSelect={settingsCtx.setPreset} />
       </div>
 
       <hr className="border-[var(--border)]" />

@@ -1,0 +1,5 @@
+Source: https://github.com/affaan-m/ECC
+Version: 2.2.3
+License: MIT (see LICENSE-ECC.txt)
+Vendored: agents/ skills/ commands/ rules/ hooks/
+Copyright (c) Affaan Mustafa
