@@ -3,7 +3,7 @@
 // ==========================================
 
 import { API_BASE_URL } from './constants';
-import type { ActionCenterInteraction, Attachment, Conversation, GuiCapabilityStatus, Message, Project, SSEEvent } from './types';
+import type { ActionCenterInteraction, Attachment, Conversation, GuiCapabilityStatus, Message, PresetKind, PresetProfile, PresetSelection, Project, SSEEvent } from './types';
 
 function notifyAuthExpired(message = 'Sessiya vaxtı bitib. Yenidən daxil olun.') {
   try {
@@ -138,7 +138,7 @@ export async function sendChatMessage(
   baseUrl: string,
   model: string,
   workingDirectory: string,
-  options: { safeMode: boolean; projectId?: string | null; conversationId?: string | null; orchestrationMode?: boolean; workflow?: string; guiBrowserMode?: string; guiBrowserPath?: string; guiBrowserCdpUrl?: string; productMode?: 'web_chat' | 'desktop_code'; executionMode?: 'cloud' | 'local'; referentSummary?: Record<string, unknown> | null },
+  options: { safeMode: boolean; projectId?: string | null; conversationId?: string | null; orchestrationMode?: boolean; workflow?: string; guiBrowserMode?: string; guiBrowserPath?: string; guiBrowserCdpUrl?: string; productMode?: 'web_chat' | 'desktop_code'; executionMode?: 'cloud' | 'local'; referentSummary?: Record<string, unknown> | null; preset?: PresetSelection | null },
   onEvent: (event: SSEEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
@@ -181,6 +181,7 @@ export async function sendChatMessage(
     guiBrowserPath: options.guiBrowserPath,
     guiBrowserCdpUrl: options.guiBrowserCdpUrl,
     referentSummary: options.referentSummary || undefined,
+    preset: options.preset || undefined,
   });
 
   const doFetch = async () => apiFetch(`${API_BASE_URL}/api/chat`, {
@@ -851,4 +852,79 @@ export async function resolveCheckpoint(
   if (contentType.includes('text/event-stream')) {
     return response;
   }
+}
+
+// ==========================================
+// ECC Preset API
+// ==========================================
+
+export interface PresetInfo {
+  id: string;
+  name: string;
+  version: string | null;
+  source: string;
+  license: string;
+  counts: { agents: number; skills: number; commands: number; rules: number; hooks: number };
+  hooksExecutable: boolean;
+}
+
+export async function listPresets(): Promise<PresetInfo[]> {
+  const response = await apiFetch(`${API_BASE_URL}/api/presets`);
+  if (!response.ok) throw new Error('Preset siyahısı alınmadı');
+  const data = await response.json();
+  return data.presets || [];
+}
+
+export interface PresetProfilesResponse {
+  ok: boolean;
+  builtin: PresetProfile[];
+  preset: PresetProfile[];
+  counts: { builtin: number; preset: number };
+}
+
+export async function fetchPresetProfiles(kind?: PresetKind): Promise<{ builtin: PresetProfile[]; preset: PresetProfile[] }> {
+  const params = new URLSearchParams();
+  if (kind) params.set('kind', kind);
+  const response = await apiFetch(`${API_BASE_URL}/api/presets/profiles${params.toString() ? `?${params}` : ''}`);
+  if (!response.ok) throw new Error('Profillər alınmadı');
+  const data = await response.json();
+  return { builtin: data.builtin || [], preset: data.preset || [] };
+}
+
+export interface PresetEntry {
+  ok: boolean;
+  entry: {
+    id: string;
+    kind: PresetKind;
+    name: string;
+    description: string;
+    body: string;
+    path: string;
+  };
+}
+
+export async function fetchPresetEntry(kind: PresetKind, entryId: string): Promise<PresetEntry['entry']> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/presets/ecc/entry/${encodeURIComponent(kind)}/${encodeURIComponent(entryId)}`
+  );
+  if (!response.ok) throw new Error('Preset girişi alınmadı');
+  const data = await response.json();
+  return data.entry;
+}
+
+export async function fetchPresetCommands(): Promise<Array<{ id: string; name: string; description: string; argumentHint: string | null }>> {
+  const response = await apiFetch(`${API_BASE_URL}/api/presets/ecc/index?kind=commands`);
+  if (!response.ok) throw new Error('Komanda siyahısı alınmadı');
+  const data = await response.json();
+  return (data.entries || []).map((entry: { id: string; name: string; description: string; argumentHint: string | null }) => ({
+    id: entry.id,
+    name: entry.name,
+    description: entry.description,
+    argumentHint: entry.argumentHint,
+  }));
+}
+
+export function presetSelectionToPayload(preset: PresetSelection | null): { presetId: string; kind: PresetKind; entryId: string } | undefined {
+  if (!preset) return undefined;
+  return { presetId: preset.presetId, kind: preset.kind, entryId: preset.entryId };
 }

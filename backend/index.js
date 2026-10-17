@@ -408,6 +408,10 @@ app.use('/api', miscRouter);
 const dshRouter = require('./routes/dsh');
 app.use('/api/dsh', dshRouter);
 
+// ECC preset index — GET /api/presets/*
+const presetsRouter = require('./routes/presets');
+app.use('/api/presets', presetsRouter);
+
 // Screen capture — desktop app uploads user screenshots, web_chat reads them
 app.use('/api/screen-capture', screenCaptureRouter);
 

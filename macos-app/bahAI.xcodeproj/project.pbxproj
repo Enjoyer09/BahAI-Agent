@@ -1,0 +1,356 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		06196A6E1F02C78D02582EF7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 92876B8A2C113F7D3E11A0A7 /* Assets.xcassets */; };
+		61AEBA1EE249352B5527330E /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47D506A03BDE0E8E47D97AB /* main.swift */; };
+		C90725FC1782E7C28B348956 /* BackendService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C612BB0FBEB3EA21FBDD70 /* BackendService.swift */; };
+		E655AF7CB169916A52697F38 /* WKBridgeMessageHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45A54D0CBD9F92B77EBA6250 /* WKBridgeMessageHandler.swift */; };
+		F7D30B09EB95CD8837382742 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6248887F8B7A7AE3031BC106 /* AppDelegate.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		45A54D0CBD9F92B77EBA6250 /* WKBridgeMessageHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WKBridgeMessageHandler.swift; sourceTree = "<group>"; };
+		493BBBE04D98338805A66EB3 /* bahAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = bahAI.entitlements; sourceTree = "<group>"; };
+		6248887F8B7A7AE3031BC106 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		8047A0A5E1A89B3C7EBA6889 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		894CD324CC54C728C41D2D3E /* bahAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = bahAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		92876B8A2C113F7D3E11A0A7 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D47D506A03BDE0E8E47D97AB /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		E2C612BB0FBEB3EA21FBDD70 /* BackendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendService.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0877AB2B9DEF320A69BAAB4A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				894CD324CC54C728C41D2D3E /* bahAI.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		16C5CC05E4D9FC7350062547 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				92876B8A2C113F7D3E11A0A7 /* Assets.xcassets */,
+				493BBBE04D98338805A66EB3 /* bahAI.entitlements */,
+				8047A0A5E1A89B3C7EBA6889 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		6C5947FAAEB299B4FFFBFFB1 = {
+			isa = PBXGroup;
+			children = (
+				16C5CC05E4D9FC7350062547 /* Resources */,
+				CD1F06DE29A788576BABDA92 /* Sources */,
+				0877AB2B9DEF320A69BAAB4A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		70CB4480940576084D68FBD7 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				6248887F8B7A7AE3031BC106 /* AppDelegate.swift */,
+				D47D506A03BDE0E8E47D97AB /* main.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		8AC33F5BB24ACB464E2AD16A /* Bridge */ = {
+			isa = PBXGroup;
+			children = (
+				45A54D0CBD9F92B77EBA6250 /* WKBridgeMessageHandler.swift */,
+			);
+			path = Bridge;
+			sourceTree = "<group>";
+		};
+		CD1F06DE29A788576BABDA92 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				70CB4480940576084D68FBD7 /* App */,
+				8AC33F5BB24ACB464E2AD16A /* Bridge */,
+				E9D398ABA16A99961893915F /* Services */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		E9D398ABA16A99961893915F /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				E2C612BB0FBEB3EA21FBDD70 /* BackendService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		68E07ED71E58EC775CC1A2EC /* bahAI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FB0AF2E84B47E74F70FFFEEA /* Build configuration list for PBXNativeTarget "bahAI" */;
+			buildPhases = (
+				BE7056697830E62C26C21086 /* Sources */,
+				A0008793DA33F6CCE4A361E7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = bahAI;
+			packageProductDependencies = (
+			);
+			productName = bahAI;
+			productReference = 894CD324CC54C728C41D2D3E /* bahAI.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		082468D420E0609C92D3BA04 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					68E07ED71E58EC775CC1A2EC = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 07172A2CC3D208E51B972945 /* Build configuration list for PBXProject "bahAI" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 6C5947FAAEB299B4FFFBFFB1;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 0877AB2B9DEF320A69BAAB4A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				68E07ED71E58EC775CC1A2EC /* bahAI */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A0008793DA33F6CCE4A361E7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				06196A6E1F02C78D02582EF7 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BE7056697830E62C26C21086 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F7D30B09EB95CD8837382742 /* AppDelegate.swift in Sources */,
+				C90725FC1782E7C28B348956 /* BackendService.swift in Sources */,
+				E655AF7CB169916A52697F38 /* WKBridgeMessageHandler.swift in Sources */,
+				61AEBA1EE249352B5527330E /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		2C90C2C8D5617FEBD8F6AECB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Resources/bahAI.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.bahai.agent;
+				PRODUCT_NAME = bahAI;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		78EF0E4C507614EEE3856E4B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_FILE = Resources/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bahai.agent;
+				PRODUCT_NAME = bahAI;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		8914AE4E78F53AFEA092770A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_FILE = Resources/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bahai.agent;
+				PRODUCT_NAME = bahAI;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		8A902C155A4C36203E36C14F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Resources/bahAI.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.bahai.agent;
+				PRODUCT_NAME = bahAI;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		07172A2CC3D208E51B972945 /* Build configuration list for PBXProject "bahAI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				78EF0E4C507614EEE3856E4B /* Debug */,
+				8914AE4E78F53AFEA092770A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FB0AF2E84B47E74F70FFFEEA /* Build configuration list for PBXNativeTarget "bahAI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2C90C2C8D5617FEBD8F6AECB /* Debug */,
+				8A902C155A4C36203E36C14F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 082468D420E0609C92D3BA04 /* Project object */;
+}

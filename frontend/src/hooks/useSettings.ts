@@ -3,7 +3,7 @@
 // ==========================================
 
 import { useCallback, useState, useEffect } from 'react';
-import type { Settings } from '../lib/types';
+import type { Settings, PresetSelection } from '../lib/types';
 import { DEFAULT_BASE_URL, DEFAULT_SETTINGS } from '../lib/constants';
 
 function loadSetting(key: string, fallback: string): string {
@@ -21,6 +21,28 @@ function loadBoolSetting(key: string, fallback: boolean): boolean {
     return val === 'true';
   } catch {
     return fallback;
+  }
+}
+
+const PRESET_KINDS = ['agents', 'skills', 'commands', 'rules'] as const;
+
+function loadPresetSetting(key: string): PresetSelection | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      parsed.presetId === 'ecc' &&
+      PRESET_KINDS.includes(parsed.kind) &&
+      typeof parsed.entryId === 'string' && parsed.entryId &&
+      typeof parsed.name === 'string' && parsed.name
+    ) {
+      return { presetId: 'ecc', kind: parsed.kind, entryId: parsed.entryId, name: parsed.name };
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -71,6 +93,9 @@ export function useSettings() {
   const setAiMode = useCallback((mode: 'smart' | 'manual') => {
     setAiModeState(productMode === 'web_chat' ? 'smart' : mode);
   }, [productMode]);
+
+  // ECC preset — single active entry, persisted as JSON in localStorage 'preset'
+  const [preset, setPreset] = useState<PresetSelection | null>(() => loadPresetSetting('preset'));
 
   // Appearance & Layout Settings
   const [language, setLanguage] = useState(() => loadSetting('language', 'az'));
@@ -169,7 +194,16 @@ export function useSettings() {
   useEffect(() => {
     localStorage.setItem('aiMode', productMode === 'web_chat' ? 'smart' : aiMode);
   }, [aiMode, productMode]);
-  
+
+  useEffect(() => {
+    try {
+      if (preset) localStorage.setItem('preset', JSON.stringify(preset));
+      else localStorage.removeItem('preset');
+    } catch {
+      // ignore localStorage failures
+    }
+  }, [preset]);
+
   useEffect(() => { localStorage.setItem('language', language); }, [language]);
   useEffect(() => { localStorage.setItem('messageFontSize', messageFontSize); }, [messageFontSize]);
   useEffect(() => { localStorage.setItem('chatDirection', chatDirection); }, [chatDirection]);
@@ -190,11 +224,12 @@ export function useSettings() {
     };
   }, [performanceMode]);
 
-  const settings: Settings = { 
-    productMode, executionMode, apiKey, baseUrl, model, projectDir, performanceMode, orchestrationMode, workflow, 
+  const settings: Settings = {
+    productMode, executionMode, apiKey, baseUrl, model, projectDir, performanceMode, orchestrationMode, workflow,
     customInstructions, guiBrowserMode, guiBrowserPath, guiBrowserCdpUrl, guiAutoStartBrowser, aiMode,
     language, messageFontSize, chatDirection, maximizeChatSpace, centerChatInput, scrollToEndButton,
-    keepScreenAwake, enterToSend, enableMarkdown, showThinking, autoScroll
+    keepScreenAwake, enterToSend, enableMarkdown, showThinking, autoScroll,
+    preset
   };
 
   return {
@@ -226,6 +261,7 @@ export function useSettings() {
     showThinking, setShowThinking,
     autoScroll, setAutoScroll,
     showModelBadge, setShowModelBadge,
+    preset, setPreset,
   };
 }
 

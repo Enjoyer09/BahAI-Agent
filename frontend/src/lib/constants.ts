@@ -71,7 +71,8 @@ export const DEFAULT_SETTINGS = {
   guiBrowserCdpUrl: 'http://127.0.0.1:9222',
   guiAutoStartBrowser: false,
   customInstructions: '',
-  aiMode: 'smart'
+  aiMode: 'smart',
+  preset: null
 };
 
 export const WORKFLOW_OPTIONS = [

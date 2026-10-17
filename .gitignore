@@ -50,3 +50,9 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# macOS app build artifacts
+*.dmg
+macos-app/build/
+macos-app/.build/
+macos-app/bahAI.dmg
