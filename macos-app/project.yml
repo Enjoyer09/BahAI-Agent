@@ -38,3 +38,13 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Resources/bahAI.entitlements
     entitlements:
       path: Resources/bahAI.entitlements
+
+schemes:
+  bahAI:
+    build:
+      targets:
+        bahAI: all
+    run:
+      config: Debug
+    archive:
+      config: Release
